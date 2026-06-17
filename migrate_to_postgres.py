@@ -32,7 +32,9 @@ def main():
         print('Example: python migrate_to_postgres.py "postgresql+psycopg://postgres.<ref>:<pwd>@<host>:5432/postgres?sslmode=require"')
         raise SystemExit(1)
 
-    target_url = sys.argv[1]
+    args = [a for a in sys.argv[1:] if not a.startswith("--")]
+    reset = "--reset" in sys.argv[1:]
+    target_url = args[0]
     if not target_url.startswith("postgresql+psycopg://"):
         print("ERROR: target URL must start with postgresql+psycopg://")
         print("Take the Supabase 'Session pooler' URI and replace 'postgresql://' with 'postgresql+psycopg://'.")
@@ -40,6 +42,12 @@ def main():
 
     source_engine = create_engine(SOURCE_URL)
     target_engine = create_engine(target_url)
+
+    if reset:
+        # DESTRUCTIVE: drops all app tables on the target first. Only use against a
+        # fresh/empty database you intend to (re)load from scratch.
+        print("--reset: dropping existing app tables on the target ...")
+        Base.metadata.drop_all(bind=target_engine)
 
     print("Creating schema on the target database ...")
     Base.metadata.create_all(bind=target_engine)

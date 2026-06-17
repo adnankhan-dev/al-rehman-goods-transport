@@ -111,6 +111,12 @@ def _run_one_time_backfills():
 
 
 def _upgrade_schema():
+    # These are in-place migrations for legacy SQLite databases (raw ALTER/UPDATE
+    # with SQLite syntax and unquoted identifiers). On Postgres the full, current
+    # schema is built by create_all(), so this must not run there.
+    if not settings.database_url.startswith("sqlite"):
+        return
+
     inspector = inspect(engine)
     tables = set(inspector.get_table_names())
 
