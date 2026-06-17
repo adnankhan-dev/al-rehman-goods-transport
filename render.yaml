@@ -1,17 +1,19 @@
 # Render Blueprint for Al Rehman Goods Transport
 # Docs: https://render.com/docs/blueprint-spec
 #
-# A persistent disk is used so the SQLite database (and daily backups) survive
-# restarts and redeploys. Disks require a paid instance type (Starter).
-# When you later move to Supabase, delete the `disk:` block, change DATABASE_URL
-# to the Supabase connection string, and add psycopg to requirements.txt.
+# Database: Supabase (Postgres). No persistent disk is needed because the data
+# lives in Supabase, so this runs on Render's free tier.
+# Set DATABASE_URL in the Render dashboard to your Supabase connection string,
+# using the SQLAlchemy + psycopg scheme, e.g.:
+#   postgresql+psycopg://postgres.<ref>:<password>@<host>:5432/postgres?sslmode=require
+# (Use the Supabase "Session pooler" connection string — it is IPv4-compatible.)
 
 services:
   - type: web
     name: al-rehman-goods-transport
     runtime: python
-    plan: starter
-    region: singapore            # closest Render region to Pakistan; change if you prefer
+    plan: free
+    region: singapore            # closest free region to Pakistan; change if you prefer
     branch: main
     buildCommand: pip install -r requirements.txt
     startCommand: python -m al_rehman_goods_transport.init_db && uvicorn al_rehman_goods_transport.app:app --host 0.0.0.0 --port $PORT
@@ -22,12 +24,8 @@ services:
       - key: SECRET_KEY
         generateValue: true
       - key: DATABASE_URL
-        value: sqlite:////var/data/app.db
+        sync: false              # paste your Supabase connection string in the dashboard
       - key: INITIAL_ADMIN_PASSWORD
-        sync: false             # set a strong password in the Render dashboard
+        sync: false              # only used if the database has no users yet
       - key: PYTHONUNBUFFERED
         value: "1"
-    disk:
-      name: data
-      mountPath: /var/data
-      sizeGB: 1

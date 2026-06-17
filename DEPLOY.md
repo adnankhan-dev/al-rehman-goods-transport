@@ -1,62 +1,53 @@
 # Deployment Guide — Al Rehman Goods Transport
 
-Target: **Render** (web service) · **SQLite on a persistent disk** now · **Supabase (Postgres)** later.
-The repo is **public**, so the live database is **never committed** — it is uploaded after deploy via
-**Settings → Backup → Restore**.
+Target: **Render (free web service)** + **Supabase (Postgres)**.
+Code is on GitHub (public); no database or secrets are committed.
 
 ---
 
-## 1. Push the code to GitHub (public)
+## 1. Create the Supabase database
 
-A local git repo with a first commit is already prepared (the database, uploads, and `.venv`
-are excluded by `.gitignore`). Create an **empty public repo** on GitHub (no README), then:
+1. supabase.com → **New project**. Choose a region near you, set a database password.
+2. After it provisions, click **Connect** (top bar) → **Session pooler** → copy the URI.
+   It looks like:
+   `postgresql://postgres.<ref>:<password>@aws-0-<region>.pooler.supabase.com:5432/postgres`
+3. Convert it to the SQLAlchemy + psycopg form (used by both the migration and the app):
+   - change the scheme `postgresql://` → `postgresql+psycopg://`
+   - append `?sslmode=require`
+
+   Final form:
+   `postgresql+psycopg://postgres.<ref>:<password>@aws-0-<region>.pooler.supabase.com:5432/postgres?sslmode=require`
+
+> Use the **Session pooler** string (IPv4) — the plain "Direct connection" is IPv6-only and won't work from Render.
+
+## 2. Copy your current data into Supabase (run locally, once)
 
 ```bash
-git remote add origin https://github.com/<your-username>/<repo-name>.git
-git branch -M main
-git push -u origin main
+cd "d:/Al Rehman Goods/Al Rehman Goods Transport"
+.venv/Scripts/python -m pip install -r requirements.txt
+.venv/Scripts/python migrate_to_postgres.py "postgresql+psycopg://postgres.<ref>:<password>@<host>:5432/postgres?sslmode=require"
 ```
 
-Verify on GitHub that there is **no `data/` folder and no `.db` file** in the repo.
+It creates the schema and copies every table from `data/app.db` into Supabase, then fixes id
+sequences. Run it **once** into a fresh database.
 
-## 2. Create the Render service
+## 3. Deploy on Render (free)
 
-1. Render dashboard → **New → Blueprint** → connect your GitHub repo.
-2. Render reads `render.yaml` and proposes the `al-rehman-goods-transport` web service
-   (Starter plan, 1 GB disk mounted at `/var/data`).
-3. Before the first deploy, set the environment variable **`INITIAL_ADMIN_PASSWORD`**
-   to a strong password (this is the one-time login used only until you restore your real data).
-   `SECRET_KEY` is generated automatically.
-4. Click **Apply / Deploy**.
+1. Render → **New → Blueprint** → connect GitHub → select the repo. It reads `render.yaml`
+   (free web service, no disk).
+2. Set environment variables in the dashboard:
+   - **`DATABASE_URL`** = the `postgresql+psycopg://...` string from step 1.
+   - `SECRET_KEY` is generated automatically.
+   - `INITIAL_ADMIN_PASSWORD` can be left unset (your migrated data already has your users).
+3. **Apply / Deploy**, then open `https://<your-app>.onrender.com/health` → `{"status":"OK"}`
+   and log in with your existing credentials.
 
-> The Starter plan ($7/mo) is required because **persistent disks are not available on the free tier**.
-> On the free tier the database would reset on every redeploy. If you prefer to stay free, the better
-> option is to move to Supabase now (see section 5) and host the web service free.
+## Notes
 
-## 3. Load your current data
-
-1. Open `https://<your-app>.onrender.com/login` and sign in as **admin** with the
-   `INITIAL_ADMIN_PASSWORD` you set.
-2. Go to **Settings → Backup & Restore → Restore**, upload your local `data/app.db`.
-3. The app reloads with all your real data and your real users (admin / ceo / rehmangoods).
-   From now on use your real credentials; the seeded admin is gone.
-
-## 4. Notes / limitations (SQLite phase)
-
-- **Uploaded images** (delivery/loading/receipt photos) are stored on the app filesystem under
-  `static/uploads/` and are **not** on the persistent disk, so they do not survive a redeploy.
-  Tell me if you want uploads moved onto the disk too (small change).
-- Daily automatic backups are written to `/var/data/backups` on the disk.
-
-## 5. Later: switch to Supabase (Postgres)
-
-1. In Supabase, create a project and copy the connection string (Session pooler / URI).
-2. Add the Postgres driver to `requirements.txt`:  `psycopg[binary]>=3.1,<4.0`
-3. In Render, change `DATABASE_URL` to:
-   `postgresql+psycopg://<user>:<password>@<host>:<port>/<db>`
-4. Remove the `disk:` block from `render.yaml` (no longer needed) and redeploy.
-5. Recreate your data in Postgres (a one-time migration from SQLite → Postgres; I can script this).
-
-> Note: a few schema-migration helpers in `core/database.py` are SQLite-specific and are skipped
-> automatically on non-SQLite databases (`create_all` builds the full schema on Postgres). The
-> one-time data migration is the main task for the switch — ask me when you're ready.
+- Free Render web services **sleep after ~15 min idle** and take a few seconds to wake on the next
+  request. Fine for internal use; upgrade to a paid instance later if you want it always-on.
+- The SQLite-only features (file Backup/Restore in Settings, daily file backups) automatically
+  disable on Postgres. With Supabase you get its own backups; take periodic dumps from the
+  Supabase dashboard.
+- Uploaded images still save to the app filesystem (`static/uploads/`) and won't persist across
+  redeploys on the free tier. Ask me to move uploads to Supabase Storage if you need them durable.
