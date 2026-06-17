@@ -36,9 +36,22 @@ def template_url_for(request: Request, route_name: str, **params) -> str:
     path_params = {key: value for key, value in params.items() if key in path_param_names}
     query_params = {key: value for key, value in params.items() if key not in path_param_names}
 
+    url = None
+    # 1) Use our introspected path/query split.
     try:
         url = str(request.url_for(route_name, **path_params))
     except NoMatchFound:
+        url = None
+    # 2) Route introspection differs across Starlette versions; if the split was
+    #    wrong, retry treating every supplied param as a path param.
+    if url is None and params:
+        try:
+            url = str(request.url_for(route_name, **params))
+            query_params = {}
+        except NoMatchFound:
+            url = None
+    # 3) Last resort: the route takes no path params.
+    if url is None:
         url = str(request.url_for(route_name))
 
     if query_params:
