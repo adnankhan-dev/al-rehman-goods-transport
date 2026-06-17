@@ -1,0 +1,583 @@
+{% extends "base.html" %}
+{% from "_formhelpers.html" import form_shell, metric_tile %}
+
+{% block title %}Reports - Al Rehman Goods Transport{% endblock %}
+
+{% block content %}
+{% call form_shell("Reports", "A single reporting workspace for profitability, diesel usage, and plant activity.", "Reporting") %}
+<section class="content-stack report-workspace">
+    <form method="GET" class="detail-panel mb-4 report-filter-panel">
+        <div class="filter-grid filter-grid-four">
+            <div class="form-field">
+                <label class="form-label" for="report_type">Report Type</label>
+                <select class="form-select" id="report_type" name="report_type" data-report-type-switch>
+                    {% for report in report_types %}
+                    <option value="{{ report.key }}" {% if report_type == report.key %}selected{% endif %}>{{ report.label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-field">
+                <label class="form-label" for="contractor_id">Contractor</label>
+                <select class="form-select" id="contractor_id" name="contractor_id">
+                    <option value="">All contractors</option>
+                    {% for contractor in filter_options.contractors %}
+                    <option value="{{ contractor.id }}" {% if filter_state.contractor_id == contractor.id %}selected{% endif %}>{{ contractor.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-field">
+                <label class="form-label" for="site_id">To Site</label>
+                <select class="form-select" id="site_id" name="site_id">
+                    <option value="">All destination sites</option>
+                    {% for site in filter_options.sites %}
+                    <option value="{{ site.id }}" {% if filter_state.site_id == site.id %}selected{% endif %}>{{ site.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-field">
+                <label class="form-label" for="from_site_id">From Site</label>
+                <select class="form-select" id="from_site_id" name="from_site_id">
+                    <option value="">All business sites</option>
+                    {% for site in filter_options.from_sites %}
+                    <option value="{{ site.id }}" {% if filter_state.from_site_id == site.id %}selected{% endif %}>{{ site.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-field">
+                <label class="form-label" for="material_id">Material</label>
+                <select class="form-select" id="material_id" name="material_id">
+                    <option value="">All materials</option>
+                    {% for material in filter_options.materials %}
+                    <option value="{{ material.id }}" {% if filter_state.material_id == material.id %}selected{% endif %}>{{ material.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-field">
+                <label class="form-label" for="vehicle_id">Vehicle</label>
+                <select class="form-select" id="vehicle_id" name="vehicle_id">
+                    <option value="">All vehicles</option>
+                    {% for vehicle in filter_options.vehicles %}
+                    <option value="{{ vehicle.id }}" {% if filter_state.vehicle_id == vehicle.id %}selected{% endif %}>{{ vehicle.vehicle_number }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-field">
+                <label class="form-label" for="billing_status">Billing</label>
+                <select class="form-select" id="billing_status" name="billing_status">
+                    <option value="">All orders</option>
+                    <option value="billed" {% if filter_state.billing_status == 'billed' %}selected{% endif %}>Billed only</option>
+                    <option value="unbilled" {% if filter_state.billing_status == 'unbilled' %}selected{% endif %}>Ready for bill</option>
+                </select>
+            </div>
+            <div class="form-field report-filter-plant" data-report-filter-target="plants">
+                <label class="form-label" for="plant_id">Plant</label>
+                <select class="form-select" id="plant_id" name="plant_id">
+                    <option value="">All plants</option>
+                    {% for plant in filter_options.plants %}
+                    <option value="{{ plant.id }}" {% if filter_state.plant_id == plant.id %}selected{% endif %}>{{ plant.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-field report-filter-diesel" data-report-filter-target="diesel">
+                <label class="form-label" for="petrol_pump_id">Petrol Pump</label>
+                <select class="form-select" id="petrol_pump_id" name="petrol_pump_id">
+                    <option value="">All petrol pumps</option>
+                    {% for pump in filter_options.petrol_pumps %}
+                    <option value="{{ pump.id }}" {% if filter_state.petrol_pump_id == pump.id %}selected{% endif %}>{{ pump.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-field">
+                <label class="form-label" for="date_from">From Date</label>
+                <input class="form-control" type="date" id="date_from" name="date_from" value="{{ filter_state.date_from.strftime('%Y-%m-%d') if filter_state.date_from else '' }}">
+            </div>
+            <div class="form-field">
+                <label class="form-label" for="date_to">To Date</label>
+                <input class="form-control" type="date" id="date_to" name="date_to" value="{{ filter_state.date_to.strftime('%Y-%m-%d') if filter_state.date_to else '' }}">
+            </div>
+        </div>
+        <div class="filter-grid mt-3">
+            <div class="form-field">
+                <label class="form-label" for="search">Search</label>
+                <input class="form-control" type="text" id="search" name="search" value="{{ filter_state.search }}" placeholder="Driver, vehicle, receipt, contractor, site, or material">
+            </div>
+        </div>
+        <div class="detail-actions mt-3">
+            <button type="submit" class="btn btn-ui-primary">Apply Filters</button>
+            <a href="{{ url_for('reports.index') }}" class="btn btn-ui-neutral">Reset</a>
+            <a href="{{ url_for('reports.print_report',
+                report_type=filter_state.report_type,
+                contractor_id=filter_state.contractor_id or '',
+                site_id=filter_state.site_id or '',
+                from_site_id=filter_state.from_site_id or '',
+                material_id=filter_state.material_id or '',
+                vehicle_id=filter_state.vehicle_id or '',
+                plant_id=filter_state.plant_id or '',
+                petrol_pump_id=filter_state.petrol_pump_id or '',
+                billing_status=filter_state.billing_status,
+                date_from=filter_state.date_from.strftime('%Y-%m-%d') if filter_state.date_from else '',
+                date_to=filter_state.date_to.strftime('%Y-%m-%d') if filter_state.date_to else '',
+                search=filter_state.search
+            ) }}" class="btn btn-ui-neutral table-tools-print" target="_blank" rel="noopener">
+                <i class="bi bi-printer" aria-hidden="true"></i>
+                <span>Print Report</span>
+            </a>
+        </div>
+    </form>
+
+    {% if filter_chips %}
+    <div class="detail-panel" style="padding:0.75rem 1rem;">
+        <span class="detail-label" style="font-size:0.75rem;letter-spacing:0.06em;text-transform:uppercase;font-weight:700;">Active Filters</span>
+        <div style="margin-top:0.4rem;color:#5b6472;font-size:0.88rem;">{{ filter_chips|join('  ·  ') }}</div>
+    </div>
+    {% endif %}
+
+    <div class="collection-overview">
+        {% for card in summary_cards %}
+            {{ metric_tile(card.label, card.value, card.hint, card.tone) }}
+        {% endfor %}
+    </div>
+
+    {% if report_type == 'profit_loss' %}
+    <div class="report-grid">
+        <article class="report-panel">
+            <div class="report-panel-header">
+                <div>
+                    <h3 class="report-panel-title">Profit & Loss Statement</h3>
+                    <p class="report-panel-copy">A compact statement built directly from the filtered trip records.</p>
+                </div>
+            </div>
+            <div class="report-panel-body">
+                <table class="table detail-table mb-0">
+                    <tbody>
+                        {% for line in statement_lines %}
+                        <tr>
+                            <td>{{ line.label }}</td>
+                            <td class="text-end {% if line.kind == 'negative' %}text-danger{% else %}text-success{% endif %}">Rs. {{ "{:,.0f}".format(line.amount) }}</td>
+                        </tr>
+                        {% endfor %}
+                        <tr>
+                            <th>Total Expenses</th>
+                            <th class="text-end">Rs. {{ "{:,.0f}".format(statement_totals.expenses) }}</th>
+                        </tr>
+                        <tr>
+                            <th>Net Profit</th>
+                            <th class="text-end text-success">Rs. {{ "{:,.0f}".format(statement_totals.profit) }}</th>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </article>
+        <article class="report-panel">
+            <div class="report-panel-header">
+                <div>
+                    <h3 class="report-panel-title">Profit By Contractor</h3>
+                    <p class="report-panel-copy">Top contributors by filtered trip profitability.</p>
+                </div>
+            </div>
+            <div class="report-panel-body"><div class="chart-stage"><canvas id="reportProfitChart" width="400" height="300"></canvas></div></div>
+        </article>
+        <article class="report-panel report-grid-wide">
+            <div class="report-panel-header">
+                <div>
+                    <h3 class="report-panel-title">Expense Breakdown</h3>
+                    <p class="report-panel-copy">A visual mix of the cost buckets feeding this report.</p>
+                </div>
+            </div>
+            <div class="report-panel-body"><div class="chart-stage"><canvas id="reportExpenseChart" width="600" height="300"></canvas></div></div>
+        </article>
+    </div>
+
+    <div class="table-panel table-panel-list">
+        <div class="table-panel-header table-panel-header">
+            <div>
+                <h3 class="table-panel-title">Profitability register</h3>
+                <p class="table-panel-copy">The order register, upgraded with revenue, cost, and profit columns for each filtered trip.</p>
+            </div>
+            <div class="table-toolbar">
+                <span class="collection-pill"><strong>{{ orders|length }}</strong> filtered trips</span>
+            </div>
+        </div>
+        <div class="table-responsive">
+            <table class="table detail-table">
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>Date</th>
+                        <th>Vehicle</th>
+                        <th>Contractor</th>
+                        <th>Material</th>
+                        <th>Delivered</th>
+                        <th>Revenue</th>
+                        <th>Vehicle Payable</th>
+                        <th>Plant</th>
+                        <th>Diesel</th>
+                        <th>Advance</th>
+                        <th>Profit</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for order in orders %}
+                    <tr>
+                        <td><span class="table-id-badge">#{{ order.id }}</span></td>
+                        <td>{{ (order.completion_date or order.order_date).strftime('%Y-%m-%d') }}</td>
+                        <td>{{ order.vehicle.vehicle_number if order.vehicle else '-' }}</td>
+                        <td>{{ order.contractor.name if order.contractor else '-' }}</td>
+                        <td>{{ order.material_name }}</td>
+                        <td>{{ "%.2f"|format(order.delivered_quantity or order.quantity or 0) }} {{ order.unit.upper() }}</td>
+                        {% set live_diesel = module_diesel_by_order.get(order.id, 0) %}
+                        <td class="table-amount">Rs. {{ "%.2f"|format(order.total_contractor_amount()) }}</td>
+                        <td class="table-amount">Rs. {{ "%.2f"|format(order.remaining_vehicle_payment() - live_diesel) }}</td>
+                        <td class="table-amount">Rs. {{ "%.2f"|format(order.plant_amount or 0) }}</td>
+                        <td class="table-amount">Rs. {{ "%.2f"|format(order.total_diesel_amount() + live_diesel) }}</td>
+                        <td class="table-amount">Rs. {{ "%.2f"|format(order.total_advance_amount()) }}</td>
+                        <td class="table-amount text-success">Rs. {{ "%.2f"|format(order.profit_amount()) }}</td>
+                    </tr>
+                    {% else %}
+                    <tr><td colspan="12" class="text-center table-muted">No completed orders matched these report filters.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {% elif report_type == 'diesel' %}
+    <div class="report-grid">
+        <article class="report-panel">
+            <div class="report-panel-header">
+                <div>
+                    <h3 class="report-panel-title">Diesel By Pump</h3>
+                    <p class="report-panel-copy">Fuel value grouped by pump.</p>
+                </div>
+            </div>
+            <div class="report-panel-body"><div class="chart-stage"><canvas id="dieselByPumpChart" width="400" height="300"></canvas></div></div>
+        </article>
+        <article class="report-panel">
+            <div class="report-panel-header">
+                <div>
+                    <h3 class="report-panel-title">Diesel By Vehicle</h3>
+                    <p class="report-panel-copy">Top vehicles by diesel amount.</p>
+                </div>
+            </div>
+            <div class="report-panel-body"><div class="chart-stage"><canvas id="dieselByVehicleChart" width="400" height="300"></canvas></div></div>
+        </article>
+    </div>
+
+    <div class="table-panel table-panel-list">
+        <div class="table-panel-header table-panel-header">
+            <div>
+                <h3 class="table-panel-title">Diesel register</h3>
+                <p class="table-panel-copy">Only the fields needed for diesel review: trip date, vehicle, pump, receipt, litres, and amount.</p>
+            </div>
+        </div>
+        <div class="table-responsive">
+            <table class="table detail-table">
+                <thead>
+                    <tr>
+                        <th>Date</th>
+                        <th>Order</th>
+                        <th>Vehicle</th>
+                        <th>Pump</th>
+                        <th>Receipt</th>
+                        <th>Litres</th>
+                        <th>Amount</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for entry in diesel_entries %}
+                    <tr>
+                        <td>{{ entry.date.strftime('%Y-%m-%d') if entry.date else '-' }}</td>
+                        <td>{{ '#' ~ entry.order_id if entry.order_id else '-' }}</td>
+                        <td>{{ entry.vehicle_number }}</td>
+                        <td>{{ entry.pump_name }}</td>
+                        <td>{{ entry.receipt_number or '-' }}</td>
+                        <td>{{ "%.2f"|format(entry.litres) }}</td>
+                        <td class="table-amount">Rs. {{ "%.2f"|format(entry.amount) }}</td>
+                    </tr>
+                    {% else %}
+                    <tr><td colspan="7" class="text-center table-muted">No diesel entries matched these filters.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {% elif report_type == 'performance' %}
+    <div class="report-grid">
+        <article class="report-panel report-grid-wide">
+            <div class="report-panel-header">
+                <div>
+                    <h3 class="report-panel-title">Monthly Profit Trend</h3>
+                    <p class="report-panel-copy">Profit per month for the filtered trips.</p>
+                </div>
+            </div>
+            <div class="report-panel-body"><div class="chart-stage"><canvas id="performanceTrendChart" width="600" height="300"></canvas></div></div>
+        </article>
+        <article class="report-panel report-grid-wide">
+            <div class="report-panel-header">
+                <div>
+                    <h3 class="report-panel-title">Profit By Contractor</h3>
+                    <p class="report-panel-copy">Top contractors by profit contribution.</p>
+                </div>
+            </div>
+            <div class="report-panel-body"><div class="chart-stage"><canvas id="performanceContractorChart" width="600" height="300"></canvas></div></div>
+        </article>
+    </div>
+
+    <div class="table-panel table-panel-list">
+        <div class="table-panel-header">
+            <div>
+                <h3 class="table-panel-title">Month by month</h3>
+                <p class="table-panel-copy">Trips, delivered quantity, revenue, and profit per month.</p>
+            </div>
+        </div>
+        <div class="table-responsive">
+            <table class="table detail-table">
+                <thead>
+                    <tr><th>Month</th><th>Trips</th><th>Quantity</th><th>Revenue</th><th>Profit</th></tr>
+                </thead>
+                <tbody>
+                    {% for row in monthly_rows %}
+                    <tr>
+                        <td><strong>{{ row.label }}</strong></td>
+                        <td>{{ row.trips }}</td>
+                        <td>{{ "%.2f"|format(row.quantity) }}</td>
+                        <td class="table-amount">Rs. {{ "%.2f"|format(row.revenue) }}</td>
+                        <td class="table-amount {% if row.profit >= 0 %}text-success{% else %}text-danger{% endif %}">Rs. {{ "%.2f"|format(row.profit) }}</td>
+                    </tr>
+                    {% else %}
+                    <tr><td colspan="5" class="text-center table-muted">No completed orders matched these filters.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="table-panel table-panel-list">
+        <div class="table-panel-header">
+            <div>
+                <h3 class="table-panel-title">Contractor ranking</h3>
+                <p class="table-panel-copy">Sorted by profit contribution.</p>
+            </div>
+        </div>
+        <div class="table-responsive">
+            <table class="table detail-table">
+                <thead>
+                    <tr><th>Contractor</th><th>Trips</th><th>Quantity</th><th>Revenue</th><th>Profit</th></tr>
+                </thead>
+                <tbody>
+                    {% for row in contractor_rows %}
+                    <tr>
+                        <td><strong>{{ row.name }}</strong></td>
+                        <td>{{ row.trips }}</td>
+                        <td>{{ "%.2f"|format(row.quantity) }}</td>
+                        <td class="table-amount">Rs. {{ "%.2f"|format(row.revenue) }}</td>
+                        <td class="table-amount {% if row.profit >= 0 %}text-success{% else %}text-danger{% endif %}">Rs. {{ "%.2f"|format(row.profit) }}</td>
+                    </tr>
+                    {% else %}
+                    <tr><td colspan="5" class="text-center table-muted">No contractor activity matched these filters.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="table-panel table-panel-list">
+        <div class="table-panel-header">
+            <div>
+                <h3 class="table-panel-title">Vehicle utilization</h3>
+                <p class="table-panel-copy">Sorted by delivered quantity; earnings are the gross vehicle amounts.</p>
+            </div>
+        </div>
+        <div class="table-responsive">
+            <table class="table detail-table">
+                <thead>
+                    <tr><th>Vehicle</th><th>Owner</th><th>Trips</th><th>Quantity</th><th>Earnings</th><th>Profit Contribution</th></tr>
+                </thead>
+                <tbody>
+                    {% for row in vehicle_rows %}
+                    <tr>
+                        <td><strong>{{ row.vehicle_number }}</strong></td>
+                        <td>{{ row.owner_name }}</td>
+                        <td>{{ row.trips }}</td>
+                        <td>{{ "%.2f"|format(row.quantity) }}</td>
+                        <td class="table-amount">Rs. {{ "%.2f"|format(row.earnings) }}</td>
+                        <td class="table-amount {% if row.profit >= 0 %}text-success{% else %}text-danger{% endif %}">Rs. {{ "%.2f"|format(row.profit) }}</td>
+                    </tr>
+                    {% else %}
+                    <tr><td colspan="6" class="text-center table-muted">No vehicle activity matched these filters.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {% else %}
+    <div class="report-grid">
+        <article class="report-panel">
+            <div class="report-panel-header">
+                <div>
+                    <h3 class="report-panel-title">Amount By Plant</h3>
+                    <p class="report-panel-copy">Plant payable value grouped by crush plant.</p>
+                </div>
+            </div>
+            <div class="report-panel-body"><div class="chart-stage"><canvas id="plantAmountChart" width="400" height="300"></canvas></div></div>
+        </article>
+        <article class="report-panel">
+            <div class="report-panel-header">
+                <div>
+                    <h3 class="report-panel-title">Material Mix</h3>
+                    <p class="report-panel-copy">Loaded quantity grouped by material.</p>
+                </div>
+            </div>
+            <div class="report-panel-body"><div class="chart-stage"><canvas id="plantMaterialChart" width="400" height="300"></canvas></div></div>
+        </article>
+    </div>
+
+    <div class="table-panel table-panel-list">
+        <div class="table-panel-header table-panel-header">
+            <div>
+                <h3 class="table-panel-title">Plant activity register</h3>
+                <p class="table-panel-copy">Only plant-facing trip information: date, plant, vehicle, material, loading quantity, and plant amount.</p>
+            </div>
+        </div>
+        <div class="table-responsive">
+            <table class="table detail-table">
+                <thead>
+                    <tr>
+                        <th>Date</th>
+                        <th>Order</th>
+                        <th>Plant</th>
+                        <th>Vehicle</th>
+                        <th>Material</th>
+                        <th>Loaded Qty</th>
+                        <th>Plant Amount</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for loading in plant_loadings %}
+                    <tr>
+                        <td>{{ (loading.order.completion_date or loading.order.order_date).strftime('%Y-%m-%d') if loading.order else '-' }}</td>
+                        <td>#{{ loading.order_id }}</td>
+                        <td>{{ loading.plant.name if loading.plant else '-' }}</td>
+                        <td>{{ loading.order.vehicle.vehicle_number if loading.order and loading.order.vehicle else '-' }}</td>
+                        <td>{{ loading.order.material_name if loading.order else '-' }}</td>
+                        <td>{{ "%.2f"|format(loading.load_quantity or 0) }} {{ loading.order.unit.upper() if loading.order and loading.order.unit else '' }}</td>
+                        <td class="table-amount">Rs. {{ "%.2f"|format(loading.plant_amount or 0) }}</td>
+                    </tr>
+                    {% else %}
+                    <tr><td colspan="7" class="text-center table-muted">No plant activity matched these filters.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {% endif %}
+</section>
+{% endcall %}
+{% endblock %}
+
+{% block page_scripts %}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const reportTypeSelect = document.querySelector('[data-report-type-switch]');
+        const dieselFilters = document.querySelectorAll('[data-report-filter-target="diesel"]');
+        const plantFilters = document.querySelectorAll('[data-report-filter-target="plants"]');
+
+        function toggleScopedFilters() {
+            const reportType = reportTypeSelect ? reportTypeSelect.value : 'profit_loss';
+
+            dieselFilters.forEach(function(element) {
+                const shouldShow = reportType === 'diesel';
+                element.hidden = !shouldShow;
+                const field = element.querySelector('select, input');
+                if (field) {
+                    field.disabled = !shouldShow;
+                }
+            });
+
+            plantFilters.forEach(function(element) {
+                const shouldShow = reportType === 'plants';
+                element.hidden = !shouldShow;
+                const field = element.querySelector('select, input');
+                if (field) {
+                    field.disabled = !shouldShow;
+                }
+            });
+        }
+
+        if (reportTypeSelect) {
+            reportTypeSelect.addEventListener('change', toggleScopedFilters);
+            toggleScopedFilters();
+        }
+
+        function buildBarChart(id, labels, values, label, color) {
+            const element = document.getElementById(id);
+            if (!element) {
+                return;
+            }
+            new Chart(element.getContext('2d'), {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: label,
+                        data: values,
+                        backgroundColor: color,
+                        borderRadius: 12,
+                        borderSkipped: false
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { display: false } },
+                    scales: {
+                        y: { beginAtZero: true, ticks: { color: '#64748b' }, grid: { color: 'rgba(148, 163, 184, 0.16)' } },
+                        x: { ticks: { color: '#475569' }, grid: { display: false } }
+                    }
+                }
+            });
+        }
+
+        function buildDoughnutChart(id, labels, values, colors) {
+            const element = document.getElementById(id);
+            if (!element) {
+                return;
+            }
+            new Chart(element.getContext('2d'), {
+                type: 'doughnut',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        data: values,
+                        backgroundColor: colors,
+                        borderWidth: 0
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'bottom',
+                            labels: { boxWidth: 14, color: '#475569' }
+                        }
+                    }
+                }
+            });
+        }
+
+        {% if report_type == 'profit_loss' %}
+        buildBarChart('reportProfitChart', {{ profit_chart['labels'] | tojson }}, {{ profit_chart['values'] | tojson }}, 'Profit', 'rgba(34, 184, 166, 0.82)');
+        buildDoughnutChart('reportExpenseChart', {{ expense_chart['labels'] | tojson }}, {{ expense_chart['values'] | tojson }}, ['#355070', '#3a86ff', '#f59e0b', '#b85c38']);
+        {% elif report_type == 'diesel' %}
+        buildBarChart('dieselByPumpChart', {{ diesel_chart['labels'] | tojson }}, {{ diesel_chart['values'] | tojson }}, 'Diesel Amount', 'rgba(58, 134, 255, 0.82)');
+        buildBarChart('dieselByVehicleChart', {{ vehicle_diesel_chart['labels'] | tojson }}, {{ vehicle_diesel_chart['values'] | tojson }}, 'Diesel Amount', 'rgba(249, 115, 22, 0.82)');
+        {% elif report_type == 'performance' %}
+        buildBarChart('performanceTrendChart', {{ trend_chart['labels'] | tojson }}, {{ trend_chart['values'] | tojson }}, 'Profit', 'rgba(34, 184, 166, 0.82)');
+        buildBarChart('performanceContractorChart', {{ contractor_chart['labels'] | tojson }}, {{ contractor_chart['values'] | tojson }}, 'Profit', 'rgba(58, 134, 255, 0.82)');
+        {% else %}
+        buildBarChart('plantAmountChart', {{ plant_chart['labels'] | tojson }}, {{ plant_chart['values'] | tojson }}, 'Plant Amount', 'rgba(184, 92, 56, 0.82)');
+        buildDoughnutChart('plantMaterialChart', {{ material_chart['labels'] | tojson }}, {{ material_chart['values'] | tojson }}, ['#157a6e', '#3a86ff', '#f59e0b', '#b85c38', '#6b7280']);
+        {% endif %}
+    });
+</script>
+{% endblock %}

@@ -1,0 +1,230 @@
+{% set path = request.url.path %}
+<aside class="app-sidebar" id="app-sidebar">
+    <div class="app-sidebar-inner">
+        <button type="button" class="btn btn-sm btn-ui-light d-lg-none w-100 mb-2" id="sidebar-close-btn">
+            Close Menu
+        </button>
+
+        <a class="app-sidebar-brand" href="{{ url_for('dashboard.dashboard') }}">
+            <img src="{{ url_for('static', filename='images/logo1.png') }}" alt="{{ config['APP_NAME'] }} logo">
+            <div>
+                <div class="app-brand-title">{{ config['APP_NAME'] }}</div>
+                <div class="app-brand-subtitle">Dispatch | Accounts | Reports</div>
+            </div>
+        </a>
+
+        <div class="app-sidebar-user">
+            Signed in as <strong>{{ current_user.username }}</strong>
+        </div>
+
+        <div class="app-nav-section">
+
+            {# ── Overview ─────────────────────────────────────────── #}
+            <div class="app-nav-group">
+                <div class="app-nav-group-title">Overview</div>
+                <ul class="app-nav-list">
+                    {% if current_user.can('dashboard.view') %}
+                    <li>
+                        <a href="{{ url_for('dashboard.dashboard') }}"
+                           data-label="Dashboard" title="Dashboard"
+                           class="app-nav-link {% if path == '/' or path == '/dashboard' %}active{% endif %}">
+                            <span class="app-nav-link-icon"><i class="bi bi-grid-fill icon-overview"></i></span>
+                            <span class="app-nav-link-text">Dashboard</span>
+                        </a>
+                    </li>
+                    {% endif %}
+                    {% if current_user.can('reports.view') %}
+                    <li>
+                        <a href="{{ url_for('reports.index') }}"
+                           data-label="Reports" title="Reports"
+                           class="app-nav-link {% if path.startswith('/reports') %}active{% endif %}">
+                            <span class="app-nav-link-icon"><i class="bi bi-bar-chart-line-fill icon-overview"></i></span>
+                            <span class="app-nav-link-text">Reports</span>
+                        </a>
+                    </li>
+                    {% endif %}
+                </ul>
+            </div>
+
+            {# ── Dispatch ─────────────────────────────────────────── #}
+            {% if current_user.can('orders.view') or current_user.can('diesel.view') %}
+            <div class="app-nav-group">
+                <div class="app-nav-group-title">Dispatch</div>
+                <ul class="app-nav-list">
+                    {% if current_user.can('orders.create') %}
+                    <li>
+                        <a href="{{ url_for('orders.create_order') }}"
+                           data-label="New Order" title="New Order"
+                           class="app-nav-link {% if path == '/orders/create' %}active{% endif %}">
+                            <span class="app-nav-link-icon"><i class="bi bi-plus-circle-fill icon-dispatch"></i></span>
+                            <span class="app-nav-link-text">New Order</span>
+                        </a>
+                    </li>
+                    {% endif %}
+                    {% if current_user.can('orders.view') %}
+                    <li>
+                        <a href="{{ url_for('orders.orders') }}"
+                           data-label="All Orders" title="All Orders"
+                           class="app-nav-link {% if path.startswith('/orders') and path != '/orders/create' %}active{% endif %}">
+                            <span class="app-nav-link-icon"><i class="bi bi-card-list icon-dispatch"></i></span>
+                            <span class="app-nav-link-text">All Orders</span>
+                        </a>
+                    </li>
+                    {% endif %}
+                    {% if current_user.can('diesel.view') %}
+                    <li>
+                        <a href="{{ url_for('diesel.index') }}"
+                           data-label="Fuel Log" title="Fuel Log"
+                           class="app-nav-link {% if path.startswith('/diesel') %}active{% endif %}">
+                            <span class="app-nav-link-icon"><i class="bi bi-droplet-fill icon-dispatch"></i></span>
+                            <span class="app-nav-link-text">Fuel Log</span>
+                        </a>
+                    </li>
+                    {% endif %}
+                </ul>
+            </div>
+            {% endif %}
+
+            {# ── Finance ──────────────────────────────────────────── #}
+            {% if current_user.can('ledger.view') %}
+            <div class="app-nav-group">
+                <div class="app-nav-group-title">Finance</div>
+                <ul class="app-nav-list">
+                    <li>
+                        <a href="{{ url_for('ledger.index') }}"
+                           data-label="Ledger & Bills" title="Ledger & Bills"
+                           class="app-nav-link {% if path.startswith('/ledger') or path.startswith('/bills') or path.startswith('/transactions') %}active{% endif %}">
+                            <span class="app-nav-link-icon"><i class="bi bi-cash-stack icon-finance"></i></span>
+                            <span class="app-nav-link-text">Ledger & Bills</span>
+                        </a>
+                    </li>
+                    <li>
+                        <a href="{{ url_for('financial_entities.index') }}"
+                           data-label="Financial Entities" title="Financial Entities"
+                           class="app-nav-link {% if path.startswith('/financial-entities') %}active{% endif %}">
+                            <span class="app-nav-link-icon"><i class="bi bi-people-fill icon-finance"></i></span>
+                            <span class="app-nav-link-text">Financial Entities</span>
+                        </a>
+                    </li>
+                </ul>
+            </div>
+            {% endif %}
+
+            {# ── Clients & Rates ──────────────────────────────────── #}
+            {% if current_user.can('contractors.view') or current_user.can('rates.view') or current_user.can('sites.view') or current_user.can('materials.view') %}
+            <div class="app-nav-group">
+                <div class="app-nav-group-title">Clients & Rates</div>
+                <ul class="app-nav-list">
+                    {% if current_user.can('contractors.view') %}
+                    <li>
+                        <a href="{{ url_for('contractors.contractors') }}"
+                           data-label="Contractors" title="Contractors"
+                           class="app-nav-link {% if path.startswith('/contractors') %}active{% endif %}">
+                            <span class="app-nav-link-icon"><i class="bi bi-briefcase-fill icon-clients"></i></span>
+                            <span class="app-nav-link-text">Contractors</span>
+                        </a>
+                    </li>
+                    {% endif %}
+                    {% if current_user.can('rates.view') %}
+                    <li>
+                        <a href="{{ url_for('rates.index') }}"
+                           data-label="Contractor Rates" title="Contractor Rates"
+                           class="app-nav-link {% if path.startswith('/rates') %}active{% endif %}">
+                            <span class="app-nav-link-icon"><i class="bi bi-tag-fill icon-clients"></i></span>
+                            <span class="app-nav-link-text">Contractor Rates</span>
+                        </a>
+                    </li>
+                    {% endif %}
+                    {% if current_user.can('sites.view') %}
+                    <li>
+                        <a href="{{ url_for('sites.sites') }}"
+                           data-label="Sites" title="Sites"
+                           class="app-nav-link {% if path.startswith('/sites') %}active{% endif %}">
+                            <span class="app-nav-link-icon"><i class="bi bi-geo-alt-fill icon-clients"></i></span>
+                            <span class="app-nav-link-text">Sites</span>
+                        </a>
+                    </li>
+                    {% endif %}
+                    {% if current_user.can('materials.view') %}
+                    <li>
+                        <a href="{{ url_for('materials.index') }}"
+                           data-label="Materials" title="Materials"
+                           class="app-nav-link {% if path.startswith('/materials') %}active{% endif %}">
+                            <span class="app-nav-link-icon"><i class="bi bi-box-seam-fill icon-clients"></i></span>
+                            <span class="app-nav-link-text">Materials</span>
+                        </a>
+                    </li>
+                    {% endif %}
+                </ul>
+            </div>
+            {% endif %}
+
+            {# ── Fleet & Vendors ──────────────────────────────────── #}
+            {% if current_user.can('vehicle_owners.view') or current_user.can('vehicles.view') or current_user.can('plants.view') or current_user.can('petrol_pumps.view') %}
+            <div class="app-nav-group">
+                <div class="app-nav-group-title">Fleet & Vendors</div>
+                <ul class="app-nav-list">
+                    {% if current_user.can('vehicle_owners.view') %}
+                    <li>
+                        <a href="{{ url_for('vehicle_owners.index') }}"
+                           data-label="Vehicle Owners" title="Vehicle Owners"
+                           class="app-nav-link {% if path.startswith('/vehicle-owners') %}active{% endif %}">
+                            <span class="app-nav-link-icon"><i class="bi bi-person-badge-fill icon-fleet"></i></span>
+                            <span class="app-nav-link-text">Vehicle Owners</span>
+                        </a>
+                    </li>
+                    {% endif %}
+                    {% if current_user.can('vehicles.view') %}
+                    <li>
+                        <a href="{{ url_for('vehicles.vehicles') }}"
+                           data-label="Vehicles" title="Vehicles"
+                           class="app-nav-link {% if path.startswith('/vehicles') %}active{% endif %}">
+                            <span class="app-nav-link-icon"><i class="bi bi-truck-flatbed icon-fleet"></i></span>
+                            <span class="app-nav-link-text">Vehicles</span>
+                        </a>
+                    </li>
+                    {% endif %}
+                    {% if current_user.can('plants.view') %}
+                    <li>
+                        <a href="{{ url_for('plants.plants') }}"
+                           data-label="Plants" title="Plants"
+                           class="app-nav-link {% if path.startswith('/plants') %}active{% endif %}">
+                            <span class="app-nav-link-icon"><i class="bi bi-bricks icon-fleet"></i></span>
+                            <span class="app-nav-link-text">Plants</span>
+                        </a>
+                    </li>
+                    {% endif %}
+                    {% if current_user.can('petrol_pumps.view') %}
+                    <li>
+                        <a href="{{ url_for('petrol_pumps.index') }}"
+                           data-label="Petrol Pumps" title="Petrol Pumps"
+                           class="app-nav-link {% if path.startswith('/petrol-pumps') %}active{% endif %}">
+                            <span class="app-nav-link-icon"><i class="bi bi-fuel-pump-fill icon-fleet"></i></span>
+                            <span class="app-nav-link-text">Petrol Pumps</span>
+                        </a>
+                    </li>
+                    {% endif %}
+                </ul>
+            </div>
+            {% endif %}
+
+            {# ── System ───────────────────────────────────────────── #}
+            {% if current_user.can('settings.view') or current_user.can('users.manage') %}
+            <div class="app-nav-group">
+                <div class="app-nav-group-title">System</div>
+                <ul class="app-nav-list">
+                    <li>
+                        <a href="{{ url_for('settings.index') }}"
+                           data-label="Settings" title="Settings"
+                           class="app-nav-link {% if path.startswith('/settings') %}active{% endif %}">
+                            <span class="app-nav-link-icon"><i class="bi bi-gear-fill icon-system"></i></span>
+                            <span class="app-nav-link-text">Settings</span>
+                        </a>
+                    </li>
+                </ul>
+            </div>
+            {% endif %}
+
+        </div>
+    </div>
+</aside>

@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% from "_formhelpers.html" import form_actions, form_shell, render_field %}
+
+{% block title %}Create Vehicle Owner - Al Rehman Goods Transport{% endblock %}
+
+{% block content %}
+{% call form_shell("Create Vehicle Owner", "Create an owner profile once and attach multiple vehicles under it for easier billing later.", "Vehicle Owners", url_for('vehicle_owners.index'), "Back to Vehicle Owners") %}
+<form method="POST" class="form-stack">
+    {{ form.hidden_tag() }}
+    <div class="form-grid-two">
+        {{ render_field(form.name, placeholder="Owner name") }}
+        {{ render_field(form.phone, placeholder="Phone number") }}
+    </div>
+    {{ render_field(form.address, rows=3, placeholder="Address") }}
+    {{ form_actions("Create Vehicle Owner", url_for('vehicle_owners.index')) }}
+</form>
+{% endcall %}
+{% endblock %}

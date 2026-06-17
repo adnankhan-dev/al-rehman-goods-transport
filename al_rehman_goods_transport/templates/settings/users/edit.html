@@ -1,0 +1,170 @@
+{% extends "base.html" %}
+{% from "_formhelpers.html" import detail_value, form_shell %}
+
+{% block title %}Edit {{ edited_user.username }} - Al Rehman Goods Transport{% endblock %}
+
+{% block content %}
+{% call form_shell("Edit User — " ~ edited_user.username, "Update role, fine-tune permissions, or reset the password for this account.", "Settings", url_for('settings.index'), "Back to Settings") %}
+
+<div class="detail-grid mb-4">
+    <div class="detail-panel">
+        <h3><i class="bi bi-person-circle"></i> Account Info</h3>
+        <div class="detail-list">
+            {{ detail_value("Username", edited_user.username) }}
+            {{ detail_value("Email", edited_user.email) }}
+            {{ detail_value("Current Role", edited_user.role_label) }}
+            {{ detail_value("Status", "Active" if edited_user.is_active else "Inactive") }}
+            {{ detail_value("Last Login", edited_user.last_login_at.strftime('%d %b %Y %I:%M %p') if edited_user.last_login_at else "Never") }}
+            {{ detail_value("Created", edited_user.created_at.strftime('%d %b %Y') if edited_user.created_at else "—") }}
+        </div>
+    </div>
+    <div class="detail-panel">
+        <h3><i class="bi bi-shield-check"></i> Permissions Summary</h3>
+        <div class="detail-list">
+            {{ detail_value("Assigned Privileges", edited_user.permission_codes|length ~ " permissions") }}
+            {% if not is_self %}
+            <div class="detail-item" style="margin-top: 1rem;">
+                <form action="{{ url_for('settings.users_toggle_active', user_id=edited_user.id) }}" method="POST" class="d-inline">
+                    <button type="submit" class="btn btn-sm {{ 'btn-ui-neutral' if edited_user.is_active else 'btn-ui-ocean' }}">
+                        <i class="bi {{ 'bi-person-slash' if edited_user.is_active else 'bi-person-check' }}"></i>
+                        {{ 'Deactivate Account' if edited_user.is_active else 'Activate Account' }}
+                    </button>
+                </form>
+                <form action="{{ url_for('settings.users_delete', user_id=edited_user.id) }}" method="POST" class="d-inline ms-2">
+                    <button type="submit" class="btn btn-sm btn-ui-danger" onclick="return confirm('Delete {{ edited_user.username }}? This cannot be undone.')">
+                        <i class="bi bi-trash"></i> Delete User
+                    </button>
+                </form>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+{% if not is_self or edited_user.role != 'admin' %}
+<div class="detail-panel mb-4">
+    <h3><i class="bi bi-key"></i> Role &amp; Access</h3>
+    <p class="form-note">Change the role to update all permissions at once. Use the customise option for fine-grained control.</p>
+    <form method="POST" class="form-stack js-user-form mt-3">
+        <input type="hidden" name="action" value="update_access">
+
+        <div class="form-grid-two">
+            <div class="form-field">
+                <label class="form-label" for="role">Role</label>
+                <select class="form-select js-role-select" id="role" name="role" required>
+                    {% for role_key, role_data in role_definitions.items() %}
+                    <option
+                        value="{{ role_key }}"
+                        data-description="{{ role_data.description }}"
+                        data-permissions="{{ role_data.permissions|join(',') }}"
+                        {% if edited_user.role == role_key %}selected{% endif %}
+                    >{{ role_data.label }}</option>
+                    {% endfor %}
+                </select>
+                <div class="form-text js-role-description">{{ role_definitions[edited_user.role].description }}</div>
+            </div>
+            <div class="form-field" style="align-self: end;">
+                <div class="permissions-summary js-permissions-summary" style="padding: 0.6rem 0;">
+                    <span class="js-permission-count">{{ edited_user.permission_codes|length }}</span> privileges assigned.
+                    <button type="button" class="btn btn-sm btn-ui-neutral ms-2 js-toggle-permissions">Customise</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="permissions-panel mt-2 js-permissions-detail" style="display:none;">
+            <div class="permissions-panel-header">
+                <div><h4>Fine-tune Privileges</h4><p>Uncheck or add individual permissions below.</p></div>
+                <button type="button" class="btn btn-ui-neutral btn-sm js-reset-to-role">Reset to Role Defaults</button>
+            </div>
+            {% for group in permission_groups %}
+            <div class="permission-group">
+                <div class="permission-group-header">
+                    <strong>{{ group.label }}</strong>
+                    <span>{{ group.description }}</span>
+                </div>
+                <div class="permission-grid">
+                    {% for permission in group.permissions %}
+                    <label class="permission-card">
+                        <input type="checkbox" class="form-check-input js-permission-checkbox" name="permission_codes" value="{{ permission.code }}" {% if permission.code in edited_user.permission_codes %}checked{% endif %}>
+                        <span>
+                            <strong>{{ permission.label }}</strong>
+                            <small>{{ permission.description }}</small>
+                        </span>
+                    </label>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+
+        <div class="form-actions">
+            <button type="submit" class="btn btn-ui-primary">Save Access</button>
+        </div>
+    </form>
+</div>
+{% endif %}
+
+<div class="detail-panel">
+    <h3><i class="bi bi-lock"></i> Reset Password</h3>
+    <form method="POST" class="form-stack mt-3">
+        <input type="hidden" name="action" value="reset_password">
+        <div class="form-grid-two">
+            <div class="form-field">
+                <label class="form-label" for="new_password">New Password</label>
+                <input type="password" class="form-control" id="new_password" name="new_password" minlength="8" required autocomplete="new-password">
+                <div class="form-text">Minimum 8 characters.</div>
+            </div>
+            <div class="form-field">
+                <label class="form-label" for="confirm_new_password">Confirm Password</label>
+                <input type="password" class="form-control" id="confirm_new_password" name="confirm_new_password" minlength="8" required autocomplete="new-password">
+            </div>
+        </div>
+        <div class="form-actions">
+            <button type="submit" class="btn btn-ui-midnight" onclick="return confirm('Reset password for {{ edited_user.username }}?')">Reset Password</button>
+        </div>
+    </form>
+</div>
+
+{% endcall %}
+{% endblock %}
+
+{% block page_scripts %}
+<script>
+(function () {
+    const roleSelect = document.querySelector('.js-role-select');
+    const roleDesc = document.querySelector('.js-role-description');
+    const permCount = document.querySelector('.js-permission-count');
+    const toggleBtn = document.querySelector('.js-toggle-permissions');
+    const resetBtn = document.querySelector('.js-reset-to-role');
+    const detail = document.querySelector('.js-permissions-detail');
+    const checkboxes = document.querySelectorAll('.js-permission-checkbox');
+
+    function getSelectedPermissions() {
+        const opt = roleSelect.options[roleSelect.selectedIndex];
+        return new Set((opt.dataset.permissions || '').split(',').map(s => s.trim()).filter(Boolean));
+    }
+
+    function applyRole() {
+        const opt = roleSelect.options[roleSelect.selectedIndex];
+        if (roleDesc) roleDesc.textContent = opt.dataset.description || '';
+        const perms = getSelectedPermissions();
+        checkboxes.forEach(cb => { cb.checked = perms.has(cb.value); });
+        updateCount();
+    }
+
+    function updateCount() {
+        const checked = document.querySelectorAll('.js-permission-checkbox:checked').length;
+        if (permCount) permCount.textContent = checked;
+    }
+
+    if (roleSelect) roleSelect.addEventListener('change', applyRole);
+    if (toggleBtn) toggleBtn.addEventListener('click', function () {
+        const visible = detail.style.display !== 'none';
+        detail.style.display = visible ? 'none' : '';
+        toggleBtn.textContent = visible ? 'Customise' : 'Hide';
+    });
+    if (resetBtn) resetBtn.addEventListener('click', applyRole);
+    checkboxes.forEach(cb => cb.addEventListener('change', updateCount));
+})();
+</script>
+{% endblock %}

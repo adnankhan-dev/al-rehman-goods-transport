@@ -1,0 +1,242 @@
+{% macro page_header(title, description=None, eyebrow="Workspace", action_href=None, action_label=None, action_class="btn btn-ui-primary") %}
+<section class="section-heading">
+    <div>
+        <span class="eyebrow">{{ eyebrow }}</span>
+        <h1 class="section-title">{{ title }}</h1>
+        {% if description %}
+        <p class="section-copy">{{ description }}</p>
+        {% endif %}
+    </div>
+    {% if action_href and action_label %}
+    <a href="{{ action_href }}" class="{{ action_class }}">{{ action_label }}</a>
+    {% endif %}
+</section>
+{% endmacro %}
+
+{% macro form_shell(title, description=None, eyebrow="Workspace", action_href=None, action_label=None, action_class="btn btn-ui-primary") %}
+<section class="form-screen">
+    {{ page_header(title, description, eyebrow, action_href, action_label, action_class) }}
+    <div class="card form-shell-card">
+        <div class="card-body p-4 p-lg-5">
+            {{ caller() }}
+        </div>
+    </div>
+</section>
+{% endmacro %}
+
+{% macro render_field(field, help_text=None, wrapper_class="form-field", label_class="form-label") %}
+    {% set classes = kwargs.get("class", "") %}
+    {% if field.type == "BooleanField" %}
+        {% if "form-check-input" not in classes %}
+            {% set classes = (classes ~ " form-check-input").strip() %}
+        {% endif %}
+    {% elif "Select" in field.type %}
+        {% if "form-select" not in classes %}
+            {% set classes = (classes ~ " form-select").strip() %}
+        {% endif %}
+    {% else %}
+        {% if "form-control" not in classes %}
+            {% set classes = (classes ~ " form-control").strip() %}
+        {% endif %}
+    {% endif %}
+    {% if field.errors %}
+        {% set classes = (classes ~ " is-invalid").strip() %}
+    {% endif %}
+    {% set _ = kwargs.update({"class": classes}) %}
+<div class="{{ wrapper_class }}">
+    {% if field.type == "BooleanField" %}
+    <div class="form-check">
+        {{ field(**kwargs)|safe }}
+        {{ field.label(class=label_class) }}
+    </div>
+    {% else %}
+    {{ field.label(class=label_class) }}
+    {{ field(**kwargs)|safe }}
+    {% endif %}
+    {% if help_text %}
+    <div class="form-text">{{ help_text }}</div>
+    {% endif %}
+    {% if field.errors %}
+    <div class="invalid-feedback d-block">
+        {% for error in field.errors %}
+            <div>{{ error }}</div>
+        {% endfor %}
+    </div>
+    {% endif %}
+</div>
+{% endmacro %}
+
+{% macro render_searchable_select(field, help_text=None, placeholder="Type to search", wrapper_class="form-field", label_class="form-label", allow_empty=False) %}
+    {% set ns = namespace(current_label="") %}
+    {% for choice in field.iter_choices() %}
+        {% set value = choice[0] %}
+        {% set label = choice[1] %}
+        {% set selected = choice[2] %}
+        {% if selected and value|string not in ("", "0") %}
+            {% set ns.current_label = label %}
+        {% endif %}
+    {% endfor %}
+<div class="{{ wrapper_class }} searchable-select">
+    {{ field.label(class=label_class, for=field.id ~ "_search") }}
+    <div class="searchable-select-control">
+        <input
+            type="text"
+            id="{{ field.id }}_search"
+            class="form-control searchable-select-input{% if field.errors %} is-invalid{% endif %}"
+            value="{{ ns.current_label }}"
+            placeholder="{{ placeholder }}"
+            autocomplete="off"
+            role="combobox"
+            aria-autocomplete="list"
+            aria-expanded="false"
+            data-searchable-select-input="true"
+            data-searchable-select-target="{{ field.id }}"
+            data-searchable-select-allow-empty="{{ 'true' if allow_empty else 'false' }}"
+            {% if field.flags.required and not allow_empty %}required{% endif %}
+        >
+        <button type="button" class="searchable-select-toggle" tabindex="-1" aria-label="Show all options" title="Show all options" data-searchable-select-toggle="{{ field.id }}">
+            <i class="bi bi-chevron-down" aria-hidden="true"></i>
+        </button>
+        <ul class="searchable-select-menu" id="{{ field.id }}_menu" role="listbox" hidden></ul>
+    </div>
+    {{ field(class="d-none", required=False, tabindex="-1", aria_hidden="true")|safe }}
+    {% if help_text %}
+    <div class="form-text">{{ help_text }}</div>
+    {% endif %}
+    {% if field.errors %}
+    <div class="invalid-feedback d-block">
+        {% for error in field.errors %}
+            <div>{{ error }}</div>
+        {% endfor %}
+    </div>
+    {% endif %}
+</div>
+{% endmacro %}
+
+{% macro form_actions(primary_label, cancel_href, cancel_label="Cancel", primary_class="btn btn-ui-primary") %}
+<div class="form-actions">
+    <button type="submit" class="{{ primary_class }}">{{ primary_label }}</button>
+    <a href="{{ cancel_href }}" class="btn btn-ui-neutral">{{ cancel_label }}</a>
+</div>
+{% endmacro %}
+
+{% macro pagination_nav(request, pagination) %}
+{% if pagination and pagination.total_pages > 1 %}
+<nav class="d-flex justify-content-between align-items-center flex-wrap gap-2 mt-3">
+    <span class="table-text">Showing {{ pagination.start_index }}&ndash;{{ pagination.end_index }} of {{ pagination.total }}</span>
+    <div class="d-flex align-items-center gap-2">
+        {% if pagination.has_prev %}
+        <a class="btn btn-sm btn-ui-neutral" href="{{ request.url.include_query_params(page=pagination.page - 1) }}">&larr; Prev</a>
+        {% endif %}
+        <span class="table-text">Page {{ pagination.page }} of {{ pagination.total_pages }}</span>
+        {% if pagination.has_next %}
+        <a class="btn btn-sm btn-ui-neutral" href="{{ request.url.include_query_params(page=pagination.page + 1) }}">Next &rarr;</a>
+        {% endif %}
+    </div>
+</nav>
+{% endif %}
+{% endmacro %}
+
+{% macro stat_card(label, value_id, hint=None, tone="default") %}
+<div class="summary-stat summary-stat-{{ tone }}">
+    <span>{{ label }}</span>
+    <strong id="{{ value_id }}">0</strong>
+    {% if hint %}
+    <small>{{ hint }}</small>
+    {% endif %}
+</div>
+{% endmacro %}
+
+{% macro metric_tile(label, value, hint=None, tone="default", icon=None, href=None) %}
+{% set tag = "a" if href else "div" %}
+<{{ tag }}{% if href %} href="{{ href }}"{% endif %} class="metric-tile metric-tile-{{ tone }}{% if icon %} metric-tile-with-icon{% endif %}">
+    {% if icon %}
+    <div class="metric-tile-icon-slot"><i class="{{ icon }}" aria-hidden="true"></i></div>
+    {% endif %}
+    <div>
+        <span>{{ label }}</span>
+        <strong>{{ value }}</strong>
+        {% if hint %}
+        <small>{{ hint }}</small>
+        {% endif %}
+    </div>
+</{{ tag }}>
+{% endmacro %}
+
+{% macro table_tools(table_id, search_placeholder="Filter records", print_label="Print") %}
+<div class="table-toolbar-bar">
+    <div class="table-search-wrap">
+        <i class="bi bi-search table-search-icon" aria-hidden="true"></i>
+        <input
+            type="text"
+            id="{{ table_id }}_filter"
+            class="form-control table-search-input"
+            placeholder="{{ search_placeholder }}"
+            data-table-filter="{{ table_id }}"
+        >
+    </div>
+    <button type="button" class="btn btn-ui-neutral btn-sm" onclick="window.print(); return false;">
+        <i class="bi bi-printer" aria-hidden="true"></i>
+        <span class="d-none d-sm-inline ms-1">{{ print_label }}</span>
+    </button>
+</div>
+{% endmacro %}
+
+{% macro detail_value(label, value) %}
+<div class="detail-item">
+    <span class="detail-label">{{ label }}</span>
+    <span class="detail-value">{{ value }}</span>
+</div>
+{% endmacro %}
+
+{% macro empty_state(message="No records found.", icon="bi-inbox") %}
+<div class="empty-state">
+    <i class="bi {{ icon }} empty-state-icon" aria-hidden="true"></i>
+    <p>{{ message }}</p>
+</div>
+{% endmacro %}
+
+{% macro erp_top_bar(back_href, back_label, actions=None) %}
+<div class="erp-top-bar">
+    <a href="{{ back_href }}" class="erp-top-bar-back">
+        <i class="bi bi-arrow-left" aria-hidden="true"></i>
+        {{ back_label }}
+    </a>
+    {% if actions %}
+    <div class="erp-top-bar-actions">
+        {{ actions }}
+    </div>
+    {% endif %}
+</div>
+{% endmacro %}
+
+{% macro report_print_tools(report_title, report_subtitle=None) %}
+<div class="detail-actions report-print-toolbar">
+    <div class="report-print-intro">
+        <span class="eyebrow">ERP Print</span>
+        <strong>{{ report_title }}</strong>
+        {% if report_subtitle %}
+        <small>{{ report_subtitle }}</small>
+        {% endif %}
+    </div>
+    <button type="button" class="btn btn-ui-midnight" onclick="window.print()">
+        <i class="bi bi-printer" aria-hidden="true"></i>
+        <span>Print Report</span>
+    </button>
+</div>
+<section class="report-print-letterhead">
+    <div class="report-print-letterhead-brand">
+        <div class="report-print-kicker">ERP Report Statement</div>
+        <h1>Al Rehman Goods Transport</h1>
+        <p>Bahtr Mor Wah Cantt</p>
+        <p>Contact No. Ahsan Niazi 0307-2342827</p>
+        <p>Inam Khan - 0301-5749086</p>
+    </div>
+    <div class="report-print-letterhead-meta">
+        <div><span>Report</span><strong>{{ report_title }}</strong></div>
+        {% if report_subtitle %}
+        <div><span>Range</span><strong>{{ report_subtitle }}</strong></div>
+        {% endif %}
+    </div>
+</section>
+{% endmacro %}

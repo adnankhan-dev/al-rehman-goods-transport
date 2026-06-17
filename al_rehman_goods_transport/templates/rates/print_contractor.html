@@ -1,0 +1,133 @@
+{% extends "base.html" %}
+{% from "_formhelpers.html" import report_print_tools %}
+
+{% block title %}Rate Sheet – {{ contractor.name }}{% endblock %}
+
+{% block content %}
+<section class="form-screen rate-print-screen">
+    {{ report_print_tools("Rate Schedule — " ~ contractor.name, "Al Rehman Goods Transport") }}
+
+    <div class="detail-panel mb-3">
+        <h3>Contractor Information</h3>
+        <div class="detail-grid">
+            <div class="detail-list">
+                <div class="detail-item"><span class="detail-label">Name</span><span class="detail-value">{{ contractor.name }}</span></div>
+                {% if contractor.contact_person %}
+                <div class="detail-item"><span class="detail-label">Contact Person</span><span class="detail-value">{{ contractor.contact_person }}</span></div>
+                {% endif %}
+                {% if contractor.phone %}
+                <div class="detail-item"><span class="detail-label">Phone</span><span class="detail-value">{{ contractor.phone }}</span></div>
+                {% endif %}
+            </div>
+            <div class="detail-list">
+                <div class="detail-item"><span class="detail-label">Printed On</span><span class="detail-value">{{ now.strftime('%d %B %Y') }}</span></div>
+                <div class="detail-item"><span class="detail-label">Total Rate Records</span><span class="detail-value">{{ rates|length }}</span></div>
+                <div class="detail-item"><span class="detail-label">Active Rates</span><span class="detail-value">{{ rates|selectattr('is_currently_active')|list|length }}</span></div>
+            </div>
+        </div>
+    </div>
+
+    {% set active_rates = rates|selectattr('is_currently_active')|list %}
+    {% set other_rates = rates|rejectattr('is_currently_active')|list %}
+
+    {% if active_rates %}
+    <div class="table-panel mb-4">
+        <div class="table-panel-header">
+            <h3 class="table-panel-title">Current Active Rates</h3>
+            <span class="section-count">{{ active_rates|length }} rates</span>
+        </div>
+        <div class="table-responsive">
+            <table class="table detail-table">
+                <thead>
+                    <tr>
+                        <th>From Site</th>
+                        <th>To Site (Delivery)</th>
+                        <th>Material</th>
+                        <th>Unit</th>
+                        <th style="text-align:right;">Rate (Rs.)</th>
+                        <th>Effective From</th>
+                        <th>Effective To</th>
+                        <th>Notes</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for rate in active_rates %}
+                    <tr>
+                        <td>{{ rate.from_site.name if rate.from_site else "—" }}</td>
+                        <td><strong>{{ rate.site.name }}</strong></td>
+                        <td>{{ rate.material.name if rate.material else "All Materials" }}</td>
+                        <td>{{ rate.unit|upper }}</td>
+                        <td style="text-align:right; font-weight:700; color: var(--primary);">{{ "%.2f"|format(rate.rate) }}</td>
+                        <td>{{ rate.effective_from.strftime('%d %b %Y') }}</td>
+                        <td>{{ rate.effective_to.strftime('%d %b %Y') if rate.effective_to else "Open-ended" }}</td>
+                        <td class="text-muted" style="font-size:0.85rem;">{{ rate.notes or "—" }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {% else %}
+    <div class="alert alert-info mb-4">No currently active rates for this contractor.</div>
+    {% endif %}
+
+    {% if other_rates %}
+    <div class="table-panel mb-4">
+        <div class="table-panel-header">
+            <h3 class="table-panel-title" style="color: var(--text-muted);">Historical / Upcoming Rates</h3>
+            <span class="section-count">{{ other_rates|length }} records</span>
+        </div>
+        <div class="table-responsive">
+            <table class="table detail-table" style="opacity: 0.75;">
+                <thead>
+                    <tr>
+                        <th>From Site</th>
+                        <th>To Site</th>
+                        <th>Material</th>
+                        <th>Unit</th>
+                        <th style="text-align:right;">Rate (Rs.)</th>
+                        <th>Effective From</th>
+                        <th>Effective To</th>
+                        <th>Status</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for rate in other_rates %}
+                    <tr>
+                        <td>{{ rate.from_site.name if rate.from_site else "—" }}</td>
+                        <td>{{ rate.site.name }}</td>
+                        <td>{{ rate.material.name if rate.material else "All Materials" }}</td>
+                        <td>{{ rate.unit|upper }}</td>
+                        <td style="text-align:right;">{{ "%.2f"|format(rate.rate) }}</td>
+                        <td>{{ rate.effective_from.strftime('%d %b %Y') }}</td>
+                        <td>{{ rate.effective_to.strftime('%d %b %Y') if rate.effective_to else "Open-ended" }}</td>
+                        <td>
+                            {% if rate.effective_from > today %}
+                            <span class="badge bg-info">Upcoming</span>
+                            {% else %}
+                            <span class="badge bg-secondary">Expired</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {% endif %}
+
+    <div class="detail-panel mt-4" style="border-top: 2px solid var(--border); padding-top: 1.5rem;">
+        <p class="mb-1" style="font-size:0.85rem; color: var(--text-muted);">
+            This rate schedule has been issued by <strong>Al Rehman Goods Transport</strong>.
+            Rates are subject to revision with a new rate schedule issuance.
+            Please retain this document for your records.
+        </p>
+    </div>
+</section>
+{% endblock %}
+
+{% block page_scripts %}
+<script>
+    const today = new Date();
+</script>
+{% endblock %}

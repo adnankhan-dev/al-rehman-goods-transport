@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% from "_formhelpers.html" import form_actions, form_shell, render_field %}
+
+{% block title %}Edit Vehicle - Al Rehman Goods Transport{% endblock %}
+
+{% block content %}
+{% call form_shell("Edit Vehicle " ~ vehicle.vehicle_number, "Refresh registration and ownership details for this fleet record. The balance is maintained by orders, diesel, and payments.", "Vehicles", url_for('vehicles.view_vehicle', id=vehicle.id), "View Vehicle") %}
+<form method="POST" class="form-stack">
+    {{ form.hidden_tag() }}
+    <div class="form-grid-two">
+        {{ render_field(form.vehicle_number, placeholder="Vehicle number") }}
+        {{ render_field(form.owner_id) }}
+        {{ render_field(form.vehicle_type, placeholder="Vehicle type") }}
+        {{ render_field(form.capacity) }}
+        {{ render_field(form.fitness_certificate, placeholder="Fitness certificate") }}
+    </div>
+    {{ render_field(form.insurance_details, rows=3, placeholder="Insurance details") }}
+    {{ form_actions("Update Vehicle", url_for('vehicles.vehicles')) }}
+</form>
+{% endcall %}
+{% endblock %}

@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% from "_formhelpers.html" import form_actions, form_shell, render_field %}
+
+{% block title %}Edit Vehicle Owner - Al Rehman Goods Transport{% endblock %}
+
+{% block content %}
+{% call form_shell("Edit Vehicle Owner " ~ owner.name, "Update owner details while keeping all linked vehicles grouped under the same profile.", "Vehicle Owners", url_for('vehicle_owners.view', id=owner.id), "View Owner") %}
+<form method="POST" class="form-stack">
+    {{ form.hidden_tag() }}
+    <div class="form-grid-two">
+        {{ render_field(form.name, placeholder="Owner name") }}
+        {{ render_field(form.phone, placeholder="Phone number") }}
+    </div>
+    {{ render_field(form.address, rows=3, placeholder="Address") }}
+    {{ form_actions("Update Vehicle Owner", url_for('vehicle_owners.view', id=owner.id)) }}
+</form>
+{% endcall %}
+{% endblock %}

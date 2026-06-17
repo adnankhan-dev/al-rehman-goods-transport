@@ -1,0 +1,125 @@
+{% extends "base.html" %}
+{% from "_formhelpers.html" import detail_value, form_shell %}
+
+{% block title %}View Site - Al Rehman Goods Transport{% endblock %}
+
+{% block content %}
+{% call form_shell("Site — " ~ site.name, "Track delivery volume, profitability, and contractor assignment for this site.", "Sites") %}
+<section class="detail-shell">
+    <div class="erp-top-bar">
+        <a href="{{ url_for('sites.sites') }}" class="erp-top-bar-back">
+            <i class="bi bi-arrow-left"></i> Sites
+        </a>
+        <div class="erp-top-bar-actions">
+            {% if current_user.can('sites.edit') %}
+            <a href="{{ url_for('sites.edit_site', id=site.id) }}" class="btn btn-sm btn-ui-edit">
+                <i class="bi bi-pencil"></i> Edit
+            </a>
+            {% endif %}
+        </div>
+    </div>
+    <div class="detail-grid">
+        <div class="detail-panel">
+            <h3><i class="bi bi-geo-alt-fill"></i> Site Information</h3>
+            <div class="detail-list">
+                {{ detail_value("Name", site.name) }}
+                {{ detail_value("Contact Person", site.contact_person or "-") }}
+                {{ detail_value("Phone", site.phone or "-") }}
+                {{ detail_value("Contractor", site.contractor.name if site.contractor else "-") }}
+                {{ detail_value("Business Site", "Yes" if site.is_business_site else "No") }}
+            </div>
+        </div>
+        <div class="detail-panel">
+            <h3><i class="bi bi-bar-chart-fill"></i> Performance Snapshot</h3>
+            <div class="detail-list">
+                {{ detail_value("Total Orders", total_orders) }}
+                {{ detail_value("Completed Orders", completed_orders_count) }}
+                {{ detail_value("Total Quantity Delivered", total_quantity ~ " CFT") }}
+                {{ detail_value("Total Profit", "Rs. " ~ ("%.2f"|format(total_profit))) }}
+            </div>
+        </div>
+    </div>
+    <div class="detail-panel">
+        <h3><i class="bi bi-map-fill"></i> Address</h3>
+        <div class="detail-value">{{ site.address or "No address available." }}</div>
+    </div>
+    <div class="detail-panel">
+        <h3><i class="bi bi-truck"></i> Related Orders</h3>
+        <div class="table-responsive">
+            <table class="table align-middle detail-table">
+                <thead>
+                    <tr>
+                        <th>Date</th>
+                        <th>Order</th>
+                        <th>Role</th>
+                        <th>Vehicle</th>
+                        <th>Material</th>
+                        <th>Quantity</th>
+                        <th>Billing</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for order in related_orders %}
+                    <tr>
+                        <td>{{ (order.completion_date or order.order_date).strftime('%Y-%m-%d') }}</td>
+                        <td><a href="{{ url_for('orders.view_order', id=order.id) }}"><span class="table-id-badge">#{{ order.id }}</span></a></td>
+                        <td>
+                            {% if order.site_id == site.id %}
+                            <span class="status-chip status-chip-muted">Destination</span>
+                            {% elif order.from_site_id == site.id %}
+                            <span class="status-chip status-chip-complete">From Site</span>
+                            {% else %}-{% endif %}
+                        </td>
+                        <td>{{ order.vehicle.vehicle_number if order.vehicle else '-' }}</td>
+                        <td>{{ order.material_name }}</td>
+                        <td>{{ "%.2f"|format(order.delivered_quantity or order.quantity or 0) }} {{ order.unit|upper }}</td>
+                        <td>
+                            {% if order.bill %}
+                            <span class="status-chip status-chip-billed">{{ order.bill.bill_number }}</span>
+                            {% else %}
+                            <span class="status-chip status-chip-ready">Ready for Bill</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr><td colspan="7" class="text-center text-muted py-3">No related orders found for this site.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    <div class="detail-panel">
+        <h3><i class="bi bi-arrow-left-right"></i> Related Transactions</h3>
+        <div class="table-responsive">
+            <table class="table align-middle detail-table">
+                <thead>
+                    <tr>
+                        <th>Date</th>
+                        <th>Type</th>
+                        <th>Amount</th>
+                        <th>Reference</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for transaction in related_transactions %}
+                    <tr>
+                        <td>{{ transaction.date.strftime('%Y-%m-%d') }}</td>
+                        <td>{{ transaction.type|replace('_', ' ')|title }}</td>
+                        <td>Rs. {{ "%.2f"|format(transaction.amount or 0) }}</td>
+                        <td>{{ transaction.reference or "-" }}</td>
+                    </tr>
+                    {% else %}
+                    <tr><td colspan="4" class="text-center text-muted py-3">No related transactions found for this site.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    <div class="detail-actions">
+        <a href="{{ url_for('sites.sites') }}" class="btn btn-ui-neutral">
+            <i class="bi bi-arrow-left"></i> Back to Sites
+        </a>
+    </div>
+</section>
+{% endcall %}
+{% endblock %}

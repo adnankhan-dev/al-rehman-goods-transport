@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+{% from "_formhelpers.html" import form_shell, metric_tile, table_tools %}
+
+{% block title %}Materials - Al Rehman Goods Transport{% endblock %}
+
+{% block content %}
+{% call form_shell("Materials", "Master material list used by orders, billing filters, and material reporting.", "Records", (url_for('materials.create_material') if current_user.can('materials.create') else None), "Add Material") %}
+<section class="content-stack">
+    <div class="collection-overview">
+        {{ metric_tile("Material Count", materials|length, "Reference records for order capture", "primary", "bi bi-box-seam-fill") }}
+        {{ metric_tile("Total Orders", materials|map(attribute='orders')|map('length')|sum, "Orders referencing these materials", "ocean", "bi bi-truck-fill") }}
+    </div>
+    {{ table_tools("materialsTable", "Search by material name…", "Print") }}
+    <div class="table-panel">
+        <div class="table-panel-header">
+            <div>
+                <h3 class="table-panel-title">Material register</h3>
+            </div>
+            <div class="table-toolbar">
+                <span class="section-count">{{ materials|length }} materials</span>
+            </div>
+        </div>
+        <div class="table-responsive">
+            <table id="materialsTable" class="table detail-table">
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>Name</th>
+                        <th>Unit</th>
+                        <th>Orders</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for material in materials %}
+                    <tr>
+                        <td><span class="table-id-badge">#{{ material.id }}</span></td>
+                        <td><span class="table-main"><strong>{{ material.name }}</strong></span></td>
+                        <td><span class="table-text">{{ (material.unit or 'cft')|upper }}</span></td>
+                        <td><span class="table-text">{{ material.orders|length }}</span></td>
+                        <td>
+                            <div class="table-action-group">
+                                <a href="{{ url_for('materials.view_material', id=material.id) }}" class="btn btn-sm btn-ui-ghost" title="View">
+                                    <i class="bi bi-eye"></i>
+                                </a>
+                                {% if current_user.can('materials.edit') %}
+                                <a href="{{ url_for('materials.edit_material', id=material.id) }}" class="btn btn-sm btn-ui-edit" title="Edit">
+                                    <i class="bi bi-pencil"></i>
+                                </a>
+                                {% endif %}
+                            </div>
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr><td colspan="5" class="text-center py-4 table-muted">No materials found.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</section>
+{% endcall %}
+{% endblock %}

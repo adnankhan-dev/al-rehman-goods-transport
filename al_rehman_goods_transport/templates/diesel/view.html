@@ -1,0 +1,89 @@
+{% extends "base.html" %}
+{% from "_formhelpers.html" import detail_value, erp_top_bar %}
+
+{% block title %}Diesel Entry #{{ entry.id }} - Al Rehman Goods Transport{% endblock %}
+
+{% block content %}
+<section class="form-screen">
+    {% set actions %}
+        {% if current_user.can('diesel.edit') %}
+        <a href="{{ url_for('diesel.edit', id=entry.id) }}" class="btn btn-ui-edit btn-sm">
+            <i class="bi bi-pencil"></i> Edit
+        </a>
+        {% endif %}
+        {% if current_user.can('diesel.delete') %}
+        <form action="{{ url_for('diesel.delete', id=entry.id) }}" method="POST" class="d-inline">
+            <button type="submit" class="btn btn-sm btn-ui-danger" onclick="return confirm('Delete this diesel entry?')">
+                <i class="bi bi-trash"></i> Delete
+            </button>
+        </form>
+        {% endif %}
+    {% endset %}
+    {{ erp_top_bar(url_for('diesel.index'), "Back to Diesel Entries", actions) }}
+
+    <div class="detail-grid mt-3">
+        <div class="detail-panel">
+            <h3><i class="bi bi-fuel-pump-fill"></i> Fuel Entry</h3>
+            <div class="detail-list">
+                {{ detail_value("Entry ID", "#" ~ entry.id) }}
+                {{ detail_value("Date", entry.date.strftime('%d %B %Y')) }}
+                {{ detail_value("Vehicle", entry.vehicle.vehicle_number) }}
+                {{ detail_value("Vehicle Owner", entry.vehicle.owner_display_name) }}
+                {% if entry.petrol_pump %}
+                {{ detail_value("Petrol Pump", entry.petrol_pump.name) }}
+                {{ detail_value("Pump Outstanding Balance", "Rs. " ~ "%.2f"|format(entry.petrol_pump.balance)) }}
+                {% else %}
+                {{ detail_value("Petrol Pump", "—") }}
+                {% endif %}
+                {{ detail_value("Receipt Number", entry.receipt_number or "—") }}
+                <div class="detail-item">
+                    <span class="detail-label">Bill Status</span>
+                    <span class="detail-value">
+                        {% if entry.bill_id %}
+                        <a href="{{ url_for('bills.view_bill', id=entry.bill_id) }}" class="status-badge status-badge-completed">
+                            <i class="bi bi-receipt"></i> Billed — {{ entry.bill.bill_number if entry.bill else "#" ~ entry.bill_id }}
+                        </a>
+                        {% else %}
+                        <span class="status-badge status-badge-pending">Unbilled</span>
+                        {% endif %}
+                    </span>
+                </div>
+            </div>
+        </div>
+
+        <div class="detail-panel">
+            <h3><i class="bi bi-droplet-fill"></i> Fuel &amp; Cost</h3>
+            <div class="detail-list">
+                <div class="detail-item">
+                    <span class="detail-label">Amount Paid</span>
+                    <span class="detail-value" style="font-size: 1.4rem; font-weight: 700; color: var(--primary);">Rs. {{ "%.2f"|format(entry.amount) }}</span>
+                </div>
+                {{ detail_value("Litres Filled", ("%.2f"|format(entry.litres) ~ " L") if entry.litres else "—") }}
+                {% if entry.litres and entry.litres > 0 %}
+                {{ detail_value("Rate per Litre", "Rs. " ~ "%.2f"|format(entry.amount / entry.litres)) }}
+                {% endif %}
+                {{ detail_value("Logged On", entry.created_at.strftime('%d %b %Y %I:%M %p') if entry.created_at else "—") }}
+            </div>
+        </div>
+    </div>
+
+    {% if entry.order %}
+    <div class="detail-panel mt-3">
+        <h3><i class="bi bi-truck"></i> Linked Trip</h3>
+        <div class="detail-list">
+            {{ detail_value("Order ID", "#" ~ entry.order.id) }}
+            {{ detail_value("Order Date", entry.order.order_date.strftime('%d %B %Y')) }}
+            {{ detail_value("Vehicle", entry.order.vehicle.vehicle_number if entry.order.vehicle else "—") }}
+            {{ detail_value("Material", entry.order.material_name) }}
+        </div>
+    </div>
+    {% endif %}
+
+    {% if entry.notes %}
+    <div class="detail-panel mt-3">
+        <h3><i class="bi bi-chat-text"></i> Notes</h3>
+        <p class="mb-0" style="white-space: pre-line;">{{ entry.notes }}</p>
+    </div>
+    {% endif %}
+</section>
+{% endblock %}

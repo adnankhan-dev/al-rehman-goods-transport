@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% from "_formhelpers.html" import form_actions, form_shell, render_field %}
+
+{% block title %}Create Material - Al Rehman Goods Transport{% endblock %}
+
+{% block content %}
+{% call form_shell("Create Material", "Add a material once and reuse it consistently across orders and reports.", "Records", url_for('materials.index'), "Back to Materials") %}
+<form method="POST" class="form-stack">
+    {{ form.hidden_tag() }}
+    <div class="form-grid-two">
+        {{ render_field(form.name, placeholder="Material name") }}
+        {{ render_field(form.unit, help_text="The measuring unit for this material. It is fixed here and used automatically on every order.") }}
+    </div>
+    {{ form_actions("Create Material", url_for('materials.index')) }}
+</form>
+{% endcall %}
+{% endblock %}

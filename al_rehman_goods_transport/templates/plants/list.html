@@ -1,0 +1,82 @@
+{% extends "base.html" %}
+{% from "_formhelpers.html" import form_shell, metric_tile, table_tools %}
+
+{% block title %}Plants - Al Rehman Goods Transport{% endblock %}
+
+{% block content %}
+{% call form_shell("Plants", "Supply plant profiles, contacts, and payment balances.", "Records", (url_for('plants.create_plant') if current_user.can('plants.create') else None), "Add Plant", "btn btn-ui-accent") %}
+<section class="content-stack">
+    <div class="collection-overview">
+        {{ metric_tile("Plants", plants|length, "Supply sources on record", "primary", "bi bi-building-fill") }}
+        {{ metric_tile("Open Balance", "Rs. " ~ ("%.0f"|format(plants|sum(attribute='balance'))), "Aggregate plant-side position", "accent", "bi bi-cash-stack") }}
+        {{ metric_tile("With Contacts", plants|selectattr('contact_person')|list|length, "Ready for direct coordination", "ocean", "bi bi-person-lines-fill") }}
+        {{ metric_tile("With Terms", plants|selectattr('payment_terms')|list|length, "Plants with stored commercial terms", "slate", "bi bi-file-earmark-text-fill") }}
+    </div>
+    {{ table_tools("plantsTable", "Search by name, contact, phone, terms, or balance…", "Print") }}
+    <div class="table-panel">
+        <div class="table-panel-header">
+            <div>
+                <h3 class="table-panel-title">Plant directory</h3>
+            </div>
+            <div class="table-toolbar">
+                <span class="section-count">{{ plants|length }} records</span>
+            </div>
+        </div>
+        <div class="table-responsive">
+            <table id="plantsTable" class="table detail-table">
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>Name</th>
+                        <th>Contact Person</th>
+                        <th>Phone</th>
+                        <th>Payment Terms</th>
+                        <th>Balance</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for plant in plants %}
+                    <tr>
+                        <td><span class="table-id-badge">#{{ plant.id }}</span></td>
+                        <td>
+                            <div class="table-main">
+                                <strong>{{ plant.name }}</strong>
+                                <span class="table-sub">{{ plant.address or "No address saved" }}</span>
+                            </div>
+                        </td>
+                        <td><span class="table-text">{{ plant.contact_person or "-" }}</span></td>
+                        <td><span class="table-text">{{ plant.phone or "-" }}</span></td>
+                        <td><span class="table-text">{{ plant.payment_terms or "-" }}</span></td>
+                        <td><span class="table-amount">Rs. {{ "%.2f"|format(plant.balance or 0) }}</span></td>
+                        <td>
+                            <div class="table-action-group">
+                                <a href="{{ url_for('plants.view_plant', id=plant.id) }}" class="btn btn-sm btn-ui-ghost" title="View">
+                                    <i class="bi bi-eye"></i>
+                                </a>
+                                {% if current_user.can('plants.edit') %}
+                                <a href="{{ url_for('plants.edit_plant', id=plant.id) }}" class="btn btn-sm btn-ui-edit" title="Edit">
+                                    <i class="bi bi-pencil"></i>
+                                </a>
+                                {% endif %}
+                                {% if current_user.can('plants.delete') %}
+                                <form action="{{ url_for('plants.delete_plant', id=plant.id) }}" method="POST" class="d-inline">
+                                    <button type="submit" class="btn btn-sm btn-ui-danger" onclick="return confirm('Delete this plant?')">
+                                        <i class="bi bi-trash"></i>
+                                    </button>
+                                </form>
+                                {% endif %}
+                            </div>
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr><td colspan="7" class="text-center py-4 table-muted">No plants found.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</section>
+{% endcall %}
+{% endblock %}
+

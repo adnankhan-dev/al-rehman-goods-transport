@@ -1,0 +1,96 @@
+{% extends "base.html" %}
+{% from "_formhelpers.html" import form_shell, metric_tile, table_tools %}
+
+{% block title %}Sites - Al Rehman Goods Transport{% endblock %}
+
+{% block content %}
+{% call form_shell("Sites", "Delivery destinations, contractor linkage, and order activity context.", "Records", (url_for('sites.create_site') if current_user.can('sites.create') else None), "Add Site", "btn btn-ui-ocean") %}
+<section class="content-stack">
+    <div class="collection-overview">
+        {{ metric_tile("Sites", sites|length, "Delivery and dispatch destinations", "primary", "bi bi-geo-alt-fill") }}
+        {{ metric_tile("Total Orders", sites|map(attribute='orders')|map('length')|sum, "Order volume across all sites", "accent", "bi bi-truck-fill") }}
+        {{ metric_tile("With Contacts", sites|selectattr('contact_person')|list|length, "Sites with named field contacts", "ocean", "bi bi-person-lines-fill") }}
+        {{ metric_tile("Archived", sites|selectattr('is_archived')|list|length, "Hidden from new order entry", "slate", "bi bi-archive-fill") }}
+    </div>
+    {{ table_tools("sitesTable", "Search by name, contractor, contact, or phone…", "Print") }}
+    <div class="table-panel">
+        <div class="table-panel-header">
+            <div>
+                <h3 class="table-panel-title">Site register</h3>
+            </div>
+            <div class="table-toolbar">
+                <span class="section-count">{{ sites|length }} records</span>
+            </div>
+        </div>
+        <div class="table-responsive">
+            <table id="sitesTable" class="table detail-table">
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>Name</th>
+                        <th>Contact Person</th>
+                        <th>Phone</th>
+                        <th>Contractor</th>
+                        <th>Business Site</th>
+                        <th>Orders</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for site in sites %}
+                    <tr>
+                        <td><span class="table-id-badge">#{{ site.id }}</span></td>
+                        <td>
+                            <div class="table-main">
+                                <strong>{{ site.name }}</strong>
+                                {% if site.is_business_site %}<span class="status-chip status-chip-complete" style="font-size:0.6rem">From-site</span>{% endif %}
+                                {% if site.is_archived %}<span class="status-chip status-chip-muted" style="font-size:0.6rem">Archived</span>{% endif %}
+                            </div>
+                        </td>
+                        <td><span class="table-text">{{ site.contact_person or "-" }}</span></td>
+                        <td><span class="table-text">{{ site.phone or "-" }}</span></td>
+                        <td><span class="table-text">{{ site.contractor.name if site.contractor else "-" }}</span></td>
+                        <td>
+                            {% if site.is_business_site %}
+                            <span class="status-chip status-chip-complete">Yes</span>
+                            {% else %}
+                            <span class="table-muted">No</span>
+                            {% endif %}
+                        </td>
+                        <td><span class="table-text">{{ site.orders|length }}</span></td>
+                        <td>
+                            <div class="table-action-group">
+                                <a href="{{ url_for('sites.view_site', id=site.id) }}" class="btn btn-sm btn-ui-ghost" title="View">
+                                    <i class="bi bi-eye"></i>
+                                </a>
+                                {% if current_user.can('sites.edit') %}
+                                <a href="{{ url_for('sites.edit_site', id=site.id) }}" class="btn btn-sm btn-ui-edit" title="Edit">
+                                    <i class="bi bi-pencil"></i>
+                                </a>
+                                <form action="{{ url_for('sites.archive_site', id=site.id) }}" method="POST" class="d-inline">
+                                    <button type="submit" class="btn btn-sm {{ 'btn-ui-ocean' if site.is_archived else 'btn-ui-neutral' }}" title="{{ 'Restore site' if site.is_archived else 'Archive site' }}">
+                                        <i class="bi {{ 'bi-arrow-counterclockwise' if site.is_archived else 'bi-archive' }}"></i>
+                                    </button>
+                                </form>
+                                {% endif %}
+                                {% if current_user.can('sites.delete') %}
+                                <form action="{{ url_for('sites.delete_site', id=site.id) }}" method="POST" class="d-inline">
+                                    <button type="submit" class="btn btn-sm btn-ui-danger" onclick="return confirm('Delete this site?')">
+                                        <i class="bi bi-trash"></i>
+                                    </button>
+                                </form>
+                                {% endif %}
+                            </div>
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr><td colspan="8" class="text-center py-4 table-muted">No sites found.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</section>
+{% endcall %}
+{% endblock %}
+

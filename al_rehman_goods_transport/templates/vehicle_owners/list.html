@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+{% from "_formhelpers.html" import form_shell, metric_tile, table_tools %}
+
+{% block title %}Vehicle Owners - Al Rehman Goods Transport{% endblock %}
+
+{% block content %}
+{% call form_shell("Vehicle Owners", "Owner profiles linking fleet units for grouped billing and settlement.", "Records", (url_for('vehicle_owners.create') if current_user.can('vehicle_owners.create') else None), "Add Owner", "btn btn-ui-accent") %}
+<section class="content-stack">
+    <div class="collection-overview">
+        {{ metric_tile("Owner Profiles", owners|length, "People and companies with registered vehicles", "primary", "bi bi-person-badge-fill", url_for('vehicle_owners.index')) }}
+        {{ metric_tile("Linked Vehicles", owners|map(attribute='vehicles')|map('length')|sum, "Fleet units assigned across all owners", "accent", "bi bi-truck-fill", url_for('vehicles.vehicles')) }}
+        {{ metric_tile("With Phone", owners|selectattr('phone')|list|length, "Owners with a contact number on file", "ocean", "bi bi-telephone-fill") }}
+        {{ metric_tile("Total Balance", "Rs. " ~ ("%.0f"|format(owners|sum(attribute='balance'))), "Net payable position across all owners", "slate", "bi bi-cash-coin") }}
+    </div>
+    {{ table_tools("vehicleOwnersTable", "Search by name, phone, or vehicle count…", "Print") }}
+    <div class="table-panel">
+        <div class="table-panel-header">
+            <div>
+                <h3 class="table-panel-title">Owner directory</h3>
+            </div>
+            <div class="table-toolbar">
+                <span class="section-count">{{ owners|length }} owners</span>
+            </div>
+        </div>
+        <div class="table-responsive">
+            <table id="vehicleOwnersTable" class="table detail-table">
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>Name</th>
+                        <th>Phone</th>
+                        <th>Vehicles</th>
+                        <th>Balance</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for owner in owners %}
+                    <tr>
+                        <td><span class="table-id-badge">#{{ owner.id }}</span></td>
+                        <td>
+                            <div class="table-main">
+                                <strong>{{ owner.name }}</strong>
+                                <span class="table-sub">{{ owner.address or "No address saved" }}</span>
+                            </div>
+                        </td>
+                        <td><span class="table-text">{{ owner.phone or "-" }}</span></td>
+                        <td><span class="table-text">{{ owner.vehicles|length }} vehicle{% if owner.vehicles|length != 1 %}s{% endif %}</span></td>
+                        <td><span class="table-amount">Rs. {{ "%.2f"|format(owner.balance or 0) }}</span></td>
+                        <td>
+                            <div class="table-action-group">
+                                <a href="{{ url_for('vehicle_owners.view', id=owner.id) }}" class="btn btn-sm btn-ui-ghost" title="View">
+                                    <i class="bi bi-eye"></i>
+                                </a>
+                                {% if current_user.can('vehicle_owners.edit') %}
+                                <a href="{{ url_for('vehicle_owners.edit', id=owner.id) }}" class="btn btn-sm btn-ui-edit" title="Edit">
+                                    <i class="bi bi-pencil"></i>
+                                </a>
+                                {% endif %}
+                            </div>
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr><td colspan="6" class="text-center py-4 table-muted">No vehicle owners found.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</section>
+{% endcall %}
+{% endblock %}
+

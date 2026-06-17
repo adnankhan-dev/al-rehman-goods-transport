@@ -1,0 +1,217 @@
+{% extends "base.html" %}
+{% from "_formhelpers.html" import detail_value, form_shell, metric_tile %}
+
+{% block title %}{{ entity.name }} - Al Rehman Goods Transport{% endblock %}
+
+{% block content %}
+{% call form_shell(entity.name, "Financial account overview — balance, transaction history, and post new entries.", "Finance") %}
+<section class="detail-shell">
+    <div class="erp-top-bar">
+        <a href="{{ url_for('financial_entities.index') }}" class="erp-top-bar-back">
+            <i class="bi bi-arrow-left"></i> Financial Entities
+        </a>
+        <div class="erp-top-bar-actions">
+            <a href="{{ url_for('financial_entities.statement', id=entity.id) }}" class="btn btn-sm btn-ui-midnight" target="_blank" rel="noopener">
+                <i class="bi bi-printer"></i> Statement
+            </a>
+            {% if current_user.can('ledger.create') %}
+            <a href="{{ url_for('financial_entities.edit', id=entity.id) }}" class="btn btn-sm btn-ui-edit">
+                <i class="bi bi-pencil"></i> Edit
+            </a>
+            <form action="{{ url_for('financial_entities.delete', id=entity.id) }}" method="POST" class="d-inline">
+                <button type="submit" class="btn btn-sm btn-ui-danger" onclick="return confirm('Delete {{ entity.name }}? This will also remove all their transaction history.')">
+                    <i class="bi bi-trash"></i>
+                </button>
+            </form>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="collection-overview">
+        {% if entity.balance > 0.005 %}
+        {{ metric_tile("Balance", "Rs. " ~ ("%.2f"|format(entity.balance)), "They owe us this amount", "accent", "bi bi-arrow-up-circle-fill") }}
+        {% elif entity.balance < -0.005 %}
+        {{ metric_tile("Balance", "Rs. " ~ ("%.2f"|format(entity.balance|abs)), "We owe them this amount", "primary", "bi bi-arrow-down-circle-fill") }}
+        {% else %}
+        {{ metric_tile("Balance", "Rs. 0.00", "Account is fully settled", "slate", "bi bi-check-circle-fill") }}
+        {% endif %}
+        {{ metric_tile("Total Loaned", "Rs. " ~ ("%.2f"|format(entity.total_loaned)), "Paid to entity on loan basis", "ocean", "bi bi-box-arrow-up-right") }}
+        {{ metric_tile("Total Received", "Rs. " ~ ("%.2f"|format(entity.total_received)), "Received from entity", "midnight", "bi bi-box-arrow-in-down-left") }}
+        {{ metric_tile("Total Expenses", "Rs. " ~ ("%.2f"|format(entity.total_expenses)), "One-time payments (no return expected)", "slate", "bi bi-receipt") }}
+    </div>
+
+    <div class="detail-grid">
+        <div class="detail-panel">
+            <h3><i class="bi bi-person-vcard-fill"></i> Entity Information</h3>
+            <div class="detail-list">
+                {{ detail_value("Name", entity.name) }}
+                {{ detail_value("Phone", entity.phone or "-") }}
+                {{ detail_value("Balance Position", entity.balance_label) }}
+                {{ detail_value("Notes", entity.notes or "-") }}
+            </div>
+        </div>
+
+        {% if current_user.can('ledger.create') %}
+        <div class="detail-panel">
+            <h3><i class="bi bi-plus-circle-fill"></i> Post New Transaction</h3>
+            <form method="POST" action="{{ url_for('financial_entities.post_transaction', id=entity.id) }}" class="form-stack" style="gap:0.75rem;">
+                <div class="form-field">
+                    <label class="form-label" for="transaction_type">Transaction Type</label>
+                    <select class="form-select" id="transaction_type" name="transaction_type" onchange="updateTypeHint(this.value)">
+                        <option value="loan_given">Loan Given to Entity — balance increases (they owe us)</option>
+                        <option value="amount_received">Amount Received from Entity — balance decreases</option>
+                        <option value="expense_paid">Expense / Service Payment — balance unchanged</option>
+                    </select>
+                    <div id="typeHint" class="form-help"></div>
+                </div>
+                <div class="form-grid-two" style="gap:0.6rem;">
+                    <div class="form-field">
+                        <label class="form-label" for="amount">Amount (Rs.)</label>
+                        <input class="form-control" type="number" step="0.01" min="0.01" id="amount" name="amount" required placeholder="0.00">
+                    </div>
+                    <div class="form-field">
+                        <label class="form-label" for="date">Date</label>
+                        <input class="form-control" type="date" id="date" name="date" value="{{ now().strftime('%Y-%m-%d') if now is defined else '' }}">
+                    </div>
+                    <div class="form-field">
+                        <label class="form-label" for="payment_method">Payment Method</label>
+                        <select class="form-select" id="payment_method" name="payment_method">
+                            <option value="cash">Cash</option>
+                            <option value="bank_transfer">Bank Transfer</option>
+                            <option value="cheque">Cheque</option>
+                            <option value="other">Other</option>
+                        </select>
+                    </div>
+                    <div class="form-field">
+                        <label class="form-label" for="reference">Reference / Voucher</label>
+                        <input class="form-control" type="text" id="reference" name="reference" placeholder="Optional reference">
+                    </div>
+                    <div class="form-field" style="grid-column: 1 / -1;">
+                        <label class="form-label" for="notes">Notes</label>
+                        <textarea class="form-control" id="notes" name="notes" rows="2" placeholder="Purpose, occasion, or any detail"></textarea>
+                    </div>
+                </div>
+                <div class="filter-actions">
+                    <button type="submit" class="btn btn-ui-primary">Post Transaction</button>
+                </div>
+            </form>
+        </div>
+        {% endif %}
+    </div>
+
+    {% if entity.transactions %}
+    <div class="table-panel table-panel-list">
+        <div class="table-panel-header">
+            <div>
+                <h3 class="table-panel-title"><i class="bi bi-clock-history" style="font-size:0.85rem;margin-right:0.35rem;opacity:0.65"></i> Transaction History</h3>
+                <p class="table-panel-copy">All financial activity with {{ entity.name }}, most recent first.</p>
+            </div>
+        </div>
+        <div class="table-responsive">
+            <table class="table detail-table">
+                <thead>
+                    <tr>
+                        <th>Date</th>
+                        <th>Type</th>
+                        <th>Amount</th>
+                        <th>Direction</th>
+                        <th>Balance Impact</th>
+                        <th>Method</th>
+                        <th>Reference</th>
+                        <th>Notes</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for tx in entity.transactions %}
+                    <tr>
+                        <td>{{ tx.date.strftime('%Y-%m-%d') }}</td>
+                        <td>
+                            {% if tx.transaction_type == 'loan_given' %}
+                            <span class="status-badge status-badge-completed">{{ tx.type_short }}</span>
+                            {% elif tx.transaction_type == 'amount_received' %}
+                            <span class="status-badge status-badge-pending">{{ tx.type_short }}</span>
+                            {% else %}
+                            <span class="status-badge">{{ tx.type_short }}</span>
+                            {% endif %}
+                        </td>
+                        <td><strong>Rs. {{ "%.2f"|format(tx.amount) }}</strong></td>
+                        <td>
+                            {% if tx.direction == 'out' %}
+                            <span style="color:#dc2626;">↑ Company Paid</span>
+                            {% elif tx.direction == 'in' %}
+                            <span style="color:#157a6e;">↓ Company Received</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if tx.balance_delta > 0 %}
+                            <span style="color:#157a6e;">+ Rs. {{ "%.2f"|format(tx.balance_delta) }}</span>
+                            {% elif tx.balance_delta < 0 %}
+                            <span style="color:#dc2626;">− Rs. {{ "%.2f"|format(tx.balance_delta|abs) }}</span>
+                            {% else %}
+                            <span style="color:var(--muted);">No change</span>
+                            {% endif %}
+                        </td>
+                        <td>{{ tx.payment_method|replace('_', ' ')|title if tx.payment_method else "-" }}</td>
+                        <td>{{ tx.reference or "-" }}</td>
+                        <td>{{ tx.notes or "-" }}</td>
+                        <td>
+                            {% if current_user.can('ledger.create') %}
+                            <form action="{{ url_for('financial_entities.delete_transaction', id=entity.id, tx_id=tx.id) }}" method="POST" class="d-inline">
+                                <button type="submit" class="btn btn-sm btn-ui-danger" onclick="return confirm('Remove this transaction and reverse its balance impact?')" title="Delete">
+                                    <i class="bi bi-trash"></i>
+                                </button>
+                            </form>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+                <tfoot>
+                    <tr class="bill-grand-total-row">
+                        <td colspan="4"><strong>Net Balance</strong></td>
+                        <td colspan="5">
+                            {% if entity.balance > 0.005 %}
+                            <strong style="color:#157a6e;">Rs. {{ "%.2f"|format(entity.balance) }} — They owe us</strong>
+                            {% elif entity.balance < -0.005 %}
+                            <strong style="color:#dc2626;">Rs. {{ "%.2f"|format(entity.balance|abs) }} — We owe them</strong>
+                            {% else %}
+                            <strong>Settled (Rs. 0.00)</strong>
+                            {% endif %}
+                        </td>
+                    </tr>
+                </tfoot>
+            </table>
+        </div>
+    </div>
+    {% else %}
+    <div class="detail-panel">
+        <h3><i class="bi bi-clock-history"></i> No transactions yet</h3>
+        <p class="detail-value">Use the form above to post the first transaction for {{ entity.name }}.</p>
+    </div>
+    {% endif %}
+</section>
+{% endcall %}
+{% endblock %}
+
+{% block page_scripts %}
+<script>
+    const hints = {
+        loan_given: 'Company pays entity. Their balance increases — they owe us this money and are expected to return it.',
+        amount_received: 'Company receives money from entity. Their balance decreases — could be a loan repayment, a deposit for safekeeping, or any other inflow.',
+        expense_paid: 'Company pays for a service or product. No balance change — this is a settled expense, not a loan or deposit.',
+    };
+    function updateTypeHint(type) {
+        document.getElementById('typeHint').textContent = hints[type] || '';
+    }
+    document.addEventListener('DOMContentLoaded', function() {
+        const sel = document.getElementById('transaction_type');
+        if (sel) updateTypeHint(sel.value);
+        // Set today's date as default
+        const dateInput = document.getElementById('date');
+        if (dateInput && !dateInput.value) {
+            dateInput.value = new Date().toISOString().split('T')[0];
+        }
+    });
+</script>
+{% endblock %}

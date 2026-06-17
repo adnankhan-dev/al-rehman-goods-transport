@@ -1,0 +1,152 @@
+{% extends "base.html" %}
+{% from "_formhelpers.html" import detail_value, form_shell %}
+
+{% block title %}View Plant - Al Rehman Goods Transport{% endblock %}
+
+{% block content %}
+{% call form_shell("Plant — " ~ plant.name, "Contact details and payment exposure from completed order settlements.", "Plants") %}
+<section class="detail-shell">
+    <div class="erp-top-bar">
+        <a href="{{ url_for('plants.plants') }}" class="erp-top-bar-back">
+            <i class="bi bi-arrow-left"></i> Plants
+        </a>
+        <div class="erp-top-bar-actions">
+            {% if current_user.can('plants.edit') %}
+            <a href="{{ url_for('plants.edit_plant', id=plant.id) }}" class="btn btn-sm btn-ui-edit">
+                <i class="bi bi-pencil"></i> Edit
+            </a>
+            {% endif %}
+        </div>
+    </div>
+    <div class="detail-grid">
+        <div class="detail-panel">
+            <h3><i class="bi bi-building-fill"></i> Plant Information</h3>
+            <div class="detail-list">
+                {{ detail_value("Name", plant.name) }}
+                {{ detail_value("Contact Person", plant.contact_person or "-") }}
+                {{ detail_value("Phone", plant.phone or "-") }}
+                {{ detail_value("Payment Terms", plant.payment_terms or "-") }}
+            </div>
+        </div>
+        <div class="detail-panel">
+            <h3><i class="bi bi-cash-stack"></i> Financial Overview</h3>
+            <div class="detail-list">
+                {{ detail_value("Balance Position", balance_summary.label ~ " - Rs. " ~ ("%.2f"|format(balance_summary.amount))) }}
+                {{ detail_value("Loading Value", "Rs. " ~ ("%.2f"|format(total_loaded_amount or 0))) }}
+            </div>
+        </div>
+    </div>
+    <div class="detail-panel">
+        <h3><i class="bi bi-geo-alt-fill"></i> Address</h3>
+        <div class="detail-value">{{ plant.address or "No address available." }}</div>
+    </div>
+    <div class="detail-panel">
+        <h3><i class="bi bi-funnel-fill"></i> Order Filters</h3>
+        <form method="GET" class="filter-grid">
+            <div class="form-field">
+                <label class="form-label" for="material_type">Material</label>
+                <select class="form-select" id="material_type" name="material_type">
+                    <option value="">All materials</option>
+                    {% for material in available_materials %}
+                    <option value="{{ material }}" {% if selected_material == material %}selected{% endif %}>{{ material }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-field">
+                <label class="form-label" for="start_date">Start Date</label>
+                <input class="form-control" type="date" id="start_date" name="start_date" value="{{ selected_start_date }}">
+            </div>
+            <div class="form-field">
+                <label class="form-label" for="end_date">End Date</label>
+                <input class="form-control" type="date" id="end_date" name="end_date" value="{{ selected_end_date }}">
+            </div>
+            <div class="filter-actions">
+                <button type="submit" class="btn btn-ui-midnight">Apply Filters</button>
+            </div>
+        </form>
+    </div>
+    <div class="detail-panel">
+        <h3><i class="bi bi-truck"></i> Related Orders</h3>
+        <div class="table-responsive">
+            <table class="table table-striped detail-table">
+                <thead>
+                    <tr>
+                        <th>Date</th>
+                        <th>Order</th>
+                        <th>Vehicle</th>
+                        <th>Material</th>
+                        <th>Loading Qty</th>
+                        <th>Amount</th>
+                        <th>Bill</th>
+                        <th>Image</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for loading in related_loadings %}
+                    <tr>
+                        <td>{{ (loading.order.completion_date or loading.order.order_date).strftime('%Y-%m-%d') if loading.order else '-' }}</td>
+                        <td><a href="{{ url_for('orders.view_order', id=loading.order_id) }}">Order #{{ loading.order_id }}</a></td>
+                        <td>{{ loading.order.vehicle.vehicle_number if loading.order and loading.order.vehicle else '-' }}</td>
+                        <td>{{ loading.order.material_name if loading.order else '-' }}</td>
+                        <td>{{ "%.2f"|format(loading.load_quantity or 0) }} {{ loading.order.unit|upper if loading.order and loading.order.unit else '' }}</td>
+                        <td>Rs. {{ "%.2f"|format(loading.plant_amount or 0) }}</td>
+                        <td>
+                            {% if loading.bill_id %}
+                            <a href="{{ url_for('bills.view_bill', id=loading.bill_id) }}" class="status-badge status-badge-completed" title="{{ loading.bill.bill_number if loading.bill else loading.bill_id }}">
+                                <i class="bi bi-receipt"></i> Billed
+                            </a>
+                            {% else %}
+                            <span class="status-badge status-badge-pending">Unbilled</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if loading.loading_image %}
+                            <a href="{{ loading.loading_image }}" target="_blank" rel="noopener">View</a>
+                            {% else %}
+                            -
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr><td colspan="8" class="text-center">No related orders match the current filters.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    <div class="detail-panel">
+        <h3><i class="bi bi-arrow-left-right"></i> Related Transactions</h3>
+        <div class="table-responsive">
+            <table class="table table-striped detail-table">
+                <thead>
+                    <tr>
+                        <th>Date</th>
+                        <th>Type</th>
+                        <th>Amount</th>
+                        <th>Reference</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for transaction in transactions %}
+                    <tr>
+                        <td>{{ transaction.date.strftime('%Y-%m-%d') }}</td>
+                        <td>{{ transaction.type|replace('_', ' ')|title }}</td>
+                        <td>Rs. {{ "%.2f"|format(transaction.amount or 0) }}</td>
+                        <td>{{ transaction.reference or "-" }}</td>
+                    </tr>
+                    {% else %}
+                    <tr><td colspan="4" class="text-center">No plant transactions found.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    <div class="detail-actions">
+        <a href="{{ url_for('plants.plants') }}" class="btn btn-ui-neutral">
+            <i class="bi bi-arrow-left"></i> Back to Plants
+        </a>
+    </div>
+</section>
+{% endcall %}
+{% endblock %}
+

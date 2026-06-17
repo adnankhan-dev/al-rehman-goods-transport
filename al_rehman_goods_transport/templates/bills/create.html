@@ -1,0 +1,303 @@
+{% extends "base.html" %}
+{% from "_formhelpers.html" import form_shell, metric_tile %}
+
+{% block title %}Create Bill - Al Rehman Goods Transport{% endblock %}
+
+{% block content %}
+{% call form_shell("Create Bill", "Select an account, review the outstanding position, and turn it into a bill record ready for settlement.", "Finance", url_for('bills.index'), "Back to Bills", "btn btn-ui-neutral") %}
+<section class="content-stack">
+    <form method="GET" class="detail-panel">
+        <div class="filter-grid filter-grid-four">
+            <div class="form-field">
+                <label class="form-label" for="entity_type">Entity Type</label>
+                <select class="form-select" id="entity_type" name="entity_type" onchange="this.form.submit()">
+                    <option value="contractor" {% if filter_state.entity_type == 'contractor' %}selected{% endif %}>Contractor</option>
+                    <option value="plant" {% if filter_state.entity_type == 'plant' %}selected{% endif %}>Plant</option>
+                    <option value="petrol_pump" {% if filter_state.entity_type == 'petrol_pump' %}selected{% endif %}>Petrol Pump</option>
+                    <option value="vehicle_owner" {% if filter_state.entity_type == 'vehicle_owner' %}selected{% endif %}>Vehicle Owner</option>
+                </select>
+            </div>
+            <div class="form-field">
+                <label class="form-label" for="entity_id">Entity</label>
+                <select class="form-select" id="entity_id" name="entity_id">
+                    <option value="">Select account</option>
+                    {% if filter_state.entity_type == 'contractor' %}
+                        {% for contractor in contractors %}
+                        <option value="{{ contractor.id }}" {% if filter_state.entity_id == contractor.id %}selected{% endif %}>{{ contractor.name }}</option>
+                        {% endfor %}
+                    {% elif filter_state.entity_type == 'plant' %}
+                        {% for plant in plants %}
+                        <option value="{{ plant.id }}" {% if filter_state.entity_id == plant.id %}selected{% endif %}>{{ plant.name }}</option>
+                        {% endfor %}
+                    {% elif filter_state.entity_type == 'petrol_pump' %}
+                        {% for petrol_pump in petrol_pumps %}
+                        <option value="{{ petrol_pump.id }}" {% if filter_state.entity_id == petrol_pump.id %}selected{% endif %}>{{ petrol_pump.name }}</option>
+                        {% endfor %}
+                    {% else %}
+                        {% for vehicle_owner in vehicle_owners %}
+                        <option value="{{ vehicle_owner.id }}" {% if filter_state.entity_id == vehicle_owner.id %}selected{% endif %}>{{ vehicle_owner.name }}</option>
+                        {% endfor %}
+                    {% endif %}
+                </select>
+            </div>
+            {% if filter_state.entity_type == 'contractor' %}
+            <div class="form-field">
+                <label class="form-label" for="material_type">Material</label>
+                <select class="form-select" id="material_type" name="material_type">
+                    <option value="">All materials</option>
+                    {% for material in available_materials %}
+                    <option value="{{ material }}" {% if filter_state.material_type == material %}selected{% endif %}>{{ material }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-field">
+                <label class="form-label" for="start_date">Start Date</label>
+                <input class="form-control" type="date" id="start_date" name="start_date" value="{{ filter_state.start_date.strftime('%Y-%m-%d') if filter_state.start_date else '' }}">
+            </div>
+            <div class="form-field">
+                <label class="form-label" for="end_date">End Date</label>
+                <input class="form-control" type="date" id="end_date" name="end_date" value="{{ filter_state.end_date.strftime('%Y-%m-%d') if filter_state.end_date else '' }}">
+            </div>
+            {% endif %}
+        </div>
+        {% if available_sites %}
+        <div class="bill-site-filter">
+            <div class="detail-label">Sites</div>
+            <div class="bill-site-grid">
+                {% for site in available_sites %}
+                <label class="bill-check-card">
+                    <input type="checkbox" name="site_ids" value="{{ site.id }}" {% if site.id in filter_state.site_ids %}checked{% endif %}>
+                    <span>
+                        <strong>{{ site.name }}</strong>
+                        <small>{{ site.address or "Selected contractor site" }}</small>
+                    </span>
+                </label>
+                {% endfor %}
+            </div>
+        </div>
+        {% endif %}
+        <div class="filter-actions mt-3">
+            <button type="submit" class="btn btn-ui-midnight">Load Account</button>
+        </div>
+    </form>
+
+    <div class="collection-overview">
+        {{ metric_tile("Selected Entity", selected_entity.name if selected_entity else "Choose account", "Current bill target", "midnight", "bi bi-building") }}
+        {{ metric_tile("Current Balance", "Rs. " ~ ("%.2f"|format(entity_balance or 0)), "Outstanding account position", "accent", "bi bi-cash-stack") }}
+        {{ metric_tile("Available Records", (candidate_orders|length + candidate_diesel_entries|length + candidate_plant_loadings|length), "Unbilled records available for selection", "ocean", "bi bi-list-check") }}
+        {{ metric_tile("Selectable Amount", "Rs. " ~ ("%.2f"|format(candidate_total_amount or 0)), "Total of all available unbilled records", "slate", "bi bi-receipt") }}
+    </div>
+
+    {% if selected_entity %}
+    <form method="POST" class="detail-shell">
+        <input type="hidden" name="entity_type" value="{{ filter_state.entity_type }}">
+        <input type="hidden" name="entity_id" value="{{ filter_state.entity_id }}">
+        <input type="hidden" name="material_type" value="{{ filter_state.material_type }}">
+        <input type="hidden" name="start_date" value="{{ filter_state.start_date.strftime('%Y-%m-%d') if filter_state.start_date else '' }}">
+        <input type="hidden" name="end_date" value="{{ filter_state.end_date.strftime('%Y-%m-%d') if filter_state.end_date else '' }}">
+        {% for site_id in filter_state.site_ids %}
+        <input type="hidden" name="site_ids" value="{{ site_id }}">
+        {% endfor %}
+
+        <div class="detail-panel">
+            <h3><i class="bi bi-chat-text-fill"></i> Bill Notes</h3>
+            <textarea name="notes" rows="3" class="form-control" placeholder="Optional note for this bill.">{{ filter_state.notes }}</textarea>
+        </div>
+
+        {% if filter_state.entity_type == 'contractor' %}
+        <div class="table-panel table-panel-list">
+            <div class="table-panel-header">
+                <div>
+                    <h3 class="table-panel-title"><i class="bi bi-truck" style="font-size:0.85rem;margin-right:0.35rem;opacity:0.65"></i> Delivered trips available for billing</h3>
+                </div>
+            </div>
+            <div class="table-responsive">
+                <table class="table detail-table">
+                    <thead>
+                        <tr>
+                            <th>Select</th>
+                            <th>Date</th>
+                            <th>Vehicle</th>
+                            <th>Site</th>
+                            <th>Material</th>
+                            <th>Quantity</th>
+                            <th>Amount</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for order in candidate_orders %}
+                        <tr>
+                            <td><input type="checkbox" name="order_ids" value="{{ order.id }}" {% if order.id in selected_order_ids %}checked{% endif %}></td>
+                            <td>{{ (order.completion_date or order.order_date).strftime('%Y-%m-%d') }}</td>
+                            <td>{{ order.vehicle.vehicle_number }}</td>
+                            <td>{{ order.site.name }}</td>
+                            <td>{{ order.material_name }}</td>
+                            <td>{{ "%.2f"|format(order.delivered_quantity or order.quantity or 0) }} {{ order.unit|upper }}</td>
+                            <td>Rs. {{ "%.2f"|format(order.billable_amount) }}</td>
+                        </tr>
+                        {% else %}
+                        <tr><td colspan="7" class="text-center">No outstanding trips match the current filters.</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        {% elif filter_state.entity_type == 'petrol_pump' %}
+        <div class="table-panel table-panel-list">
+            <div class="table-panel-header">
+                <div>
+                    <h3 class="table-panel-title"><i class="bi bi-fuel-pump" style="font-size:0.85rem;margin-right:0.35rem;opacity:0.65"></i> Diesel entries available for billing</h3>
+                </div>
+            </div>
+            <div class="table-responsive">
+                <table class="table detail-table">
+                    <thead>
+                        <tr>
+                            <th>Select</th>
+                            <th>Date</th>
+                            <th>Vehicle</th>
+                            <th>Owner</th>
+                            <th>Receipt</th>
+                            <th>Litres</th>
+                            <th>Amount</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for entry in candidate_diesel_entries %}
+                        <tr>
+                            <td><input type="checkbox" name="entry_ids" value="{{ entry.id }}" {% if entry.id in selected_entry_ids %}checked{% endif %}></td>
+                            <td>{{ entry.date.strftime('%Y-%m-%d') }}</td>
+                            <td>{{ entry.vehicle.vehicle_number if entry.vehicle else "-" }}</td>
+                            <td>{{ entry.vehicle.owner.name if entry.vehicle and entry.vehicle.owner else "-" }}</td>
+                            <td>{{ entry.receipt_number or "-" }}</td>
+                            <td>{{ "%.2f"|format(entry.litres or 0) }} L</td>
+                            <td>Rs. {{ "%.2f"|format(entry.amount or 0) }}</td>
+                        </tr>
+                        {% else %}
+                        <tr><td colspan="7" class="text-center">No outstanding diesel entries match the current filters.</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        {% elif filter_state.entity_type == 'plant' %}
+        <div class="table-panel table-panel-list">
+            <div class="table-panel-header">
+                <div>
+                    <h3 class="table-panel-title"><i class="bi bi-building" style="font-size:0.85rem;margin-right:0.35rem;opacity:0.65"></i> Plant loadings available for billing</h3>
+                </div>
+            </div>
+            <div class="table-responsive">
+                <table class="table detail-table">
+                    <thead>
+                        <tr>
+                            <th>Select</th>
+                            <th>Date</th>
+                            <th>Order #</th>
+                            <th>Vehicle</th>
+                            <th>Material</th>
+                            <th>Quantity</th>
+                            <th>Amount</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for loading in candidate_plant_loadings %}
+                        <tr>
+                            <td><input type="checkbox" name="loading_ids" value="{{ loading.id }}" {% if loading.id in selected_loading_ids %}checked{% endif %}></td>
+                            <td>{{ (loading.order.completion_date or loading.order.order_date).strftime('%Y-%m-%d') }}</td>
+                            <td>#{{ loading.order_id }}</td>
+                            <td>{{ loading.order.vehicle.vehicle_number }}</td>
+                            <td>{{ loading.order.material_name }}</td>
+                            <td>{{ "%.2f"|format(loading.load_quantity or 0) }} {{ loading.order.unit|upper }}</td>
+                            <td>Rs. {{ "%.2f"|format(loading.plant_amount or 0) }}</td>
+                        </tr>
+                        {% else %}
+                        <tr><td colspan="7" class="text-center">No outstanding plant loadings match the current filters.</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        {% else %}
+        <div class="table-panel table-panel-list">
+            <div class="table-panel-header">
+                <div>
+                    <h3 class="table-panel-title"><i class="bi bi-truck" style="font-size:0.85rem;margin-right:0.35rem;opacity:0.65"></i> Completed trips available for billing</h3>
+                </div>
+            </div>
+            <div class="table-responsive">
+                <table class="table detail-table">
+                    <thead>
+                        <tr>
+                            <th>Select</th>
+                            <th>Date</th>
+                            <th>Vehicle</th>
+                            <th>Site</th>
+                            <th>Material</th>
+                            <th>Quantity</th>
+                            <th>Vehicle Rate</th>
+                            <th>Payable</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for order in candidate_orders %}
+                        <tr>
+                            <td><input type="checkbox" name="order_ids" value="{{ order.id }}" {% if order.id in selected_order_ids %}checked{% endif %}></td>
+                            <td>{{ (order.completion_date or order.order_date).strftime('%Y-%m-%d') }}</td>
+                            <td>{{ order.vehicle.vehicle_number }}</td>
+                            <td>{{ order.site.name }}</td>
+                            <td>{{ order.material_name }}</td>
+                            <td>{{ "%.2f"|format(order.delivered_quantity or order.quantity or 0) }} {{ order.unit|upper }}</td>
+                            <td>Rs. {{ "%.2f"|format(order.vehicle_rate or 0) }}</td>
+                            <td>Rs. {{ "%.2f"|format(order.remaining_vehicle_payment()) }}</td>
+                        </tr>
+                        {% else %}
+                        <tr><td colspan="8" class="text-center">No outstanding trips match the current filters.</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        {% endif %}
+
+        <div class="detail-panel">
+            <h3><i class="bi bi-arrow-left-right"></i> Related Transactions</h3>
+            <div class="table-responsive">
+                <table class="table table-striped detail-table">
+                    <thead>
+                        <tr>
+                            <th>Date</th>
+                            <th>Type</th>
+                            <th>Amount</th>
+                            <th>Reference</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for transaction in entity_transactions[:10] %}
+                        <tr>
+                            <td>{{ transaction.date.strftime('%Y-%m-%d') }}</td>
+                            <td>{{ transaction.type|replace('_', ' ')|title }}</td>
+                            <td>Rs. {{ "%.2f"|format(transaction.amount or 0) }}</td>
+                            <td>{{ transaction.reference or "-" }}</td>
+                        </tr>
+                        {% else %}
+                        <tr><td colspan="4" class="text-center">No related transactions found.</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="detail-actions">
+            <button type="submit" class="btn btn-ui-primary">Create Bill</button>
+        </div>
+    </form>
+    {% else %}
+    <div class="detail-panel">
+        <h3><i class="bi bi-arrow-right-circle-fill"></i> Select an account to begin</h3>
+        <p class="detail-value">Choose the entity type and account first. The module will then load the outstanding position and related transactions.</p>
+    </div>
+    {% endif %}
+</section>
+{% endcall %}
+{% endblock %}

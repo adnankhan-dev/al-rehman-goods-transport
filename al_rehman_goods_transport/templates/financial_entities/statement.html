@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Account Statement — {{ entity.name }}</title>
+    <style>
+        :root {
+            --ink: #0f172a;
+            --muted: #475569;
+            --soft: #e2e8f0;
+            --panel: #f8fafc;
+            --brand: #0b2742;
+            --green: #157a6e;
+            --red: #dc2626;
+        }
+        * { box-sizing: border-box; }
+        body {
+            margin: 0;
+            background: #eef2f7;
+            color: var(--ink);
+            font-family: "Segoe UI", Arial, sans-serif;
+            font-size: 14px;
+            padding: 28px;
+        }
+        .shell {
+            max-width: 900px;
+            margin: 0 auto;
+            background: #fff;
+            border-radius: 20px;
+            box-shadow: 0 24px 60px rgba(15,23,42,.14);
+            overflow: hidden;
+        }
+        .actions {
+            display: flex;
+            justify-content: flex-end;
+            gap: 10px;
+            padding: 16px 24px 0;
+        }
+        .btn {
+            appearance: none;
+            border: 1px solid var(--soft);
+            border-radius: 999px;
+            background: #fff;
+            color: var(--ink);
+            padding: 8px 16px;
+            font: inherit;
+            cursor: pointer;
+            text-decoration: none;
+        }
+        .btn-primary { background: var(--brand); color: #fff; border-color: var(--brand); }
+        .body { padding: 28px 32px 36px; }
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            padding-bottom: 20px;
+            border-bottom: 2px solid var(--soft);
+            margin-bottom: 24px;
+        }
+        .statement-title { margin: 0; font-size: 1.8rem; color: var(--brand); }
+        .statement-subtitle { margin: 4px 0 0; color: var(--muted); font-size: 0.9rem; }
+        .meta-block { text-align: right; color: var(--muted); font-size: 0.85rem; line-height: 1.8; }
+        .meta-block strong { color: var(--ink); font-size: 1rem; display: block; }
+        .balance-badge {
+            display: inline-block;
+            padding: 6px 14px;
+            border-radius: 999px;
+            font-weight: 700;
+            font-size: 0.95rem;
+            margin-top: 8px;
+        }
+        .balance-positive { background: #d1fae5; color: #065f46; }
+        .balance-negative { background: #fee2e2; color: #991b1b; }
+        .balance-zero { background: #f1f5f9; color: var(--muted); }
+        table { width: 100%; border-collapse: collapse; margin-top: 8px; }
+        th {
+            background: var(--brand);
+            color: #fff;
+            padding: 10px 12px;
+            text-align: left;
+            font-size: 0.82rem;
+            letter-spacing: 0.04em;
+            text-transform: uppercase;
+        }
+        td { padding: 10px 12px; border-bottom: 1px solid var(--soft); vertical-align: top; }
+        tr:last-child td { border-bottom: none; }
+        tr:nth-child(even) td { background: #fafbfc; }
+        .amount-in { color: var(--green); font-weight: 600; }
+        .amount-out { color: var(--red); font-weight: 600; }
+        .balance-col { font-weight: 700; }
+        .balance-col.pos { color: var(--green); }
+        .balance-col.neg { color: var(--red); }
+        .summary-row td {
+            background: var(--brand) !important;
+            color: #fff;
+            font-weight: 700;
+            border-bottom: none;
+        }
+        .footer {
+            margin-top: 32px;
+            padding-top: 16px;
+            border-top: 1px solid var(--soft);
+            color: var(--muted);
+            font-size: 0.8rem;
+        }
+        .chip {
+            display: inline-block;
+            padding: 2px 10px;
+            border-radius: 999px;
+            font-size: 0.78rem;
+            font-weight: 600;
+        }
+        .chip-loan { background: #dbeafe; color: #1e40af; }
+        .chip-received { background: #d1fae5; color: #065f46; }
+        .chip-expense { background: #fef3c7; color: #92400e; }
+        @media print {
+            body { background: #fff; padding: 0; }
+            .shell { box-shadow: none; border-radius: 0; max-width: none; }
+            .actions { display: none; }
+        }
+    </style>
+</head>
+<body>
+<div class="shell">
+    <div class="actions">
+        <a href="{{ url_for('financial_entities.view', id=entity.id) }}" class="btn">← Back</a>
+        <button class="btn btn-primary" onclick="window.print()">Print / PDF</button>
+    </div>
+    <div class="body">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:16px;border-bottom:2px solid #e2e8f0;padding-bottom:14px;margin-bottom:18px;">
+            <div>
+                <div style="font-size:1.5rem;font-weight:800;color:#0b2742;letter-spacing:-0.01em;">Al Rehman Goods Transport</div>
+                <div style="color:#64748b;font-size:0.82rem;line-height:1.6;">Bahtr Mor Wah Cantt</div>
+                <div style="color:#64748b;font-size:0.82rem;line-height:1.6;">Contact No. Ahsan Niazi 0307-2342827</div>
+                <div style="color:#64748b;font-size:0.82rem;line-height:1.6;">Inam Khan - 0301-5749086</div>
+            </div>
+            <div style="text-transform:uppercase;letter-spacing:0.14em;color:#d97706;font-size:0.74rem;font-weight:700;white-space:nowrap;">Account Statement</div>
+        </div>
+        <div class="header">
+            <div>
+                <p class="statement-subtitle">ACCOUNT STATEMENT</p>
+                <h1 class="statement-title">{{ entity.name }}</h1>
+                {% if entity.phone %}<p class="statement-subtitle">{{ entity.phone }}</p>{% endif %}
+                {% if entity.notes %}<p class="statement-subtitle" style="max-width:360px;">{{ entity.notes }}</p>{% endif %}
+            </div>
+            <div class="meta-block">
+                <strong>Account Summary</strong>
+                Printed: {{ now.strftime('%d %b %Y') if now is defined else '' }}
+                <br>
+                Total Transactions: {{ rows|length }}
+                <br>
+                {% if closing_balance > 0.005 %}
+                <span class="balance-badge balance-positive">They owe us — Rs. {{ "%.2f"|format(closing_balance) }}</span>
+                {% elif closing_balance < -0.005 %}
+                <span class="balance-badge balance-negative">We owe them — Rs. {{ "%.2f"|format(closing_balance|abs) }}</span>
+                {% else %}
+                <span class="balance-badge balance-zero">Settled — Rs. 0.00</span>
+                {% endif %}
+            </div>
+        </div>
+
+        {% if rows %}
+        <table>
+            <thead>
+                <tr>
+                    <th>Date</th>
+                    <th>Type</th>
+                    <th>Reference</th>
+                    <th>Notes</th>
+                    <th>Method</th>
+                    <th style="text-align:right">Amount</th>
+                    <th style="text-align:right">Running Balance</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in rows %}
+                {% set tx = row.tx %}
+                <tr>
+                    <td>{{ tx.date.strftime('%d %b %Y') }}</td>
+                    <td>
+                        {% if tx.transaction_type == 'loan_given' %}
+                        <span class="chip chip-loan">Loan Given</span>
+                        {% elif tx.transaction_type == 'amount_received' %}
+                        <span class="chip chip-received">Received</span>
+                        {% else %}
+                        <span class="chip chip-expense">Expense</span>
+                        {% endif %}
+                    </td>
+                    <td>{{ tx.reference or "—" }}</td>
+                    <td>{{ tx.notes or "—" }}</td>
+                    <td>{{ tx.payment_method|replace('_', ' ')|title if tx.payment_method else "—" }}</td>
+                    <td style="text-align:right">
+                        {% if tx.balance_delta > 0 %}
+                        <span class="amount-in">Rs. {{ "%.2f"|format(tx.amount) }}</span>
+                        {% elif tx.balance_delta < 0 %}
+                        <span class="amount-out">Rs. {{ "%.2f"|format(tx.amount) }}</span>
+                        {% else %}
+                        Rs. {{ "%.2f"|format(tx.amount) }}
+                        {% endif %}
+                    </td>
+                    <td style="text-align:right">
+                        <span class="balance-col {% if row.running_balance >= 0 %}pos{% else %}neg{% endif %}">
+                            {% if row.running_balance < 0 %}− {% endif %}Rs. {{ "%.2f"|format(row.running_balance|abs) }}
+                        </span>
+                    </td>
+                </tr>
+                {% endfor %}
+                <tr class="summary-row">
+                    <td colspan="5"><strong>Closing Balance</strong></td>
+                    <td style="text-align:right">
+                        Rs. {{ "%.2f"|format(rows|map(attribute='tx')|map(attribute='amount')|sum) }}
+                    </td>
+                    <td style="text-align:right">
+                        {% if closing_balance >= 0 %}Rs. {{ "%.2f"|format(closing_balance) }}
+                        {% else %}− Rs. {{ "%.2f"|format(closing_balance|abs) }}{% endif %}
+                    </td>
+                </tr>
+            </tbody>
+        </table>
+        {% else %}
+        <p style="color:var(--muted);text-align:center;padding:32px 0;">No transactions recorded for this entity.</p>
+        {% endif %}
+
+        <div class="footer">
+            This statement is generated by Al Rehman Goods Transport ERP. Positive balance = entity owes the company. Negative balance = company owes the entity.
+        </div>
+    </div>
+</div>
+</body>
+</html>

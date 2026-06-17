@@ -1,0 +1,109 @@
+{% extends "base.html" %}
+{% from "_formhelpers.html" import detail_value, form_shell, metric_tile %}
+
+{% block title %}View Material - Al Rehman Goods Transport{% endblock %}
+
+{% block content %}
+{% call form_shell("Material — " ~ material.name, "Review how this material is used across the transport workflow.", "Records") %}
+<section class="detail-shell">
+    <div class="erp-top-bar">
+        <a href="{{ url_for('materials.index') }}" class="erp-top-bar-back">
+            <i class="bi bi-arrow-left"></i> Materials
+        </a>
+        <div class="erp-top-bar-actions">
+            {% if current_user.can('materials.edit') %}
+            <a href="{{ url_for('materials.edit_material', id=material.id) }}" class="btn btn-sm btn-ui-edit">
+                <i class="bi bi-pencil"></i> Edit
+            </a>
+            {% endif %}
+            {% if current_user.can('materials.delete') %}
+            <form action="{{ url_for('materials.delete_material', id=material.id) }}" method="POST" class="d-inline">
+                <button type="submit" class="btn btn-sm btn-ui-danger" onclick="return confirm('Delete this material?')">
+                    <i class="bi bi-trash"></i>
+                </button>
+            </form>
+            {% endif %}
+        </div>
+    </div>
+    <div class="collection-overview">
+        {{ metric_tile("Measuring Unit", (material.unit or 'cft')|upper, "Fixed unit applied to every order", "midnight", "bi bi-rulers") }}
+        {{ metric_tile("Completed Trips", stats.completed_count, "Delivered orders of this material", "primary", "bi bi-truck-fill") }}
+        {{ metric_tile("Material Delivered", "%.2f"|format(stats.total_delivered) ~ " " ~ (material.unit or 'cft')|upper, "Total delivered quantity", "accent", "bi bi-box-seam-fill") }}
+        {{ metric_tile("Revenue", "Rs. " ~ "{:,.0f}".format(stats.total_revenue), "Contractor-side value of delivered trips", "ocean", "bi bi-cash-stack") }}
+    </div>
+
+    <div class="detail-grid">
+        <div class="detail-panel">
+            <h3><i class="bi bi-box-seam-fill"></i> Material Information</h3>
+            <div class="detail-list">
+                {{ detail_value("Name", material.name) }}
+                {{ detail_value("Measuring Unit", (material.unit or 'cft')|upper) }}
+                {{ detail_value("Total Orders", stats.total_orders) }}
+                {{ detail_value("Completed Trips", stats.completed_count) }}
+                {{ detail_value("Contractors Served", stats.contractor_count) }}
+            </div>
+        </div>
+        <div class="detail-panel">
+            <h3><i class="bi bi-receipt"></i> Billing & Delivery</h3>
+            <div class="detail-list">
+                {{ detail_value("Total Delivered", "%.2f"|format(stats.total_delivered) ~ " " ~ (material.unit or 'cft')|upper) }}
+                {{ detail_value("Total Revenue", "Rs. " ~ "%.2f"|format(stats.total_revenue)) }}
+                {{ detail_value("Billed Trips", stats.billed_count) }}
+                {{ detail_value("Ready for Bill", stats.unbilled_count) }}
+            </div>
+        </div>
+    </div>
+
+    <div class="table-panel table-panel-list mt-3">
+        <div class="table-panel-header">
+            <div>
+                <h3 class="table-panel-title">Recent orders</h3>
+                <p class="table-panel-copy">Latest trips that moved this material (up to 20 shown).</p>
+            </div>
+        </div>
+        <div class="table-responsive">
+            <table class="table detail-table">
+                <thead>
+                    <tr>
+                        <th>Date</th>
+                        <th>Vehicle</th>
+                        <th>Contractor</th>
+                        <th>To Site</th>
+                        <th>Delivered</th>
+                        <th>Receipt</th>
+                        <th>Status</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for order in recent_orders %}
+                    <tr>
+                        <td>{{ (order.completion_date or order.order_date).strftime('%Y-%m-%d') }}</td>
+                        <td>{{ order.vehicle.vehicle_number if order.vehicle else '-' }}</td>
+                        <td>{{ order.contractor.name if order.contractor else '-' }}</td>
+                        <td>{{ order.site.name if order.site else '-' }}</td>
+                        <td>{{ "%.2f"|format(order.delivered_quantity or order.quantity or 0) }} {{ (order.unit or 'cft')|upper }}</td>
+                        <td>{{ order.receipt_number or '-' }}</td>
+                        <td>
+                            {% if order.is_billed %}
+                            <span class="status-chip status-chip-complete">Billed</span>
+                            {% else %}
+                            <span class="status-chip status-chip-pending">Ready for Bill</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr><td colspan="7" class="text-center table-muted">No orders recorded for this material yet.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="detail-actions mt-3">
+        <a href="{{ url_for('materials.index') }}" class="btn btn-ui-neutral">
+            <i class="bi bi-arrow-left"></i> Back to Materials
+        </a>
+    </div>
+</section>
+{% endcall %}
+{% endblock %}

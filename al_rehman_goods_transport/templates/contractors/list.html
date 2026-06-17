@@ -1,0 +1,84 @@
+{% extends "base.html" %}
+{% from "_formhelpers.html" import form_shell, metric_tile, table_tools %}
+
+{% block title %}Contractors - Al Rehman Goods Transport{% endblock %}
+
+{% block content %}
+{% call form_shell("Contractors", "Commercial partner profiles, contacts, and outstanding balances.", "Records", (url_for('contractors.create_contractor') if current_user.can('contractors.create') else None), "Add Contractor", "btn btn-ui-ocean") %}
+<section class="content-stack">
+    <div class="collection-overview">
+        {{ metric_tile("Total Contractors", contractors|length, "Registered commercial partners", "primary", "bi bi-briefcase-fill", url_for('contractors.contractors')) }}
+        {{ metric_tile("Outstanding Balance", "Rs. " ~ ("%.0f"|format(contractors|sum(attribute='balance'))), "Net receivable position across all accounts", "accent", "bi bi-cash-coin") }}
+        {{ metric_tile("With Email", contractors|selectattr('email')|list|length, "Profiles ready for formal communication", "ocean", "bi bi-envelope-fill") }}
+        {{ metric_tile("With Terms", contractors|selectattr('payment_terms')|list|length, "Profiles with payment terms configured", "slate", "bi bi-file-earmark-text-fill") }}
+    </div>
+    {{ table_tools("contractorsTable", "Search by name, phone, email, balance, or terms…", "Print") }}
+    <div class="table-panel">
+        <div class="table-panel-header">
+            <div>
+                <h3 class="table-panel-title">Contractor directory</h3>
+            </div>
+            <div class="table-toolbar">
+                <span class="section-count">{{ contractors|length }} records</span>
+            </div>
+        </div>
+        <div class="table-responsive">
+            <table id="contractorsTable" class="table detail-table">
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>Name</th>
+                        <th>Contact Person</th>
+                        <th>Phone</th>
+                        <th>Email</th>
+                        <th>Balance</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for contractor in contractors %}
+                    <tr>
+                        <td><span class="table-id-badge">#{{ contractor.id }}</span></td>
+                        <td>
+                            <div class="table-main">
+                                <strong>{{ contractor.name }}</strong>
+                                <span class="table-sub">{{ contractor.payment_terms or "No payment terms saved" }}</span>
+                            </div>
+                        </td>
+                        <td><span class="table-text">{{ contractor.contact_person or "-" }}</span></td>
+                        <td><span class="table-text">{{ contractor.phone or "-" }}</span></td>
+                        <td><span class="table-muted">{{ contractor.email or "-" }}</span></td>
+                        <td><span class="table-amount">Rs. {{ contractor.balance }}</span></td>
+                        <td>
+                            <div class="table-action-group">
+                                <a href="{{ url_for('contractors.view_contractor', id=contractor.id) }}" class="btn btn-sm btn-ui-ghost" title="View">
+                                    <i class="bi bi-eye"></i>
+                                </a>
+                                {% if current_user.can('contractors.edit') %}
+                                <a href="{{ url_for('contractors.edit_contractor', id=contractor.id) }}" class="btn btn-sm btn-ui-edit" title="Edit">
+                                    <i class="bi bi-pencil"></i>
+                                </a>
+                                {% endif %}
+                                {% if current_user.can('contractors.delete') %}
+                                <form action="{{ url_for('contractors.delete_contractor', id=contractor.id) }}" method="POST" class="d-inline">
+                                    <button type="submit" class="btn btn-sm btn-ui-danger" title="Delete" onclick="return confirm('Are you sure you want to delete this contractor?')">
+                                        <i class="bi bi-trash"></i>
+                                    </button>
+                                </form>
+                                {% endif %}
+                            </div>
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="7" class="text-center table-muted">No contractors found.</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</section>
+{% endcall %}
+{% endblock %}
+

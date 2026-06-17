@@ -1,0 +1,132 @@
+{% extends "base.html" %}
+{% from "_formhelpers.html" import detail_value, form_shell %}
+
+{% block title %}View Order - Al Rehman Goods Transport{% endblock %}
+
+{% block content %}
+{% call form_shell("Order #" ~ order.id, "Review dispatch, delivery, and settlement details from the unified completed-order workflow.", "Orders") %}
+<section class="detail-shell">
+    <div class="erp-top-bar">
+        <a href="{{ url_for('orders.orders') }}" class="erp-top-bar-back">
+            <i class="bi bi-arrow-left"></i> Orders
+        </a>
+        <div class="erp-top-bar-actions">
+            {% if order.bill %}
+            <a href="{{ url_for('bills.view_bill', id=order.bill.id) }}" class="btn btn-sm btn-ui-midnight">
+                <i class="bi bi-file-earmark-text"></i> Open Bill
+            </a>
+            {% endif %}
+            {% if current_user.can('orders.edit') %}
+            <a href="{{ url_for('orders.edit_order', id=order.id) }}" class="btn btn-sm btn-ui-edit">
+                <i class="bi bi-pencil"></i> Edit
+            </a>
+            {% endif %}
+        </div>
+    </div>
+    <div class="detail-grid">
+        <div class="detail-panel">
+            <h3><i class="bi bi-clipboard2-fill"></i> Order Information</h3>
+            <div class="detail-list">
+                {{ detail_value("Order Date", order.order_date.strftime('%Y-%m-%d %H:%M')) }}
+                {{ detail_value("Status", order.status) }}
+                {{ detail_value("Vehicle", order.vehicle.vehicle_number ~ ((" - " ~ order.vehicle.owner.name) if order.vehicle.owner else "")) }}
+                {{ detail_value("Driver Name", order.driver_name) }}
+                {{ detail_value("Contractor", order.contractor.name) }}
+                {{ detail_value("From Site", order.from_site.name if order.from_site else "-") }}
+                {{ detail_value("Site", order.site.name) }}
+                {{ detail_value("Material Type", order.material_name) }}
+                {{ detail_value("Remarks", order.remarks or "-") }}
+            </div>
+        </div>
+        <div class="detail-panel">
+            <h3><i class="bi bi-box-arrow-in-right"></i> Dispatch & Delivery</h3>
+            <div class="detail-list">
+                {{ detail_value("Loading Quantity", (order.primary_loading.load_quantity if order.primary_loading else order.quantity) ~ " " ~ order.unit) }}
+                {{ detail_value("Delivered Quantity", order.delivered_quantity ~ " " ~ order.unit) }}
+                {{ detail_value("Builty Number", order.builty_number or "-") }}
+                {{ detail_value("Delivery Receipt Number", order.receipt_number or "-") }}
+                {{ detail_value("Completion Date", order.completion_date.strftime('%Y-%m-%d %H:%M') if order.completion_date else "-") }}
+                {{ detail_value("Plant", order.plant.name if order.plant else "-") }}
+                {{ detail_value("Delivery Receipt Image", order.delivery_receipt_image or "-") }}
+            </div>
+        </div>
+    </div>
+    <div class="detail-grid">
+        <div class="detail-panel">
+            <h3><i class="bi bi-wrench-adjustable-circle-fill"></i> Operational Costs</h3>
+            <div class="detail-list">
+                {{ detail_value("Advance Amount", "Rs. " ~ order.advance_amount) }}
+                {{ detail_value("Diesel Amount", "Rs. " ~ order.diesel_amount) }}
+                {{ detail_value("Diesel Litres", order.primary_diesel_entry.litres if order.primary_diesel_entry and order.primary_diesel_entry.litres is not none else "-") }}
+                {{ detail_value("Petrol Pump", order.primary_diesel_entry.petrol_pump.name if order.primary_diesel_entry and order.primary_diesel_entry.petrol_pump else "-") }}
+                {{ detail_value("Diesel Receipt", order.primary_diesel_entry.receipt_number if order.primary_diesel_entry and order.primary_diesel_entry.receipt_number else "-") }}
+                {{ detail_value("Commission", "Rs. " ~ order.commission) }}
+                {{ detail_value("Plant Amount", "Rs. " ~ order.plant_amount) }}
+                {{ detail_value("Loading Image", order.primary_loading.loading_image if order.primary_loading and order.primary_loading.loading_image else "-") }}
+            </div>
+        </div>
+        <div class="detail-panel">
+            <h3><i class="bi bi-cash-coin"></i> Financial Summary</h3>
+            <div class="detail-list">
+                {{ detail_value("Vehicle Rate", "Rs. " ~ order.vehicle_rate) }}
+                {{ detail_value("Contractor Rate", "Rs. " ~ order.contractor_rate) }}
+                {{ detail_value("Contractor Amount", "Rs. " ~ ("%.2f"|format(order.total_contractor_amount()))) }}
+                {{ detail_value("Vehicle Amount", "Rs. " ~ ("%.2f"|format(order.total_vehicle_amount()))) }}
+                {{ detail_value("Remaining Vehicle Payable", "Rs. " ~ ("%.2f"|format(order.remaining_vehicle_payment()))) }}
+                {{ detail_value("Total Diesel Amount", "Rs. " ~ ("%.2f"|format(order.total_diesel_amount()))) }}
+                {{ detail_value("Total Advance Amount", "Rs. " ~ ("%.2f"|format(order.total_advance_amount()))) }}
+                {{ detail_value("Profit Amount", "Rs. " ~ ("%.2f"|format(order.profit_amount()))) }}
+            </div>
+        </div>
+    </div>
+    <div class="detail-panel">
+        <h3><i class="bi bi-file-earmark-check-fill"></i> Billing Status</h3>
+        <div class="detail-list">
+            <div class="detail-item">
+                <span class="detail-label">Contractor Bill</span>
+                <span class="detail-value">
+                    {% if order.bill %}
+                    <a href="{{ url_for('bills.view_bill', id=order.bill.id) }}" class="status-badge status-badge-completed">{{ order.bill.bill_number }}</a>
+                    {% else %}
+                    <span class="status-badge status-badge-pending">Unbilled</span>
+                    {% endif %}
+                </span>
+            </div>
+            {% if order.billed_at %}
+            <div class="detail-item">
+                <span class="detail-label">Billed At</span>
+                <span class="detail-value">{{ order.billed_at.strftime('%Y-%m-%d %H:%M') }}</span>
+            </div>
+            {% endif %}
+            <div class="detail-item">
+                <span class="detail-label">Plant Bill</span>
+                <span class="detail-value">
+                    {% if order.primary_loading and order.primary_loading.bill %}
+                    <a href="{{ url_for('bills.view_bill', id=order.primary_loading.bill.id) }}" class="status-badge status-badge-completed">{{ order.primary_loading.bill.bill_number }}</a>
+                    {% elif order.primary_loading %}
+                    <span class="status-badge status-badge-pending">Unbilled</span>
+                    {% else %}
+                    <span>-</span>
+                    {% endif %}
+                </span>
+            </div>
+            <div class="detail-item">
+                <span class="detail-label">Vehicle Owner Bill</span>
+                <span class="detail-value">
+                    {% if order.vehicle_owner_bill %}
+                    <a href="{{ url_for('bills.view_bill', id=order.vehicle_owner_bill.id) }}" class="status-badge status-badge-completed">{{ order.vehicle_owner_bill.bill_number }}</a>
+                    {% else %}
+                    <span class="status-badge status-badge-pending">Unbilled</span>
+                    {% endif %}
+                </span>
+            </div>
+        </div>
+    </div>
+    <div class="detail-actions">
+        <a href="{{ url_for('orders.orders') }}" class="btn btn-ui-neutral">
+            <i class="bi bi-arrow-left"></i> Back to Orders
+        </a>
+    </div>
+</section>
+{% endcall %}
+{% endblock %}

@@ -1,0 +1,354 @@
+{% extends "base.html" %}
+{% from "_formhelpers.html" import form_actions, form_shell, render_field, render_searchable_select %}
+
+{% block title %}Add New Order - Al Rehman Goods Transport{% endblock %}
+
+{% block content %}
+{% call form_shell("Add New Order", "Enter the full order, delivery, and settlement details in one step so the order is ready for reporting and billing immediately.", "Orders", url_for('orders.orders'), "Back to Orders") %}
+<form method="POST" id="orderForm" class="form-stack order-form" enctype="multipart/form-data">
+    {{ form.hidden_tag() }}
+    <section class="form-section-panel">
+        <div class="form-section-heading">
+            <h3>1. Vehicle Information</h3>
+            <p class="form-section-copy">Select the assigned vehicle, driver, and any internal remarks for this trip.</p>
+        </div>
+        <div class="form-grid-two order-form-grid">
+            {{ render_field(form.order_date, help_text="You can type the date manually or pick it from the calendar.") }}
+            {{ render_searchable_select(form.vehicle_id, placeholder="Type vehicle number or owner name") }}
+            {{ render_field(form.driver_name, placeholder="Driver name") }}
+        </div>
+    </section>
+
+    <section class="form-section-panel">
+        <div class="form-section-heading">
+            <h3>2. Trip Information</h3>
+            <p class="form-section-copy">Capture the trip destination, documents, and transport-side cash and fuel movement.</p>
+        </div>
+        <div class="form-grid-two order-form-grid">
+            {{ render_searchable_select(form.contractor_id, placeholder="Type contractor name") }}
+            {{ render_searchable_select(form.from_site_id, placeholder="Type from-site name", help_text="Optional origin site from the same site master list.", allow_empty=true) }}
+            {{ render_searchable_select(form.site_id, placeholder="Select contractor first, then type site name") }}
+            {{ render_field(form.builty_number, placeholder="Builty number") }}
+            {{ render_field(form.receipt_number, placeholder="Delivery receipt number") }}
+            {{ render_field(form.advance_amount) }}
+            {{ render_field(form.delivery_receipt_image, wrapper_class="form-field order-form-field-full") }}
+        </div>
+    </section>
+
+    <section class="form-section-panel">
+        <div class="form-section-heading">
+            <h3>3. Material Information</h3>
+            <p class="form-section-copy">Complete the delivered quantity, billing rates, plant details, and commission for the material movement.</p>
+        </div>
+        <div class="form-grid-two order-form-grid">
+            {{ render_searchable_select(form.material_id, placeholder="Type material name") }}
+            <div class="form-field">
+                <label class="form-label">Measuring Unit</label>
+                <input type="text" id="order_unit_display" class="form-control" value="—" readonly tabindex="-1">
+                <div class="form-text">Set on the material; applied automatically.</div>
+            </div>
+            {{ render_field(form.load_quantity, help_text="Recorded against the order loading module.") }}
+            {{ render_field(form.delivered_quantity, help_text="Enter delivered quantity for the completed trip.") }}
+            {{ render_field(form.vehicle_rate) }}
+            <div class="form-field" id="contractor_rate_wrapper">
+                {{ render_field(form.contractor_rate) }}
+                <div id="rateHint" class="rate-hint" style="display:none;"></div>
+            </div>
+            {{ render_searchable_select(form.plant_id, placeholder="Type plant name if used", allow_empty=true) }}
+            {{ render_field(form.plant_amount, help_text="Leave at 0 when no plant cost is involved.") }}
+            {{ render_field(form.commission) }}
+            {{ render_field(form.loading_image, wrapper_class="form-field order-form-field-full") }}
+        </div>
+    </section>
+
+    <section class="form-section-panel">
+        <div class="form-section-heading">
+            <h3>4. Remarks</h3>
+            <p class="form-section-copy">Any optional dispatch or delivery notes for this trip.</p>
+        </div>
+        <div class="form-grid-two order-form-grid">
+            {{ render_field(form.remarks, rows=4, placeholder="Optional dispatch or delivery remarks", wrapper_class="form-field order-form-field-full") }}
+        </div>
+    </section>
+
+    {{ form_actions("Add New Order", url_for('orders.orders')) }}
+</form>
+
+<div class="modal fade" id="orderReviewModal" tabindex="-1" aria-labelledby="orderReviewModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
+        <div class="modal-content border-0 shadow-lg">
+            <div class="modal-header">
+                <div>
+                    <div class="eyebrow mb-1">Review Order</div>
+                    <h5 class="modal-title mb-0" id="orderReviewModalLabel">Check the order before saving</h5>
+                </div>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div class="detail-grid">
+                    <div class="detail-panel">
+                        <h3>Trip Summary</h3>
+                        <div class="detail-list" id="orderReviewTripSummary"></div>
+                    </div>
+                    <div class="detail-panel">
+                        <h3>Finance Summary</h3>
+                        <div class="detail-list" id="orderReviewFinanceSummary"></div>
+                    </div>
+                </div>
+                <div class="detail-panel">
+                    <h3>Upload Check</h3>
+                    <div id="orderReviewWarnings"></div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-ui-neutral" data-bs-dismiss="modal">Continue Editing</button>
+                <button type="button" class="btn btn-ui-primary" id="confirmOrderReviewBtn">Submit Order</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endcall %}
+{% endblock %}
+
+{% block page_scripts %}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const orderForm = document.getElementById('orderForm');
+        const contractorSelect = document.getElementById('contractor_id');
+        const fromSiteSelect = document.getElementById('from_site_id');
+        const siteSelect = document.getElementById('site_id');
+        const loadingImage = document.getElementById('loading_image');
+        const deliveryReceiptImage = document.getElementById('delivery_receipt_image');
+        const reviewModalElement = document.getElementById('orderReviewModal');
+        const reviewModal = new bootstrap.Modal(reviewModalElement);
+        const reviewTripSummary = document.getElementById('orderReviewTripSummary');
+        const reviewFinanceSummary = document.getElementById('orderReviewFinanceSummary');
+        const reviewWarnings = document.getElementById('orderReviewWarnings');
+        const confirmOrderReviewBtn = document.getElementById('confirmOrderReviewBtn');
+        let reviewConfirmed = false;
+
+        // --- Measuring unit driven by the selected material (read-only) ---
+        const MATERIAL_UNITS = {{ material_units|tojson }};
+        const unitDisplay = document.getElementById('order_unit_display');
+        const materialSelectEl = document.getElementById('material_id');
+        function currentUnit() {
+            const mid = materialSelectEl ? materialSelectEl.value : '';
+            return (mid && MATERIAL_UNITS[mid]) ? String(MATERIAL_UNITS[mid]).toUpperCase() : '';
+        }
+        function updateUnitDisplay() {
+            if (unitDisplay) unitDisplay.value = currentUnit() || '—';
+        }
+        if (materialSelectEl) {
+            materialSelectEl.addEventListener('change', updateUnitDisplay);
+            updateUnitDisplay();
+        }
+
+        function selectedText(selectElement) {
+            if (!selectElement || selectElement.selectedIndex < 0) {
+                return '-';
+            }
+            return selectElement.options[selectElement.selectedIndex].textContent.trim() || '-';
+        }
+
+        function renderDetailList(target, items) {
+            target.innerHTML = items.map(function(item) {
+                return `
+                    <div class="detail-item">
+                        <span class="detail-label">${item.label}</span>
+                        <span class="detail-value">${item.value}</span>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function refillSiteOptions(target, sites, defaultLabel) {
+            const selectedValue = target.value;
+            target.innerHTML = '';
+
+            const defaultOption = document.createElement('option');
+            defaultOption.value = '0';
+            defaultOption.textContent = defaultLabel;
+            target.appendChild(defaultOption);
+
+            sites.forEach(function(site) {
+                const option = document.createElement('option');
+                option.value = String(site.id);
+                option.textContent = site.name;
+                if (String(site.id) === selectedValue) {
+                    option.selected = true;
+                }
+                target.appendChild(option);
+            });
+
+            const searchInput = document.getElementById(`${target.id}_search`);
+            if (searchInput && searchInput.searchableSelect) {
+                searchInput.searchableSelect.refresh(!selectedValue || selectedValue === '0');
+            }
+        }
+
+        function loadContractorSites(contractorId) {
+            if (contractorId) {
+                fetch(`/api/sites/${contractorId}`)
+                    .then(response => response.json())
+                    .then(sites => {
+                        refillSiteOptions(siteSelect, sites, 'Select Site');
+                    })
+                    .catch(error => console.error('Error:', error));
+            } else {
+                refillSiteOptions(siteSelect, [], 'Select Site');
+            }
+        }
+
+        contractorSelect.addEventListener('change', function() {
+            loadContractorSites(this.value);
+        });
+
+        orderForm.addEventListener('submit', function(event) {
+            if (reviewConfirmed) {
+                return;
+            }
+
+            if (!orderForm.checkValidity()) {
+                orderForm.reportValidity();
+                return;
+            }
+
+            event.preventDefault();
+
+            const missingImages = [];
+            if (!loadingImage.files.length) missingImages.push('loading image');
+            if (!deliveryReceiptImage.files.length) missingImages.push('delivery receipt image');
+
+            const unit = currentUnit();
+            const loadQty = document.getElementById('load_quantity').value || '0';
+            const deliveredQty = document.getElementById('delivered_quantity').value || '0';
+            const vehicleRate = parseFloat(document.getElementById('vehicle_rate').value || '0');
+            const contractorRate = parseFloat(document.getElementById('contractor_rate').value || '0');
+            const deliveredNum = parseFloat(deliveredQty) || 0;
+            const fmt = function(n) { return 'Rs. ' + (Number(n) || 0).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2}); };
+
+            renderDetailList(reviewTripSummary, [
+                { label: 'Date', value: document.getElementById('order_date').value || '-' },
+                { label: 'Vehicle', value: selectedText(document.getElementById('vehicle_id')) },
+                { label: 'Driver', value: document.getElementById('driver_name').value || '-' },
+                { label: 'Contractor', value: selectedText(contractorSelect) },
+                { label: 'From Site', value: selectedText(fromSiteSelect) === 'Select From Site' ? '-' : selectedText(fromSiteSelect) },
+                { label: 'To Site', value: selectedText(siteSelect) },
+                { label: 'Material', value: selectedText(document.getElementById('material_id')) },
+                { label: 'Loading Quantity', value: `${loadQty} ${unit}`.trim() },
+                { label: 'Delivered Quantity', value: `${deliveredQty} ${unit}`.trim() },
+                { label: 'Builty Number', value: document.getElementById('builty_number').value || '-' },
+                { label: 'Delivery Receipt', value: document.getElementById('receipt_number').value || '-' }
+            ]);
+
+            renderDetailList(reviewFinanceSummary, [
+                { label: 'Contractor Rate', value: `${fmt(contractorRate)} / ${unit || 'unit'}` },
+                { label: 'Vehicle Rate', value: `${fmt(vehicleRate)} / ${unit || 'unit'}` },
+                { label: 'Order Value (Revenue)', value: fmt(deliveredNum * contractorRate) },
+                { label: 'Vehicle Amount (gross)', value: fmt(deliveredNum * vehicleRate) },
+                { label: 'Advance Amount', value: fmt(document.getElementById('advance_amount').value || '0') },
+                { label: 'Plant Amount', value: fmt(document.getElementById('plant_amount').value || '0') },
+                { label: 'Commission', value: fmt(document.getElementById('commission').value || '0') }
+            ]);
+
+            if (missingImages.length) {
+                reviewWarnings.innerHTML = `
+                    <div class="alert alert-warning mb-0">
+                        <strong>Images missing:</strong>
+                        <ul class="mb-0 mt-2">
+                            ${missingImages.map(item => `<li>${item}</li>`).join('')}
+                        </ul>
+                    </div>
+                `;
+            } else {
+                reviewWarnings.innerHTML = '<div class="alert alert-success mb-0">All three image slots have files attached for this order.</div>';
+            }
+
+            reviewModal.show();
+        });
+
+        confirmOrderReviewBtn.addEventListener('click', function() {
+            reviewConfirmed = true;
+            reviewModal.hide();
+            orderForm.submit();
+        });
+
+        reviewModalElement.addEventListener('hidden.bs.modal', function() {
+            if (!reviewConfirmed) {
+                confirmOrderReviewBtn.blur();
+            }
+        });
+
+        // --- Contractor Rate Auto-Fetch ---
+        const contractorRateInput = document.getElementById('contractor_rate');
+        const vehicleRateInput = document.getElementById('vehicle_rate');
+        const rateHint = document.getElementById('rateHint');
+        const materialSelect = document.getElementById('material_id');
+        const orderDateInput = document.getElementById('order_date');
+
+        function fetchApplicableRate() {
+            const contractorId = contractorSelect.value;
+            const siteId = siteSelect.value;
+            const fromSiteId = fromSiteSelect ? fromSiteSelect.value : '';
+            const materialId = materialSelect ? materialSelect.value : '';
+            const orderDate = orderDateInput ? orderDateInput.value : '';
+
+            if (!contractorId || contractorId === '0' || !siteId || siteId === '0') {
+                rateHint.style.display = 'none';
+                return;
+            }
+
+            const params = new URLSearchParams({
+                contractor_id: contractorId,
+                site_id: siteId,
+                from_site_id: fromSiteId || '',
+                material_id: materialId || '',
+                order_date: orderDate || '',
+            });
+
+            fetch('/api/rates/lookup?' + params.toString())
+                .then(r => r.json())
+                .then(data => {
+                    if (data.found) {
+                        const validTo = data.effective_to ? ` to ${data.effective_to}` : ' onwards';
+                        const material = data.material ? ` · ${data.material}` : '';
+                        const fromSite = data.from_site ? ` · From: ${data.from_site}` : '';
+                        const vehiclePart = data.vehicle_rate ? ` · Vehicle: Rs. ${data.vehicle_rate.toFixed(2)}` : '';
+                        rateHint.innerHTML = `
+                            <div class="rate-hint-inner">
+                                <div class="rate-hint-info">
+                                    <i class="bi bi-tag-fill"></i>
+                                    <span>Saved rate: <strong>Rs. ${data.rate.toFixed(2)} / ${data.unit.toUpperCase()}</strong>${vehiclePart}${fromSite}${material}</span>
+                                    <small>Valid: ${data.effective_from}${validTo}</small>
+                                    ${data.notes ? `<small class="rate-hint-notes">${data.notes}</small>` : ''}
+                                </div>
+                                <button type="button" class="btn btn-sm btn-ui-ocean rate-hint-apply" onclick="applyRate(${data.rate}, ${data.vehicle_rate ?? 'null'})">
+                                    Apply Rate
+                                </button>
+                            </div>
+                        `;
+                        rateHint.style.display = 'block';
+                    } else {
+                        rateHint.style.display = 'none';
+                    }
+                })
+                .catch(() => { rateHint.style.display = 'none'; });
+        }
+
+        window.applyRate = function(rate, vehicleRate) {
+            contractorRateInput.value = rate;
+            if (vehicleRate && vehicleRateInput) {
+                vehicleRateInput.value = vehicleRate;
+            }
+            rateHint.querySelector('.rate-hint-apply').textContent = 'Applied ✓';
+            rateHint.querySelector('.rate-hint-apply').disabled = true;
+        };
+
+        contractorSelect.addEventListener('change', fetchApplicableRate);
+        siteSelect.addEventListener('change', fetchApplicableRate);
+        if (fromSiteSelect) fromSiteSelect.addEventListener('change', fetchApplicableRate);
+        if (materialSelect) materialSelect.addEventListener('change', fetchApplicableRate);
+        if (orderDateInput) orderDateInput.addEventListener('change', fetchApplicableRate);
+    });
+</script>
+{% endblock %}

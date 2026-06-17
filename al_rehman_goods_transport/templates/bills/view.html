@@ -1,0 +1,420 @@
+{% extends "base.html" %}
+{% from "_formhelpers.html" import detail_value, form_shell, metric_tile %}
+
+{% block title %}{{ bill.bill_number }} - Al Rehman Goods Transport{% endblock %}
+
+{% block content %}
+{% call form_shell("Bill " ~ bill.bill_number, "Review the account, linked trips, related transactions, and settlement progress for this bill.", "Finance") %}
+<section class="detail-shell">
+    <div class="erp-top-bar">
+        <a href="{{ url_for('ledger.index') }}" class="erp-top-bar-back">
+            <i class="bi bi-arrow-left"></i> ERP Ledger
+        </a>
+        <div class="erp-top-bar-actions">
+            <a href="{{ url_for('bills.print_bill', id=bill.id) }}" class="btn btn-sm btn-ui-midnight" target="_blank" rel="noopener">
+                <i class="bi bi-printer"></i> Print View
+            </a>
+            <a href="{{ url_for('bills.export_bill_pdf', id=bill.id) }}" class="btn btn-sm btn-ui-primary">
+                <i class="bi bi-file-earmark-pdf"></i> Download PDF
+            </a>
+            <a href="{{ url_for('bills.export_bill_excel', id=bill.id) }}" class="btn btn-sm btn-ui-ocean">
+                <i class="bi bi-file-earmark-spreadsheet"></i> Export Excel
+            </a>
+        </div>
+    </div>
+    {% if bill.entity_type == 'contractor' and bill.contractor_id %}
+    {% set entity_href = url_for('contractors.view_contractor', id=bill.contractor_id) %}
+    {% elif bill.entity_type == 'plant' and bill.plant_id %}
+    {% set entity_href = url_for('plants.view_plant', id=bill.plant_id) %}
+    {% elif bill.entity_type == 'petrol_pump' and bill.petrol_pump_id %}
+    {% set entity_href = url_for('petrol_pumps.view_petrol_pump', id=bill.petrol_pump_id) %}
+    {% elif bill.entity_type == 'vehicle_owner' and bill.vehicle_owner_id %}
+    {% set entity_href = url_for('vehicle_owners.view', id=bill.vehicle_owner_id) %}
+    {% else %}
+    {% set entity_href = None %}
+    {% endif %}
+    <div class="collection-overview">
+        {{ metric_tile("Entity", bill.entity_name, bill.entity_type|replace('_', ' ')|title, "midnight", "bi bi-building-fill", entity_href) }}
+        {{ metric_tile("Records Included", linked_trip_count, "Entries covered by this bill", "ocean", "bi bi-list-check") }}
+        {{ metric_tile("Bill Amount", "Rs. " ~ ("%.2f"|format(bill.total_amount)), "Total value captured on this document", "accent", "bi bi-receipt") }}
+        {{ metric_tile("Outstanding", "Rs. " ~ ("%.2f"|format(bill.outstanding_amount)), "Remaining to settle — use form below", "primary", "bi bi-hourglass-split") }}
+    </div>
+
+    <div class="detail-grid">
+        <div class="detail-panel">
+            <h3><i class="bi bi-file-earmark-text-fill"></i> Bill Overview</h3>
+            <div class="detail-list">
+                {{ detail_value("Bill Number", bill.bill_number) }}
+                {{ detail_value("Bill Date", bill.bill_date.strftime('%Y-%m-%d %I:%M %p')) }}
+                {{ detail_value("Entity Type", bill.entity_type|replace('_', ' ')|title) }}
+                {{ detail_value("Material Filter", bill.material_type or "All materials") }}
+            </div>
+        </div>
+        <div class="detail-panel">
+            <h3><i class="bi bi-check2-circle"></i> Settlement Overview</h3>
+            <div class="detail-list">
+                {{ detail_value("Settled Amount", "Rs. " ~ ("%.2f"|format(bill.settled_amount or 0))) }}
+                {{ detail_value("Outstanding Amount", "Rs. " ~ ("%.2f"|format(bill.outstanding_amount))) }}
+                {{ detail_value("Balance Position", balance_summary.label ~ " - Rs. " ~ ("%.2f"|format(balance_summary.amount))) }}
+            </div>
+        </div>
+    </div>
+
+    {% if bill.notes %}
+    <div class="detail-panel">
+        <h3><i class="bi bi-chat-text-fill"></i> Notes</h3>
+        <div class="detail-value">{{ bill.notes }}</div>
+    </div>
+    {% endif %}
+
+    {% if standalone_diesel_rows %}
+    <div class="table-panel table-panel-list">
+        <div class="table-panel-header">
+            <div>
+                <h3 class="table-panel-title">Diesel entries</h3>
+                <p class="table-panel-copy">Standalone diesel entries logged against this petrol pump.</p>
+            </div>
+        </div>
+        <div class="table-responsive">
+            <table class="table detail-table">
+                <thead>
+                    <tr>
+                        <th>Date</th>
+                        <th>Vehicle</th>
+                        <th>Owner</th>
+                        <th>Receipt</th>
+                        <th>Litres</th>
+                        <th>Amount</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for entry in standalone_diesel_rows %}
+                    <tr>
+                        <td>{{ entry.date.strftime('%Y-%m-%d') }}</td>
+                        <td>{{ entry.vehicle.vehicle_number if entry.vehicle else '-' }}</td>
+                        <td>{{ entry.vehicle.owner_display_name if entry.vehicle else '-' }}</td>
+                        <td>{{ entry.receipt_number or '-' }}</td>
+                        <td>{{ "%.2f"|format(entry.litres) if entry.litres else '-' }}</td>
+                        <td>Rs. {{ "%.2f"|format(entry.amount or 0) }}</td>
+                        <td><a href="{{ url_for('diesel.view', id=entry.id) }}" class="btn btn-sm btn-ui-ghost"><i class="bi bi-eye"></i></a></td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+                <tfoot>
+                    <tr class="bill-grand-total-row">
+                        <td colspan="5"><strong>Total</strong></td>
+                        <td><strong>Rs. {{ "%.2f"|format(standalone_diesel_rows | sum(attribute='amount')) }}</strong></td>
+                        <td></td>
+                    </tr>
+                </tfoot>
+            </table>
+        </div>
+    </div>
+    {% endif %}
+
+    {% if orders_grouped %}
+    <div class="table-panel table-panel-list">
+        <div class="table-panel-header table-panel-header">
+            <div>
+                <h3 class="table-panel-title">Linked trips</h3>
+                <p class="table-panel-copy">Trips grouped by material — each group shows a subtotal, with a full material summary at the bottom.</p>
+            </div>
+        </div>
+
+        {% for group in orders_grouped %}
+        <div class="material-group">
+            <div class="material-group-label">
+                <strong class="material-group-name">{{ group.material }}</strong>
+                <span class="badge bg-secondary material-group-count">{{ group.trip_count }} trip{% if group.trip_count != 1 %}s{% endif %}</span>
+            </div>
+            <div class="table-responsive">
+                <table class="table detail-table">
+                    <thead>
+                        <tr>
+                            <th>Date</th>
+                            <th>Vehicle</th>
+                            <th>Site</th>
+                            <th>Receipt</th>
+                            <th>Delivered</th>
+                            <th>Amount</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for order in group.orders %}
+                        <tr>
+                            <td>{{ (order.completion_date or order.order_date).strftime('%Y-%m-%d') }}</td>
+                            <td>{{ order.vehicle.vehicle_number }}</td>
+                            <td>{{ order.site.name }}</td>
+                            <td>{{ order.receipt_number or '-' }}</td>
+                            <td>{{ "%.2f"|format(order.delivered_quantity or order.quantity or 0) }} {{ order.unit|upper }}</td>
+                            <td>Rs. {{ "%.2f"|format(order.billable_amount) }}</td>
+                        </tr>
+                        {% endfor %}
+                        <tr class="material-subtotal-row">
+                            <td colspan="4"><strong>{{ group.material }} Subtotal</strong></td>
+                            <td><strong>{{ "%.2f"|format(group.total_quantity) }} {{ group.unit }}</strong></td>
+                            <td><strong>Rs. {{ "%.2f"|format(group.total_amount) }}</strong></td>
+                        </tr>
+                        {% if group.contractor_rate %}
+                        <tr>
+                            <td colspan="6" class="text-end text-muted" style="font-size:0.8125rem;padding-top:4px;padding-bottom:6px;">
+                                @ Rs. {{ "%.2f"|format(group.contractor_rate) }}/{{ group.unit }} &times; {{ "%.2f"|format(group.total_quantity) }} {{ group.unit }} = Rs. {{ "%.2f"|format(group.total_amount) }}
+                            </td>
+                        </tr>
+                        {% endif %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        {% endfor %}
+
+        <div class="bill-material-summary">
+            <h4 class="bill-material-summary-title">Material Summary</h4>
+            <div class="table-responsive">
+                <table class="table detail-table bill-summary-table">
+                    <thead>
+                        <tr>
+                            <th>Material</th>
+                            <th>Trips</th>
+                            <th>Rate/Unit</th>
+                            <th>Total Quantity</th>
+                            <th>Total Amount</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for item in material_summary %}
+                        <tr>
+                            <td>{{ item.material }}</td>
+                            <td>{{ item.trip_count }}</td>
+                            <td>{% if item.contractor_rate %}Rs. {{ "%.2f"|format(item.contractor_rate) }}/{{ item.unit }}{% else %}—{% endif %}</td>
+                            <td>{{ "%.2f"|format(item.total_quantity) }} {{ item.unit }}</td>
+                            <td>Rs. {{ "%.2f"|format(item.total_amount) }}</td>
+                        </tr>
+                        {% endfor %}
+                        <tr class="bill-grand-total-row">
+                            <td><strong>Grand Total</strong></td>
+                            <td><strong>{{ linked_trip_count }}</strong></td>
+                            <td>—</td>
+                            <td>—</td>
+                            <td><strong>Rs. {{ "%.2f"|format(bill.total_amount) }}</strong></td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    {% if diesel_activity_rows %}
+    <div class="table-panel table-panel-list">
+        <div class="table-panel-header table-panel-header">
+            <div>
+                <h3 class="table-panel-title">Order-linked diesel activity</h3>
+                <p class="table-panel-copy">Diesel linked to completed orders for this pump.</p>
+            </div>
+        </div>
+        <div class="table-responsive">
+            <table class="table detail-table">
+                <thead>
+                    <tr>
+                        <th>Date</th>
+                        <th>Vehicle</th>
+                        <th>Receipt</th>
+                        <th>Litres</th>
+                        <th>Amount</th>
+                        <th>Image</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for entry in diesel_activity_rows %}
+                    <tr>
+                        <td>{{ (entry.order.completion_date or entry.order.order_date).strftime('%Y-%m-%d') if entry.order else '-' }}</td>
+                        <td>{{ entry.order.vehicle.vehicle_number if entry.order and entry.order.vehicle else '-' }}</td>
+                        <td>{{ entry.receipt_number or '-' }}</td>
+                        <td>{{ "%.4f"|format(entry.litres or 0) }}</td>
+                        <td>Rs. {{ "%.2f"|format(entry.amount or 0) }}</td>
+                        <td>
+                            {% if entry.receipt_image %}
+                            <a href="{{ entry.receipt_image }}" target="_blank" rel="noopener">View</a>
+                            {% else %}
+                            -
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {% endif %}
+
+    {% if loading_activity_rows %}
+    <div class="table-panel table-panel-list">
+        <div class="table-panel-header table-panel-header">
+            <div>
+                <h3 class="table-panel-title">Loading activity</h3>
+                <p class="table-panel-copy">Plant-side detail behind this bill, including quantity, vehicle, material, image, and date.</p>
+            </div>
+        </div>
+        <div class="table-responsive">
+            <table class="table detail-table">
+                <thead>
+                    <tr>
+                        <th>Date</th>
+                        <th>Vehicle</th>
+                        <th>Material</th>
+                        <th>Loading Qty</th>
+                        <th>Amount</th>
+                        <th>Image</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for loading in loading_activity_rows %}
+                    <tr>
+                        <td>{{ (loading.order.completion_date or loading.order.order_date).strftime('%Y-%m-%d') if loading.order else '-' }}</td>
+                        <td>{{ loading.order.vehicle.vehicle_number if loading.order and loading.order.vehicle else '-' }}</td>
+                        <td>{{ loading.order.material_name if loading.order else '-' }}</td>
+                        <td>{{ "%.2f"|format(loading.load_quantity or 0) }} {{ loading.order.unit|upper if loading.order and loading.order.unit else '' }}</td>
+                        <td>Rs. {{ "%.2f"|format(loading.plant_amount or 0) }}</td>
+                        <td>
+                            {% if loading.loading_image %}
+                            <a href="{{ loading.loading_image }}" target="_blank" rel="noopener">View</a>
+                            {% else %}
+                            -
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {% endif %}
+
+    {% if vehicle_owner_activity_rows %}
+    <div class="table-panel table-panel-list">
+        <div class="table-panel-header">
+            <div>
+                <h3 class="table-panel-title">Vehicle owner activity</h3>
+                <p class="table-panel-copy">Owner-side trip detail behind this bill, including vehicle, quantity, rate, delivery receipt, and date.</p>
+            </div>
+        </div>
+        <div class="table-responsive">
+            <table class="table detail-table">
+                <thead>
+                    <tr>
+                        <th>Date</th>
+                        <th>Vehicle</th>
+                        <th>Delivered Qty</th>
+                        <th>Vehicle Rate</th>
+                        <th>Delivery Receipt</th>
+                        <th>Receipt Image</th>
+                        <th class="text-end">Payable</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for order in vehicle_owner_activity_rows %}
+                    <tr>
+                        <td>{{ (order.completion_date or order.order_date).strftime('%Y-%m-%d') }}</td>
+                        <td>{{ order.vehicle.vehicle_number if order.vehicle else '-' }}</td>
+                        <td>{{ "%.2f"|format(order.delivered_quantity or order.quantity or 0) }} {{ order.unit|upper }}</td>
+                        <td>Rs. {{ "%.2f"|format(order.vehicle_rate or 0) }}</td>
+                        <td>{{ order.receipt_number or '-' }}</td>
+                        <td>
+                            {% if order.delivery_receipt_image %}
+                            <a href="{{ order.delivery_receipt_image }}" target="_blank" rel="noopener">View</a>
+                            {% else %}-{% endif %}
+                        </td>
+                        <td class="text-end">Rs. {{ "%.2f"|format(order.remaining_vehicle_payment()) }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+                <tfoot>
+                    <tr class="material-subtotal-row">
+                        <td colspan="6"><strong>Gross Trips Total</strong></td>
+                        <td class="text-end"><strong>Rs. {{ "%.2f"|format(trips_gross) }}</strong></td>
+                    </tr>
+                    {% if vehicle_owner_diesel_rows %}
+                    {% for entry in vehicle_owner_diesel_rows %}
+                    <tr style="color:var(--muted);">
+                        <td>{{ entry.date.strftime('%Y-%m-%d') }}</td>
+                        <td colspan="2">{{ entry.vehicle.vehicle_number if entry.vehicle else '-' }} — Diesel deduction</td>
+                        <td>{{ entry.petrol_pump.name if entry.petrol_pump else '-' }}</td>
+                        <td>{{ entry.receipt_number or '-' }}</td>
+                        <td>{{ "%.2f"|format(entry.litres or 0) }} L</td>
+                        <td class="text-end" style="color:#dc2626;">− Rs. {{ "%.2f"|format(entry.amount or 0) }}</td>
+                    </tr>
+                    {% endfor %}
+                    <tr class="material-subtotal-row">
+                        <td colspan="6"><strong>Diesel Deductions</strong></td>
+                        <td class="text-end" style="color:#dc2626;"><strong>− Rs. {{ "%.2f"|format(diesel_deduction_total) }}</strong></td>
+                    </tr>
+                    <tr class="bill-grand-total-row">
+                        <td colspan="6"><strong>Net Payable</strong></td>
+                        <td class="text-end"><strong>Rs. {{ "%.2f"|format(trips_gross - diesel_deduction_total) }}</strong></td>
+                    </tr>
+                    {% endif %}
+                </tfoot>
+            </table>
+        </div>
+    </div>
+    {% endif %}
+
+    <div class="detail-panel">
+        <h3><i class="bi bi-arrow-left-right"></i> Related Transactions</h3>
+        <div class="table-responsive">
+            <table class="table table-striped detail-table">
+                <thead>
+                    <tr>
+                        <th>Date</th>
+                        <th>Type</th>
+                        <th>Amount</th>
+                        <th>Reference</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for transaction in related_transactions %}
+                    <tr>
+                        <td>{{ transaction.date.strftime('%Y-%m-%d') }}</td>
+                        <td>{{ transaction.type|replace('_', ' ')|title }}</td>
+                        <td>Rs. {{ "%.2f"|format(transaction.amount or 0) }}</td>
+                        <td>{{ transaction.reference or "-" }}</td>
+                    </tr>
+                    {% else %}
+                    <tr><td colspan="4" class="text-center">No related transactions found.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    {% if bill.outstanding_amount > 0 %}
+    <div class="detail-panel">
+        <h3><i class="bi bi-cash-coin"></i> Settle Bill</h3>
+        <form method="POST" action="{{ url_for('bills.settle_bill', id=bill.id) }}" class="filter-grid">
+            <div class="form-field">
+                <label class="form-label" for="amount">Amount</label>
+                <input class="form-control" type="number" step="0.01" id="amount" name="amount" value="{{ "%.2f"|format(bill.outstanding_amount) }}">
+            </div>
+            <div class="form-field">
+                <label class="form-label" for="payment_method">Payment Method</label>
+                <select class="form-select" id="payment_method" name="payment_method">
+                    <option value="cash">Cash</option>
+                    <option value="cheque">Cheque</option>
+                    <option value="account">Account Transfer</option>
+                </select>
+            </div>
+            <div class="form-field">
+                <label class="form-label" for="reference">Reference</label>
+                <input class="form-control" type="text" id="reference" name="reference" placeholder="Voucher, cheque, or transfer reference">
+            </div>
+            <div class="filter-actions">
+                <button type="submit" class="btn btn-ui-primary" onclick="return confirm('Record this settlement?')">Settle Bill</button>
+            </div>
+        </form>
+    </div>
+    {% endif %}
+</section>
+{% endcall %}
+{% endblock %}

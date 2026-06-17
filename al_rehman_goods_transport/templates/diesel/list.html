@@ -1,0 +1,159 @@
+{% extends "base.html" %}
+{% from "_formhelpers.html" import form_shell, metric_tile, pagination_nav, table_tools, empty_state %}
+
+{% block title %}Diesel Entries - Al Rehman Goods Transport{% endblock %}
+
+{% block content %}
+{% call form_shell("Diesel Entries", "Vehicle fuel consumption log. Each entry is linked to a vehicle, with optional petrol pump and trip references.", "Orders", (url_for('diesel.create') if current_user.can('diesel.create') else None), "Add Entry", "btn btn-ui-primary") %}
+<section class="content-stack">
+    <div class="collection-overview">
+        {{ metric_tile("Total Entries", total_entries, "Diesel records on file", "primary", "bi bi-fuel-pump-fill") }}
+        {{ metric_tile("Total Amount", "Rs. " ~ ("%.2f"|format(total_amount)), "Sum of all diesel costs", "accent", "bi bi-cash-stack") }}
+        {{ metric_tile("Total Litres", ("%.2f"|format(total_litres)) ~ " L", "Combined fuel volume", "ocean", "bi bi-droplet-fill") }}
+        {{ metric_tile("This Month", ("%.2f"|format(this_month_litres)) ~ " L", "Litres consumed this calendar month", "slate", "bi bi-calendar3") }}
+    </div>
+
+    <form method="GET" action="{{ url_for('diesel.index') }}" class="detail-panel mb-4">
+        <div class="filter-grid filter-grid-four">
+            <div class="form-field">
+                <label class="form-label" for="owner_id">Vehicle Owner</label>
+                <select class="form-select" id="owner_id" name="owner_id">
+                    <option value="">All owners</option>
+                    {% for owner in vehicle_owners %}
+                    <option value="{{ owner.id }}" {% if filter_state.owner_id == owner.id %}selected{% endif %}>{{ owner.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-field">
+                <label class="form-label" for="vehicle_id">Vehicle</label>
+                <select class="form-select" id="vehicle_id" name="vehicle_id">
+                    <option value="">All vehicles</option>
+                    {% for vehicle in vehicles %}
+                    <option value="{{ vehicle.id }}" {% if filter_state.vehicle_id == vehicle.id %}selected{% endif %}>{{ vehicle.vehicle_number }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-field">
+                <label class="form-label" for="pump_id">Petrol Pump</label>
+                <select class="form-select" id="pump_id" name="pump_id">
+                    <option value="">All pumps</option>
+                    {% for pump in pumps %}
+                    <option value="{{ pump.id }}" {% if filter_state.pump_id == pump.id %}selected{% endif %}>{{ pump.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-field">
+                <label class="form-label" for="date_from">From Date</label>
+                <input class="form-control" type="date" id="date_from" name="date_from" value="{{ filter_state.date_from.strftime('%Y-%m-%d') if filter_state.date_from else '' }}">
+            </div>
+            <div class="form-field">
+                <label class="form-label" for="date_to">To Date</label>
+                <input class="form-control" type="date" id="date_to" name="date_to" value="{{ filter_state.date_to.strftime('%Y-%m-%d') if filter_state.date_to else '' }}">
+            </div>
+        </div>
+        <div class="detail-actions mt-3">
+            <button type="submit" class="btn btn-ui-primary">Apply Filters</button>
+            <a href="{{ url_for('diesel.index') }}" class="btn btn-ui-neutral">Reset</a>
+        </div>
+    </form>
+
+    {{ table_tools("dieselTable", "Search by vehicle, pump, receipt…") }}
+    <div class="table-panel table-panel-list">
+        <div class="table-panel-header">
+            <div>
+                <h3 class="table-panel-title"><i class="bi bi-fuel-pump" style="font-size:0.85rem;margin-right:0.35rem;opacity:0.65"></i> Fuel log</h3>
+            </div>
+            <div class="table-toolbar">
+                <span class="collection-pill"><strong>{{ total_entries }}</strong> entries</span>
+            </div>
+        </div>
+        <div class="table-responsive">
+            <table id="dieselTable" class="table detail-table">
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>Date</th>
+                        <th>Vehicle</th>
+                        <th>Petrol Pump</th>
+                        <th>Receipt</th>
+                        <th>Litres</th>
+                        <th>Amount</th>
+                        <th>Pump Balance</th>
+                        <th>Linked Trip</th>
+                        <th>Bill</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for entry in entries %}
+                    <tr>
+                        <td><span class="table-id-badge">#{{ entry.id }}</span></td>
+                        <td><span class="table-text">{{ entry.date.strftime('%Y-%m-%d') }}</span></td>
+                        <td>
+                            <div class="table-main">
+                                <strong>{{ entry.vehicle.vehicle_number }}</strong>
+                                <span class="table-sub">{{ entry.vehicle.owner_display_name }}</span>
+                            </div>
+                        </td>
+                        <td><span class="table-text">{{ entry.petrol_pump.name if entry.petrol_pump else '—' }}</span></td>
+                        <td><span class="table-text">{{ entry.receipt_number or '—' }}</span></td>
+                        <td><span class="table-amount">{{ "%.2f"|format(entry.litres) if entry.litres else '—' }}</span></td>
+                        <td><span class="table-amount">Rs. {{ "%.2f"|format(entry.amount) }}</span></td>
+                        <td>
+                            {% if entry.petrol_pump %}
+                            <span class="table-amount">Rs. {{ "%.2f"|format(entry.petrol_pump.balance) }}</span>
+                            {% else %}
+                            <span class="table-text text-muted">—</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if entry.order %}
+                            <span class="table-text">#{{ entry.order.id }}</span>
+                            {% else %}
+                            <span class="table-text text-muted">—</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if entry.bill_id %}
+                            <a href="{{ url_for('bills.view_bill', id=entry.bill_id) }}" class="status-badge status-badge-completed" title="Billed — {{ entry.bill.bill_number if entry.bill else entry.bill_id }}">
+                                <i class="bi bi-receipt"></i> Billed
+                            </a>
+                            {% else %}
+                            <span class="status-badge status-badge-pending">Unbilled</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <div class="table-action-group">
+                                <a href="{{ url_for('diesel.view', id=entry.id) }}" class="btn btn-sm btn-ui-ghost" title="View">
+                                    <i class="bi bi-eye"></i>
+                                </a>
+                                {% if current_user.can('diesel.edit') %}
+                                <a href="{{ url_for('diesel.edit', id=entry.id) }}" class="btn btn-sm btn-ui-edit" title="Edit">
+                                    <i class="bi bi-pencil"></i>
+                                </a>
+                                {% endif %}
+                                {% if current_user.can('diesel.delete') %}
+                                <form action="{{ url_for('diesel.delete', id=entry.id) }}" method="POST" class="d-inline">
+                                    <button type="submit" class="btn btn-sm btn-ui-danger" title="Delete" onclick="return confirm('Delete this diesel entry?')">
+                                        <i class="bi bi-trash"></i>
+                                    </button>
+                                </form>
+                                {% endif %}
+                            </div>
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="11">
+                            {{ empty_state("No diesel entries found. Add an entry to start tracking fuel.", "bi-fuel-pump") }}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {{ pagination_nav(request, pagination) }}
+    </div>
+</section>
+{% endcall %}
+{% endblock %}

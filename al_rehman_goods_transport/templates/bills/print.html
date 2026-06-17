@@ -1,0 +1,748 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ bill.bill_number }} - Bill Statement</title>
+    <style>
+        :root {
+            color-scheme: light;
+            --ink: #0f172a;
+            --muted: #475569;
+            --soft: #e2e8f0;
+            --panel: #f8fafc;
+            --brand: #0b2742;
+            --accent: #d97706;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            background: #eef2f7;
+            color: var(--ink);
+            font-family: "Segoe UI", Arial, sans-serif;
+            padding: 28px;
+        }
+
+        .statement-shell {
+            max-width: 1040px;
+            margin: 0 auto;
+            background: #ffffff;
+            border-radius: 20px;
+            box-shadow: 0 24px 60px rgba(15, 23, 42, 0.14);
+            overflow: hidden;
+        }
+
+        .statement-actions {
+            display: flex;
+            justify-content: flex-end;
+            gap: 12px;
+            padding: 18px 24px 0;
+        }
+
+        .statement-btn {
+            appearance: none;
+            border: 1px solid var(--soft);
+            border-radius: 999px;
+            background: #ffffff;
+            color: var(--ink);
+            padding: 10px 16px;
+            font: inherit;
+            text-decoration: none;
+            cursor: pointer;
+        }
+
+        .statement-btn-primary {
+            background: var(--brand);
+            color: #ffffff;
+            border-color: var(--brand);
+        }
+
+        .statement-body {
+            padding: 28px 34px 34px;
+        }
+
+        .statement-header {
+            display: grid;
+            grid-template-columns: 1.5fr 1fr;
+            gap: 24px;
+            padding-bottom: 24px;
+            border-bottom: 2px solid var(--soft);
+        }
+
+        .statement-title {
+            margin: 0;
+            font-size: 2rem;
+            letter-spacing: 0.01em;
+            color: var(--brand);
+        }
+
+        .statement-kicker {
+            text-transform: uppercase;
+            letter-spacing: 0.16em;
+            color: var(--accent);
+            font-size: 0.75rem;
+            margin-bottom: 10px;
+            font-weight: 700;
+        }
+
+        .statement-company p,
+        .statement-meta p {
+            margin: 6px 0;
+            color: var(--muted);
+        }
+
+        .statement-meta {
+            background: var(--panel);
+            border: 1px solid var(--soft);
+            border-radius: 18px;
+            padding: 18px 20px;
+        }
+
+        .meta-row {
+            display: flex;
+            justify-content: space-between;
+            gap: 14px;
+            margin-bottom: 10px;
+        }
+
+        .meta-row:last-child {
+            margin-bottom: 0;
+        }
+
+        .meta-label {
+            color: var(--muted);
+            font-size: 0.92rem;
+        }
+
+        .meta-value {
+            font-weight: 700;
+            text-align: right;
+        }
+
+        .summary-grid {
+            display: grid;
+            grid-template-columns: repeat(4, minmax(0, 1fr));
+            gap: 14px;
+            margin: 24px 0;
+        }
+
+        .summary-card {
+            border: 1px solid var(--soft);
+            border-radius: 18px;
+            background: var(--panel);
+            padding: 16px 18px;
+        }
+
+        .summary-card span {
+            display: block;
+            color: var(--muted);
+            font-size: 0.88rem;
+            margin-bottom: 8px;
+        }
+
+        .summary-card strong {
+            font-size: 1.2rem;
+        }
+
+        .statement-section {
+            margin-top: 22px;
+        }
+
+        .statement-section h3 {
+            margin: 0 0 12px;
+            font-size: 1.1rem;
+            color: var(--brand);
+        }
+
+        .statement-note {
+            margin: 0 0 12px;
+            color: var(--muted);
+            line-height: 1.55;
+        }
+
+        .statement-table {
+            width: 100%;
+            border-collapse: collapse;
+            border: 1px solid var(--soft);
+            border-radius: 16px;
+            overflow: hidden;
+        }
+
+        .statement-table th,
+        .statement-table td {
+            border-bottom: 1px solid var(--soft);
+            padding: 11px 12px;
+            text-align: left;
+            vertical-align: top;
+            font-size: 0.95rem;
+        }
+
+        .statement-table th {
+            background: #f1f5f9;
+            color: var(--brand);
+            font-weight: 700;
+        }
+
+        .statement-table tr:last-child td {
+            border-bottom: none;
+        }
+
+        .align-right {
+            text-align: right;
+        }
+
+        .statement-footer {
+            margin-top: 26px;
+            padding-top: 18px;
+            border-top: 1px solid var(--soft);
+            color: var(--muted);
+            font-size: 0.92rem;
+            line-height: 1.6;
+        }
+
+        .trip-group {
+            margin-bottom: 20px;
+        }
+
+        .trip-group-label {
+            align-items: center;
+            background: #eef4fb;
+            border: 1px solid var(--soft);
+            border-bottom: none;
+            border-radius: 12px 12px 0 0;
+            display: flex;
+            gap: 10px;
+            padding: 8px 14px;
+        }
+
+        .trip-group-label strong {
+            color: var(--brand);
+            font-size: 0.97rem;
+        }
+
+        .trip-group-count {
+            color: var(--muted);
+            font-size: 0.84rem;
+        }
+
+        .trip-group .statement-table {
+            border-top-left-radius: 0;
+            border-top-right-radius: 0;
+        }
+
+        .subtotal-row td {
+            background: #f1f5f9;
+            border-top: 2px solid var(--soft);
+            font-size: 0.92rem;
+        }
+
+        .material-summary-section {
+            border-top: 2px solid var(--soft);
+            margin-top: 24px;
+            padding-top: 16px;
+        }
+
+        .material-summary-heading {
+            color: var(--brand);
+            font-size: 0.82rem;
+            font-weight: 800;
+            letter-spacing: 0.1em;
+            margin: 0 0 12px;
+            text-transform: uppercase;
+        }
+
+        .grand-total-row td {
+            background: var(--brand);
+            color: #ffffff;
+            font-weight: 700;
+        }
+
+        @media print {
+            @page {
+                size: A4;
+                margin: 12mm 10mm;
+            }
+
+            body {
+                padding: 0;
+                background: #ffffff;
+            }
+
+            .statement-shell {
+                box-shadow: none;
+                border-radius: 0;
+                max-width: none;
+            }
+
+            .statement-actions {
+                display: none;
+            }
+
+            .statement-body {
+                padding: 0;
+            }
+
+            /* Keep every column on the page exactly like the on-screen preview:
+               shrink the type a touch and never let the date wrap to two lines. */
+            .statement-table th,
+            .statement-table td {
+                font-size: 0.72rem;
+                padding: 4px 6px;
+                word-break: break-word;
+                overflow-wrap: anywhere;
+            }
+
+            .statement-table td:first-child,
+            .statement-table th:first-child {
+                white-space: nowrap;
+            }
+
+            .trip-group,
+            .statement-section,
+            .summary-card,
+            table {
+                break-inside: avoid;
+            }
+
+            .summary-grid {
+                grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="statement-shell">
+        <div class="statement-actions">
+            <button type="button" class="statement-btn statement-btn-primary" onclick="window.print()">Print / Save PDF</button>
+            <a href="{{ url_for('bills.export_bill_excel', id=bill.id) }}" class="statement-btn">Export Excel</a>
+        </div>
+
+        <div class="statement-body">
+            <header class="statement-header">
+                <div class="statement-company">
+                    <div class="statement-kicker">Official Bill Statement</div>
+                    <h1 class="statement-title">Al Rehman Goods Transport</h1>
+                    <p>Bahtr Mor Wah Cantt</p>
+                    <p><strong>Contact No.</strong> Ahsan Niazi 0307-2342827</p>
+                    <p>Inam Khan - 0301-5749086</p>
+                </div>
+                <div class="statement-meta">
+                    <div class="meta-row">
+                        <span class="meta-label">Bill No.</span>
+                        <span class="meta-value">{{ bill.bill_number }}</span>
+                    </div>
+                    <div class="meta-row">
+                        <span class="meta-label">Bill Date</span>
+                        <span class="meta-value">{{ bill.bill_date.strftime('%Y-%m-%d') }}</span>
+                    </div>
+                    <div class="meta-row">
+                        <span class="meta-label">Entity</span>
+                        <span class="meta-value">{{ bill.entity_name }}</span>
+                    </div>
+                    <div class="meta-row">
+                        <span class="meta-label">Entity Type</span>
+                        <span class="meta-value">{{ bill.entity_type|replace('_', ' ')|title }}</span>
+                    </div>
+                </div>
+            </header>
+
+            <section class="summary-grid">
+                <div class="summary-card">
+                    <span>Total Amount</span>
+                    <strong>Rs. {{ "%.2f"|format(bill.total_amount) }}</strong>
+                </div>
+                <div class="summary-card">
+                    <span>Settled Amount</span>
+                    <strong>Rs. {{ "%.2f"|format(bill.settled_amount or 0) }}</strong>
+                </div>
+                <div class="summary-card">
+                    <span>Outstanding</span>
+                    <strong>Rs. {{ "%.2f"|format(bill.outstanding_amount) }}</strong>
+                </div>
+                <div class="summary-card">
+                    <span>Balance Position</span>
+                    <strong>{{ balance_summary.label }} Rs. {{ "%.2f"|format(balance_summary.amount) }}</strong>
+                </div>
+            </section>
+
+            {% if bill.notes %}
+            <section class="statement-section">
+                <h3>Notes</h3>
+                <p class="statement-note">{{ bill.notes }}</p>
+            </section>
+            {% endif %}
+
+            {% if bill.entity_type == 'petrol_pump' %}
+            <section class="statement-section">
+                <h3>Diesel Entries</h3>
+                {% if standalone_diesel_rows %}
+                <table class="statement-table">
+                    <thead>
+                        <tr>
+                            <th>Date</th>
+                            <th>Vehicle</th>
+                            <th>Owner</th>
+                            <th>Receipt</th>
+                            <th>Litres</th>
+                            <th class="align-right">Amount</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for entry in standalone_diesel_rows %}
+                        <tr>
+                            <td>{{ entry.date.strftime('%Y-%m-%d') }}</td>
+                            <td>{{ entry.vehicle.vehicle_number if entry.vehicle else '-' }}</td>
+                            <td>{{ entry.vehicle.owner_display_name if entry.vehicle else '-' }}</td>
+                            <td>{{ entry.receipt_number or '-' }}</td>
+                            <td>{{ "%.2f"|format(entry.litres) if entry.litres else '-' }}</td>
+                            <td class="align-right">Rs. {{ "%.2f"|format(entry.amount or 0) }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+                <div class="material-summary-section">
+                    <h4 class="material-summary-heading">Summary</h4>
+                    <table class="statement-table">
+                        <thead>
+                            <tr>
+                                <th>Entries</th>
+                                <th class="align-right">Grand Total</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr class="grand-total-row">
+                                <td><strong>{{ standalone_diesel_rows|length }}</strong></td>
+                                <td class="align-right"><strong>Rs. {{ "%.2f"|format(bill.total_amount) }}</strong></td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <p style="color:var(--muted)">No diesel entries found for this bill.</p>
+                {% endif %}
+            </section>
+            {% else %}
+            <section class="statement-section">
+                <h3>Linked Trips</h3>
+
+                {% if orders_grouped %}
+                {% for group in orders_grouped %}
+                <div class="trip-group">
+                    <div class="trip-group-label">
+                        <strong>{{ group.material }}</strong>
+                        <span class="trip-group-count">{{ group.trip_count }} trip{% if group.trip_count != 1 %}s{% endif %}</span>
+                    </div>
+
+                    {% if bill.entity_type == 'vehicle_owner' %}
+                    <table class="statement-table">
+                        <thead>
+                            <tr>
+                                <th>Date</th>
+                                <th>Vehicle</th>
+                                <th>Quantity</th>
+                                <th class="align-right">Gross Amt</th>
+                                <th class="align-right">Diesel</th>
+                                <th class="align-right">Advance</th>
+                                <th class="align-right">Net Payable</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for order in group.orders %}
+                            <tr>
+                                <td>{{ (order.completion_date or order.order_date).strftime('%Y-%m-%d') }}</td>
+                                <td>{{ order.vehicle.vehicle_number }}</td>
+                                <td>{{ "%.2f"|format(order.delivered_quantity or order.quantity or 0) }} {{ order.unit|upper }}</td>
+                                <td class="align-right">Rs. {{ "%.2f"|format(order.total_vehicle_amount()) }}</td>
+                                <td class="align-right">- Rs. {{ "%.2f"|format(order.total_diesel_amount()) }}</td>
+                                <td class="align-right">- Rs. {{ "%.2f"|format(order.total_advance_amount()) }}</td>
+                                <td class="align-right"><strong>Rs. {{ "%.2f"|format(order.remaining_vehicle_payment()) }}</strong></td>
+                            </tr>
+                            {% endfor %}
+                            <tr class="subtotal-row">
+                                <td colspan="2"><strong>{{ group.material }} Subtotal</strong></td>
+                                <td><strong>{{ "%.2f"|format(group.total_quantity) }} {{ group.unit }}</strong></td>
+                                <td class="align-right"><strong>Rs. {{ "%.2f"|format(group.total_vehicle_amount) }}</strong></td>
+                                <td class="align-right"><strong>- Rs. {{ "%.2f"|format(group.total_diesel_amount) }}</strong></td>
+                                <td class="align-right"><strong>- Rs. {{ "%.2f"|format(group.total_advance_amount) }}</strong></td>
+                                <td class="align-right"><strong>Rs. {{ "%.2f"|format(group.total_net_payable) }}</strong></td>
+                            </tr>
+                        </tbody>
+                    </table>
+                    {% else %}
+                    <table class="statement-table">
+                        <thead>
+                            <tr>
+                                <th>Date</th>
+                                <th>Vehicle</th>
+                                <th>From Site</th>
+                                <th>To Site</th>
+                                <th>Receipt</th>
+                                <th>Quantity</th>
+                                <th class="align-right">Amount</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for order in group.orders %}
+                            <tr>
+                                <td>{{ (order.completion_date or order.order_date).strftime('%Y-%m-%d') }}</td>
+                                <td>{{ order.vehicle.vehicle_number }}</td>
+                                <td>{{ order.from_site.name if order.from_site else "-" }}</td>
+                                <td>{{ order.site.name }}</td>
+                                <td>{{ order.receipt_number or "-" }}</td>
+                                <td>{{ "%.2f"|format(order.delivered_quantity or order.quantity or 0) }} {{ order.unit|upper }}</td>
+                                <td class="align-right">Rs. {{ "%.2f"|format(order.billable_amount) }}</td>
+                            </tr>
+                            {% endfor %}
+                            <tr class="subtotal-row">
+                                <td colspan="5"><strong>{{ group.material }} Subtotal</strong></td>
+                                <td><strong>{{ "%.2f"|format(group.total_quantity) }} {{ group.unit }}</strong></td>
+                                <td class="align-right"><strong>Rs. {{ "%.2f"|format(group.total_amount) }}</strong></td>
+                            </tr>
+                            {% if group.contractor_rate %}
+                            <tr class="rate-calc-row">
+                                <td colspan="7" class="align-right" style="font-size:0.82rem;color:#475569;padding:4px 12px 8px;border-bottom:1px solid var(--soft);">
+                                    @ Rs. {{ "%.2f"|format(group.contractor_rate) }}/{{ group.unit }} &times; {{ "%.2f"|format(group.total_quantity) }} {{ group.unit }} = <strong>Rs. {{ "%.2f"|format(group.total_amount) }}</strong>
+                                </td>
+                            </tr>
+                            {% endif %}
+                        </tbody>
+                    </table>
+                    {% endif %}
+                </div>
+                {% endfor %}
+                {% else %}
+                <table class="statement-table">
+                    <thead>
+                        <tr>
+                            <th>Date</th><th>Vehicle</th><th>From Site</th><th>To Site</th><th>Material</th><th>Quantity</th><th class="align-right">Amount</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr><td colspan="7">No linked trips available for this bill.</td></tr>
+                    </tbody>
+                </table>
+                {% endif %}
+
+                <div class="material-summary-section">
+                    <h4 class="material-summary-heading">Material Summary</h4>
+                    {% if bill.entity_type == 'vehicle_owner' %}
+                    <table class="statement-table">
+                        <thead>
+                            <tr>
+                                <th>Material</th>
+                                <th>Trips</th>
+                                <th>Total Qty</th>
+                                <th class="align-right">Gross Amt</th>
+                                <th class="align-right">Diesel</th>
+                                <th class="align-right">Advance</th>
+                                <th class="align-right">Net Payable</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for group in orders_grouped %}
+                            <tr>
+                                <td>{{ group.material }}</td>
+                                <td>{{ group.trip_count }}</td>
+                                <td>{{ "%.2f"|format(group.total_quantity) }} {{ group.unit }}</td>
+                                <td class="align-right">Rs. {{ "%.2f"|format(group.total_vehicle_amount) }}</td>
+                                <td class="align-right">- Rs. {{ "%.2f"|format(group.total_diesel_amount) }}</td>
+                                <td class="align-right">- Rs. {{ "%.2f"|format(group.total_advance_amount) }}</td>
+                                <td class="align-right">Rs. {{ "%.2f"|format(group.total_net_payable) }}</td>
+                            </tr>
+                            {% endfor %}
+                            <tr class="grand-total-row">
+                                <td><strong>Grand Total</strong></td>
+                                <td><strong>{{ linked_trip_count }}</strong></td>
+                                <td>—</td>
+                                <td>—</td>
+                                <td>—</td>
+                                <td>—</td>
+                                <td class="align-right"><strong>Rs. {{ "%.2f"|format(bill.total_amount) }}</strong></td>
+                            </tr>
+                        </tbody>
+                    </table>
+                    {% else %}
+                    <table class="statement-table">
+                        <thead>
+                            <tr>
+                                <th>Material</th>
+                                <th>Trips</th>
+                                <th>Rate/Unit</th>
+                                <th>Total Quantity</th>
+                                <th class="align-right">Total Amount</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for item in material_summary %}
+                            <tr>
+                                <td>{{ item.material }}</td>
+                                <td>{{ item.trip_count }}</td>
+                                <td>{% if item.contractor_rate %}Rs. {{ "%.2f"|format(item.contractor_rate) }}/{{ item.unit }}{% else %}—{% endif %}</td>
+                                <td>{{ "%.2f"|format(item.total_quantity) }} {{ item.unit }}</td>
+                                <td class="align-right">Rs. {{ "%.2f"|format(item.total_amount) }}</td>
+                            </tr>
+                            {% endfor %}
+                            <tr class="grand-total-row">
+                                <td><strong>Grand Total</strong></td>
+                                <td><strong>{{ linked_trip_count }}</strong></td>
+                                <td>—</td>
+                                <td>—</td>
+                                <td class="align-right"><strong>Rs. {{ "%.2f"|format(bill.total_amount) }}</strong></td>
+                            </tr>
+                        </tbody>
+                    </table>
+                    {% endif %}
+                </div>
+            </section>
+            {% endif %}
+
+            {% if diesel_activity_rows %}
+            <section class="statement-section">
+                <h3>Order-Linked Diesel Activity</h3>
+                <table class="statement-table">
+                    <thead>
+                        <tr>
+                            <th>Date</th>
+                            <th>Vehicle</th>
+                            <th>Receipt</th>
+                            <th>Litres</th>
+                            <th class="align-right">Amount</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for entry in diesel_activity_rows %}
+                        <tr>
+                            <td>{{ (entry.order.completion_date or entry.order.order_date).strftime('%Y-%m-%d') if entry.order else "-" }}</td>
+                            <td>{{ entry.order.vehicle.vehicle_number if entry.order and entry.order.vehicle else "-" }}</td>
+                            <td>{{ entry.receipt_number or "-" }}</td>
+                            <td>{{ "%.4f"|format(entry.litres or 0) }}</td>
+                            <td class="align-right">Rs. {{ "%.2f"|format(entry.amount or 0) }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </section>
+            {% endif %}
+
+            {% if loading_activity_rows %}
+            <section class="statement-section">
+                <h3>Loading Activity</h3>
+                <table class="statement-table">
+                    <thead>
+                        <tr>
+                            <th>Date</th>
+                            <th>Vehicle</th>
+                            <th>Material</th>
+                            <th>Loading Qty</th>
+                            <th class="align-right">Amount</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for loading in loading_activity_rows %}
+                        <tr>
+                            <td>{{ (loading.order.completion_date or loading.order.order_date).strftime('%Y-%m-%d') if loading.order else "-" }}</td>
+                            <td>{{ loading.order.vehicle.vehicle_number if loading.order and loading.order.vehicle else "-" }}</td>
+                            <td>{{ loading.order.material_name if loading.order else "-" }}</td>
+                            <td>{{ "%.2f"|format(loading.load_quantity or 0) }} {{ loading.order.unit|upper if loading.order and loading.order.unit else '' }}</td>
+                            <td class="align-right">Rs. {{ "%.2f"|format(loading.plant_amount or 0) }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </section>
+            {% endif %}
+
+            {% if vehicle_owner_activity_rows %}
+            <section class="statement-section">
+                <h3>Vehicle Owner Activity</h3>
+                <table class="statement-table">
+                    <thead>
+                        <tr>
+                            <th>Date</th>
+                            <th>Vehicle</th>
+                            <th>Delivered Qty</th>
+                            <th>Vehicle Rate</th>
+                            <th>Delivery Receipt</th>
+                            <th class="align-right">Payable</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for order in vehicle_owner_activity_rows %}
+                        <tr>
+                            <td>{{ (order.completion_date or order.order_date).strftime('%Y-%m-%d') }}</td>
+                            <td>{{ order.vehicle.vehicle_number if order.vehicle else "-" }}</td>
+                            <td>{{ "%.2f"|format(order.delivered_quantity or order.quantity or 0) }} {{ order.unit|upper }}</td>
+                            <td>Rs. {{ "%.2f"|format(order.vehicle_rate or 0) }}</td>
+                            <td>{{ order.receipt_number or "-" }}</td>
+                            <td class="align-right">Rs. {{ "%.2f"|format(order.remaining_vehicle_payment()) }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                    <tfoot>
+                        <tr style="font-weight:600;background:#f1f5f9;">
+                            <td colspan="5">Gross Trips Total</td>
+                            <td class="align-right">Rs. {{ "%.2f"|format(trips_gross) }}</td>
+                        </tr>
+                        {% if vehicle_owner_diesel_rows %}
+                        {% for entry in vehicle_owner_diesel_rows %}
+                        <tr style="color:#64748b;">
+                            <td>{{ entry.date.strftime('%Y-%m-%d') }}</td>
+                            <td colspan="2">{{ entry.vehicle.vehicle_number if entry.vehicle else "-" }} — Diesel</td>
+                            <td>{{ entry.petrol_pump.name if entry.petrol_pump else "-" }}</td>
+                            <td>{{ entry.receipt_number or "-" }}</td>
+                            <td class="align-right" style="color:#dc2626;">− Rs. {{ "%.2f"|format(entry.amount or 0) }}</td>
+                        </tr>
+                        {% endfor %}
+                        <tr style="font-weight:600;background:#fef2f2;">
+                            <td colspan="5">Diesel Deductions</td>
+                            <td class="align-right" style="color:#dc2626;">− Rs. {{ "%.2f"|format(diesel_deduction_total) }}</td>
+                        </tr>
+                        <tr style="font-weight:700;background:#0b2742;color:#ffffff;">
+                            <td colspan="5">Net Payable</td>
+                            <td class="align-right">Rs. {{ "%.2f"|format(trips_gross - diesel_deduction_total) }}</td>
+                        </tr>
+                        {% endif %}
+                    </tfoot>
+                </table>
+            </section>
+            {% endif %}
+
+            <section class="statement-section">
+                <h3>Related Transactions</h3>
+                <table class="statement-table">
+                    <thead>
+                        <tr>
+                            <th>Date</th>
+                            <th>Type</th>
+                            <th class="align-right">Amount</th>
+                            <th>Reference</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for transaction in related_transactions %}
+                        <tr>
+                            <td>{{ transaction.date.strftime('%Y-%m-%d') }}</td>
+                            <td>{{ transaction.type|replace('_', ' ')|title }}</td>
+                            <td class="align-right">Rs. {{ "%.2f"|format(transaction.amount or 0) }}</td>
+                            <td>{{ transaction.reference or "-" }}</td>
+                        </tr>
+                        {% else %}
+                        <tr>
+                            <td colspan="4">No related transactions found.</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </section>
+
+            <footer class="statement-footer">
+                This statement is issued by Al Rehman Goods Transport for operational and settlement review. Please verify the bill number, date range, and supporting activity rows before payment processing.
+            </footer>
+        </div>
+    </div>
+</body>
+</html>

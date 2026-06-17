@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% from "_formhelpers.html" import form_actions, form_shell, render_field %}
+
+{% block title %}Create Petrol Pump - Al Rehman Goods Transport{% endblock %}
+
+{% block content %}
+{% call form_shell("Create Petrol Pump", "Add a petrol pump for diesel-entry validation and reporting consistency.", "Records", url_for('petrol_pumps.index'), "Back to Petrol Pumps") %}
+<form method="POST" class="form-stack">
+    {{ form.hidden_tag() }}
+    {{ render_field(form.name, placeholder="Petrol pump name") }}
+    {{ form_actions("Create Petrol Pump", url_for('petrol_pumps.index')) }}
+</form>
+{% endcall %}
+{% endblock %}

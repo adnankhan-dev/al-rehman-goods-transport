@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+{% from "_formhelpers.html" import form_actions, form_shell, render_field, render_searchable_select %}
+
+{% block title %}Edit Diesel Entry #{{ entry.id }} - Al Rehman Goods Transport{% endblock %}
+
+{% block content %}
+{% call form_shell("Edit Diesel Entry #" ~ entry.id, "Update the fuel entry details for this vehicle.", "Diesel Entries", url_for('diesel.view', id=entry.id), "Back to Entry") %}
+<form method="POST" class="form-stack">
+    {{ form.hidden_tag() }}
+
+    <section class="form-section-panel">
+        <div class="form-section-heading">
+            <h3>1. Vehicle &amp; Date</h3>
+        </div>
+        <div class="form-grid-two">
+            {{ render_searchable_select(form.vehicle_id, placeholder="Select vehicle") }}
+            {{ render_field(form.date) }}
+        </div>
+    </section>
+
+    <section class="form-section-panel">
+        <div class="form-section-heading">
+            <h3>2. Fuel Details</h3>
+        </div>
+        <div class="form-grid-two">
+            {{ render_field(form.amount, placeholder="e.g. 5000.00") }}
+            {{ render_field(form.litres, placeholder="e.g. 45.25") }}
+            {{ render_field(form.receipt_number, placeholder="e.g. RCP-001") }}
+            {{ render_searchable_select(form.petrol_pump_id, placeholder="Select petrol pump") }}
+        </div>
+    </section>
+
+    <section class="form-section-panel">
+        <div class="form-section-heading">
+            <h3>3. Linked Trip (Optional)</h3>
+        </div>
+        <div class="form-grid-two">
+            {{ render_searchable_select(form.order_id, placeholder="— No Linked Order —", allow_empty=true) }}
+            {{ render_field(form.notes, rows=3, placeholder="Any additional notes…", wrapper_class="form-field order-form-field-full") }}
+        </div>
+    </section>
+
+    {{ form_actions("Update Entry", url_for('diesel.view', id=entry.id)) }}
+</form>
+{% endcall %}
+{% endblock %}
+
+{% block page_scripts %}
+<script>
+(function () {
+    const rate = {{ diesel_rate or 'null' }};
+    if (!rate) return;
+    const litresInput = document.getElementById('litres');
+    const amountInput = document.getElementById('amount');
+    if (!litresInput || !amountInput) return;
+
+    litresInput.addEventListener('input', function () {
+        const litres = parseFloat(this.value);
+        if (!isNaN(litres) && litres > 0) {
+            amountInput.value = (litres * rate).toFixed(2);
+        }
+    });
+    amountInput.addEventListener('input', function () {
+        const amount = parseFloat(this.value);
+        if (!isNaN(amount) && amount > 0 && rate > 0) {
+            litresInput.value = (amount / rate).toFixed(4);
+        }
+    });
+})();
+</script>
+{% endblock %}

@@ -1,0 +1,159 @@
+{% extends "base.html" %}
+{% from "_formhelpers.html" import detail_value, form_actions, form_shell, metric_tile, render_field %}
+
+{% block title %}Settings - Al Rehman Goods Transport{% endblock %}
+
+{% block content %}
+{% call form_shell("Settings & Access", "Manage system values, user accounts, and role-based privileges.", "Admin", url_for('dashboard.dashboard'), "Back to Dashboard") %}
+<section class="detail-shell">
+    <div class="collection-overview">
+        {{ metric_tile("Diesel Rate", "Rs. " ~ diesel_rate_display ~ " / L", "Rate used to auto-calculate litres from diesel amount", "primary", "bi bi-fuel-pump-fill") }}
+        {{ metric_tile("Active Users", users|selectattr('is_active')|list|length, "User accounts currently enabled", "ocean", "bi bi-person-check-fill") }}
+        {{ metric_tile("Total Users", users|length, "All ERP accounts including inactive", "accent", "bi bi-people-fill") }}
+        {{ metric_tile("User Control", "Enabled" if can_manage_users else "Restricted", "Your permission to manage accounts", "slate", "bi bi-shield-lock-fill") }}
+    </div>
+
+    {% if can_manage_settings %}
+    <div class="detail-panel">
+        <h3>Operational Settings</h3>
+        <form method="POST" class="form-stack mt-2">
+            {{ form.hidden_tag() }}
+            <input type="hidden" name="action" value="update_diesel">
+            <div class="form-grid-two">
+                {{ render_field(form.diesel_rate, placeholder="Diesel rate per litre", help_text="Orders automatically convert diesel amount to litres using this rate.") }}
+            </div>
+            {{ form_actions("Save Settings", url_for('dashboard.dashboard'), "Back to Dashboard") }}
+        </form>
+    </div>
+
+    <div class="detail-panel">
+        <h3>Balance Reconciliation &amp; Audit</h3>
+        <p class="form-note">Compare every stored account balance against the balance recomputed from orders, diesel entries, and payments — and review who changed what.</p>
+        <div class="form-actions">
+            <a href="{{ url_for('settings.reconciliation') }}" class="btn btn-ui-ocean">
+                <i class="bi bi-clipboard-check"></i> Open Reconciliation Report
+            </a>
+            <a href="{{ url_for('settings.audit') }}" class="btn btn-ui-midnight">
+                <i class="bi bi-clock-history"></i> View Audit Trail
+            </a>
+        </div>
+    </div>
+
+    {% if backup_supported %}
+    <div class="detail-panel">
+        <h3>Backup &amp; Restore</h3>
+        <div class="detail-grid">
+            <div class="detail-panel detail-panel-nested">
+                <h4>Automatic Backups</h4>
+                {{ detail_value("Backups Kept", auto_backup.count if auto_backup else 0) }}
+                {{ detail_value("Latest Backup", auto_backup.latest_time.strftime('%d %b %Y %H:%M') if auto_backup and auto_backup.latest_time else "None yet") }}
+                <p class="form-note mt-2">A dated copy of the database is written automatically once per day while the app is running (last 14 kept) in: <code>{{ auto_backup.directory if auto_backup else '—' }}</code></p>
+                <form method="POST" action="{{ url_for('settings.run_backup_now') }}" class="form-actions">
+                    <button type="submit" class="btn btn-ui-ocean">Run Backup Now</button>
+                </form>
+            </div>
+            <div class="detail-panel detail-panel-nested">
+                <h4>Download Backup</h4>
+                {{ detail_value("Database File", database_filename) }}
+                <p class="form-note mt-2">Download a point-in-time backup before major updates, access changes, or bulk data edits.</p>
+                <div class="form-actions">
+                    <a href="{{ url_for('settings.download_backup') }}" class="btn btn-ui-ocean">Download Backup</a>
+                </div>
+            </div>
+            <div class="detail-panel detail-panel-nested">
+                <h4>Restore Backup</h4>
+                <p class="form-note">Restoring will replace the current live database. Only use backups created from this ERP.</p>
+                <form method="POST" action="{{ url_for('settings.restore_backup') }}" enctype="multipart/form-data" class="form-stack mt-2">
+                    <div class="form-field">
+                        <label class="form-label" for="backup_file">Backup File</label>
+                        <input type="file" class="form-control" id="backup_file" name="backup_file" accept=".db,.sqlite,.sqlite3,.backup,.bak" required>
+                    </div>
+                    <div class="form-actions">
+                        <button type="submit" class="btn btn-ui-danger" onclick="return confirm('This will overwrite all current data. Continue?')">Restore Backup</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+    {% endif %}
+
+    {% if can_manage_users %}
+    <div class="table-panel">
+        <div class="table-panel-header">
+            <div>
+                <h3 class="table-panel-title">User Accounts</h3>
+                <p class="table-panel-copy">Manage who can access this ERP and what they can do.</p>
+            </div>
+            <div class="table-toolbar">
+                <a href="{{ url_for('settings.users_create') }}" class="btn btn-sm btn-ui-primary">
+                    <i class="bi bi-person-plus"></i> Add User
+                </a>
+            </div>
+        </div>
+        <div class="table-responsive">
+            <table class="table detail-table">
+                <thead>
+                    <tr>
+                        <th>Username</th>
+                        <th>Email</th>
+                        <th>Role</th>
+                        <th>Status</th>
+                        <th>Last Login</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for user in users %}
+                    <tr>
+                        <td>
+                            <div class="table-main">
+                                <strong>{{ user.username }}</strong>
+                                {% if current_user.id == user.id %}<span class="table-sub">You</span>{% endif %}
+                            </div>
+                        </td>
+                        <td><span class="table-text">{{ user.email }}</span></td>
+                        <td><span class="table-text">{{ user.role_label }}</span></td>
+                        <td>
+                            {% if user.is_active %}
+                            <span class="status-chip status-chip-complete">Active</span>
+                            {% else %}
+                            <span class="status-chip status-chip-muted">Inactive</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <span class="table-text">
+                                {{ user.last_login_at.strftime('%d %b %Y') if user.last_login_at else '—' }}
+                            </span>
+                        </td>
+                        <td>
+                            <div class="table-action-group">
+                                <a href="{{ url_for('settings.users_edit', user_id=user.id) }}" class="btn btn-sm btn-ui-edit" title="Edit user">
+                                    <i class="bi bi-pencil"></i>
+                                </a>
+                                {% if current_user.id != user.id %}
+                                <form action="{{ url_for('settings.users_toggle_active', user_id=user.id) }}" method="POST" class="d-inline">
+                                    <button type="submit" class="btn btn-sm {{ 'btn-ui-neutral' if user.is_active else 'btn-ui-ocean' }}" title="{{ 'Deactivate' if user.is_active else 'Activate' }}">
+                                        <i class="bi {{ 'bi-person-slash' if user.is_active else 'bi-person-check' }}"></i>
+                                    </button>
+                                </form>
+                                <form action="{{ url_for('settings.users_delete', user_id=user.id) }}" method="POST" class="d-inline">
+                                    <button type="submit" class="btn btn-sm btn-ui-danger" title="Delete user" onclick="return confirm('Delete {{ user.username }}? This cannot be undone.')">
+                                        <i class="bi bi-trash"></i>
+                                    </button>
+                                </form>
+                                {% endif %}
+                            </div>
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr><td colspan="6" class="text-center table-muted">No users found.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {% endif %}
+</section>
+{% endcall %}
+{% endblock %}

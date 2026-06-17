@@ -1,0 +1,95 @@
+{% extends "base.html" %}
+{% from "_formhelpers.html" import form_shell, metric_tile %}
+
+{% block title %}Bills - Al Rehman Goods Transport{% endblock %}
+
+{% block content %}
+{% call form_shell("Bills", "Create and track bills and settlements for contractors and creditor accounts from one shared finance module.", "Finance", (url_for('bills.create_bill') if current_user.can('ledger.create') else None), "Create New Bill", "btn btn-ui-midnight") %}
+<section class="content-stack">
+    <div class="collection-overview">
+        {{ metric_tile("Total Bills", bills|length, "Issued billing records in the system", "midnight", "bi bi-file-earmark-text-fill") }}
+        {{ metric_tile("Total Billed Value", "Rs. " ~ ("%.0f"|format(total_amount)), "Commercial amount converted into bills", "accent", "bi bi-cash-stack") }}
+        {{ metric_tile("Trips Covered", total_trip_count, "Delivered trips already grouped into bills", "ocean", "bi bi-truck-fill") }}
+        {{ metric_tile("Outstanding", "Rs. " ~ ("%.0f"|format(bills|sum(attribute='outstanding_amount'))), "Unpaid bill balances", "primary", "bi bi-hourglass-split") }}
+    </div>
+    <div class="table-panel table-panel-list">
+        <div class="table-panel-header">
+            <div>
+                <h3 class="table-panel-title"><i class="bi bi-file-earmark-text" style="font-size:0.85rem;margin-right:0.35rem;opacity:0.65"></i> Bill history</h3>
+            </div>
+            <div class="table-toolbar">
+                <span class="collection-pill"><strong>{{ bills|length }}</strong> bill records</span>
+                <span class="collection-pill"><strong>{{ total_trip_count }}</strong> trips billed</span>
+            </div>
+        </div>
+        <div class="table-responsive">
+            <table class="table detail-table">
+                <thead>
+                    <tr>
+                        <th>Bill No.</th>
+                        <th>Date</th>
+                        <th>Entity</th>
+                        <th>Scope</th>
+                        <th>Trips</th>
+                        <th>Amount</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for bill in bills %}
+                    <tr>
+                        <td>
+                            <div class="table-main">
+                                <strong>{{ bill.bill_number }}</strong>
+                                <span class="table-sub">{{ bill.entity_type|replace('_', ' ')|title }} bill</span>
+                            </div>
+                        </td>
+                        <td>
+                            <div class="table-main">
+                                <strong>{{ bill.bill_date.strftime('%Y-%m-%d') }}</strong>
+                                <span class="table-sub">{{ bill.bill_date.strftime('%I:%M %p') }}</span>
+                            </div>
+                        </td>
+                        <td>
+                            <div class="table-main">
+                                <strong>{{ bill.entity_name }}</strong>
+                                <span class="table-sub">
+                                    {{ bill.entity_type|replace('_', ' ')|title }} account
+                                </span>
+                            </div>
+                        </td>
+                        <td>
+                            <div class="table-main">
+                                <strong>{{ bill.material_type or "All materials" }}</strong>
+                                <span class="table-sub">
+                                    {% if bill.start_date or bill.end_date %}
+                                    {{ bill.start_date.strftime('%Y-%m-%d') if bill.start_date else "Start" }} to {{ bill.end_date.strftime('%Y-%m-%d') if bill.end_date else "Open" }}
+                                    {% else %}
+                                    All selected delivery dates
+                                    {% endif %}
+                                </span>
+                            </div>
+                        </td>
+                        <td><span class="table-id-badge">{{ bill.order_count }} trip{{ "" if bill.order_count == 1 else "s" }}</span></td>
+                        <td><span class="table-amount">Rs. {{ "%.2f"|format(bill.total_amount) }}</span></td>
+                        <td>
+                            <div class="table-action-group">
+                                <a href="{{ url_for('bills.view_bill', id=bill.id) }}" class="btn btn-sm btn-ui-ocean">
+                                    <i class="bi bi-file-earmark-text"></i> View Bill
+                                </a>
+                                <span class="collection-pill">Outstanding: Rs. {{ "%.2f"|format(bill.outstanding_amount) }}</span>
+                            </div>
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="7" class="text-center table-muted">No bills have been created yet.</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</section>
+{% endcall %}
+{% endblock %}

@@ -1,0 +1,33 @@
+# Render Blueprint for Al Rehman Goods Transport
+# Docs: https://render.com/docs/blueprint-spec
+#
+# A persistent disk is used so the SQLite database (and daily backups) survive
+# restarts and redeploys. Disks require a paid instance type (Starter).
+# When you later move to Supabase, delete the `disk:` block, change DATABASE_URL
+# to the Supabase connection string, and add psycopg to requirements.txt.
+
+services:
+  - type: web
+    name: al-rehman-goods-transport
+    runtime: python
+    plan: starter
+    region: singapore            # closest Render region to Pakistan; change if you prefer
+    branch: main
+    buildCommand: pip install -r requirements.txt
+    startCommand: python -m al_rehman_goods_transport.init_db && uvicorn al_rehman_goods_transport.app:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.7
+      - key: SECRET_KEY
+        generateValue: true
+      - key: DATABASE_URL
+        value: sqlite:////var/data/app.db
+      - key: INITIAL_ADMIN_PASSWORD
+        sync: false             # set a strong password in the Render dashboard
+      - key: PYTHONUNBUFFERED
+        value: "1"
+    disk:
+      name: data
+      mountPath: /var/data
+      sizeGB: 1

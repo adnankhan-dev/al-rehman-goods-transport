@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% from "_formhelpers.html" import form_actions, form_shell, render_field %}
+
+{% block title %}Create Contractor - Al Rehman Goods Transport{% endblock %}
+
+{% block content %}
+{% call form_shell("Create Contractor", "Capture partner contact details and opening balances for a new contractor account.", "Contractors", url_for('contractors.contractors'), "Back to Contractors") %}
+<form method="POST" class="form-stack">
+    {{ form.hidden_tag() }}
+    <div class="form-grid-two">
+        {{ render_field(form.name, placeholder="Contractor name") }}
+        {{ render_field(form.contact_person, placeholder="Contact person") }}
+        {{ render_field(form.phone, placeholder="Phone number") }}
+        {{ render_field(form.email, placeholder="Email address") }}
+        {{ render_field(form.payment_terms, placeholder="Payment terms") }}
+        {{ render_field(form.balance) }}
+    </div>
+    {{ render_field(form.address, rows=3, placeholder="Address") }}
+    {{ form_actions("Create Contractor", url_for('contractors.contractors')) }}
+</form>
+{% endcall %}
+{% endblock %}

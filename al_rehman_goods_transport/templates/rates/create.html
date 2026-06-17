@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% from "_formhelpers.html" import form_actions, form_shell, render_field, render_searchable_select %}
+
+{% block title %}Add Contractor Rate - Al Rehman Goods Transport{% endblock %}
+
+{% block content %}
+{% call form_shell("Add Contractor Rate", "Set a fixed rate for a contractor on a specific route and date range. The rate will be auto-applied when creating orders.", "Rates", url_for('rates.index'), "Back to Rates") %}
+<form method="POST" class="form-stack">
+    {{ form.hidden_tag() }}
+
+    <section class="form-section-panel">
+        <div class="form-section-heading">
+            <h3>1. Contractor &amp; Route</h3>
+            <p class="form-section-copy">Select the contractor and the route this rate applies to. From Site is optional — leave blank for a rate that applies regardless of origin.</p>
+        </div>
+        <div class="form-grid-two">
+            {{ render_searchable_select(form.contractor_id, placeholder="Type contractor name") }}
+            {{ render_searchable_select(form.from_site_id, placeholder="From site (optional origin)", allow_empty=true) }}
+            {{ render_searchable_select(form.site_id, placeholder="Type delivery site name") }}
+            {{ render_searchable_select(form.material_id, placeholder="Any material — or pick a specific one", allow_empty=true,
+                help_text="Leave as 'Any Material' to apply this rate to all materials on this route.") }}
+        </div>
+    </section>
+
+    <section class="form-section-panel">
+        <div class="form-section-heading">
+            <h3>2. Rate Details</h3>
+            <p class="form-section-copy">Enter the agreed rate per unit and the period it is valid. Leave 'Effective To' blank for an open-ended rate.</p>
+        </div>
+        <div class="form-grid-two">
+            {{ render_field(form.unit) }}
+            {{ render_field(form.rate, placeholder="e.g. 150.00", help_text="Rate per CFT or Ton as agreed with the contractor.") }}
+            {{ render_field(form.vehicle_rate, placeholder="e.g. 90.00", help_text="Rate per unit payable to the truck owner on this route. Leave blank if it varies per trip.") }}
+            {{ render_field(form.effective_from, help_text="The date from which this rate becomes effective.") }}
+            {{ render_field(form.effective_to, help_text="Leave blank for an open-ended rate with no expiry.") }}
+            {{ render_field(form.notes, rows=3, placeholder="e.g. Rate revised due to diesel price increase in Jan 2025", wrapper_class="form-field order-form-field-full",
+                help_text="Optional notes about why this rate was set — useful for records and contractor communication.") }}
+        </div>
+    </section>
+
+    {{ form_actions("Save Rate", url_for('rates.index')) }}
+</form>
+{% endcall %}
+{% endblock %}

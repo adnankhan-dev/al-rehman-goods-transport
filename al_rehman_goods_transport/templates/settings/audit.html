@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% from "_formhelpers.html" import form_shell, pagination_nav %}
+
+{% block title %}Audit Trail - Al Rehman Goods Transport{% endblock %}
+
+{% set action_tones = {
+    "create": "status-chip-complete",
+    "update": "status-chip-pending",
+    "settle": "status-chip-complete",
+    "repair": "status-chip-pending",
+    "restore": "status-chip-pending",
+    "delete": "status-chip-muted",
+} %}
+
+{% block content %}
+{% call form_shell("Audit Trail", "Who did what, and when — orders, transactions, bills, diesel, repairs, and restores.", "Admin", url_for('settings.index'), "Back to Settings") %}
+<section class="detail-shell">
+    <div class="table-panel">
+        <div class="table-panel-header">
+            <div>
+                <h3 class="table-panel-title">Recent Activity</h3>
+                <p class="table-panel-copy">Newest first. Entries are written automatically and cannot be edited.</p>
+            </div>
+        </div>
+        <div class="table-responsive">
+            <table class="table detail-table">
+                <thead>
+                    <tr>
+                        <th>When</th>
+                        <th>User</th>
+                        <th>Action</th>
+                        <th>Record</th>
+                        <th>Details</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for entry in entries %}
+                    <tr>
+                        <td><span class="table-text">{{ entry.created_at.strftime('%d %b %Y %H:%M') }}</span></td>
+                        <td><strong>{{ entry.username }}</strong></td>
+                        <td><span class="status-chip {{ action_tones.get(entry.action, 'status-chip-muted') }}">{{ entry.action.title() }}</span></td>
+                        <td><span class="table-text">{{ entry.entity_type.replace('_', ' ').title() }}{{ ' #' ~ entry.entity_id if entry.entity_id }}</span></td>
+                        <td><span class="table-text">{{ entry.summary or '—' }}</span></td>
+                    </tr>
+                    {% else %}
+                    <tr><td colspan="5" class="text-center table-muted">No audit entries recorded yet.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {{ pagination_nav(request, pagination) }}
+    </div>
+</section>
+{% endcall %}
+{% endblock %}

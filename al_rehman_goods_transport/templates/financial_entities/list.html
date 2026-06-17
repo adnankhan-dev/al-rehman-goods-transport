@@ -1,0 +1,91 @@
+{% extends "base.html" %}
+{% from "_formhelpers.html" import form_shell, metric_tile %}
+
+{% block title %}Financial Entities - Al Rehman Goods Transport{% endblock %}
+
+{% block content %}
+{% call form_shell("Financial Entities", "Track loans, deposits, and one-time payments with individuals or external parties.", "Finance") %}
+<section class="content-stack">
+    <div class="collection-overview">
+        {{ metric_tile("Total Entities", entities|length, "Independent financial accounts", "midnight", "bi bi-people-fill") }}
+        {{ metric_tile("Owed to Us", "Rs. " ~ ("%.2f"|format(total_owed_to_us)), "Positive balances — they owe us", "accent", "bi bi-arrow-up-circle-fill") }}
+        {{ metric_tile("We Owe", "Rs. " ~ ("%.2f"|format(total_we_owe)), "Negative balances — we owe them", "primary", "bi bi-arrow-down-circle-fill") }}
+    </div>
+
+    <div class="erp-top-bar">
+        <span></span>
+        <div class="erp-top-bar-actions">
+            {% if current_user.can('ledger.create') %}
+            <a href="{{ url_for('financial_entities.create') }}" class="btn btn-ui-primary">
+                <i class="bi bi-plus-lg"></i> Add Entity
+            </a>
+            {% endif %}
+        </div>
+    </div>
+
+    {% if entities %}
+    <div class="table-panel table-panel-list">
+        <div class="table-panel-header">
+            <h3 class="table-panel-title">All Financial Entities</h3>
+        </div>
+        <div class="table-responsive">
+            <table class="table detail-table">
+                <thead>
+                    <tr>
+                        <th>Name</th>
+                        <th>Phone</th>
+                        <th>Balance</th>
+                        <th>Position</th>
+                        <th>Transactions</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for entity in entities %}
+                    <tr>
+                        <td><strong>{{ entity.name }}</strong></td>
+                        <td>{{ entity.phone or "-" }}</td>
+                        <td>
+                            {% if entity.balance > 0.005 %}
+                            <span style="color:#157a6e;font-weight:600;">Rs. {{ "%.2f"|format(entity.balance) }}</span>
+                            {% elif entity.balance < -0.005 %}
+                            <span style="color:#dc2626;font-weight:600;">Rs. {{ "%.2f"|format(entity.balance|abs) }}</span>
+                            {% else %}
+                            <span style="color:var(--muted);">Rs. 0.00</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if entity.balance > 0.005 %}
+                            <span class="status-badge status-badge-completed">They owe us</span>
+                            {% elif entity.balance < -0.005 %}
+                            <span class="status-badge status-badge-pending">We owe them</span>
+                            {% else %}
+                            <span class="status-badge">Settled</span>
+                            {% endif %}
+                        </td>
+                        <td>{{ entity.transactions|length }}</td>
+                        <td>
+                            <a href="{{ url_for('financial_entities.view', id=entity.id) }}" class="btn btn-sm btn-ui-ghost">
+                                <i class="bi bi-eye"></i> View
+                            </a>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {% else %}
+    <div class="detail-panel">
+        <h3><i class="bi bi-people"></i> No financial entities yet</h3>
+        <p class="detail-value">Add an entity to start tracking loans, deposits, and expense payments with individuals or external parties.</p>
+        {% if current_user.can('ledger.create') %}
+        <a href="{{ url_for('financial_entities.create') }}" class="btn btn-ui-primary mt-2">
+            <i class="bi bi-plus-lg"></i> Add First Entity
+        </a>
+        {% endif %}
+    </div>
+    {% endif %}
+</section>
+{% endcall %}
+{% endblock %}

@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% from "_formhelpers.html" import form_actions, form_shell, render_field %}
+
+{% block title %}Edit Material - Al Rehman Goods Transport{% endblock %}
+
+{% block content %}
+{% call form_shell("Edit Material", "Keep the material master list clean so order capture and reports stay consistent.", "Records", url_for('materials.view_material', id=material.id), "View Material") %}
+<form method="POST" class="form-stack">
+    {{ form.hidden_tag() }}
+    <div class="form-grid-two">
+        {{ render_field(form.name, placeholder="Material name") }}
+        {{ render_field(form.unit, help_text="Changing this affects the unit shown on new orders for this material.") }}
+    </div>
+    {{ form_actions("Update Material", url_for('materials.index')) }}
+</form>
+{% endcall %}
+{% endblock %}

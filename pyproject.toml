@@ -1,0 +1,33 @@
+[project]
+name = "al-rehman-goods-transport"
+version = "0.1.0"
+description = "Transport management application for Al Rehman Goods Transport."
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+  "fastapi>=0.116,<1.0",
+  "uvicorn>=0.35,<1.0",
+  "sqlalchemy>=2.0,<3.0",
+  "itsdangerous>=2.2,<3.0",
+  "jinja2>=3.1,<4.0",
+  "python-multipart>=0.0.20,<1.0",
+  "wtforms>=3.1.2,<4.0.0",
+  "werkzeug>=3.1,<4.0",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.3,<9.0",
+  "ruff>=0.11,<0.12",
+]
+
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[tool.pytest.ini_options]
+testpaths = ["al_rehman_goods_transport/tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"

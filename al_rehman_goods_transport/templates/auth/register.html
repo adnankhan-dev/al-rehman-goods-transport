@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% from "_formhelpers.html" import form_actions %}
+
+{% block title %}Register - Al Rehman Goods Transport{% endblock %}
+
+{% block content %}
+<section class="auth-shell auth-shell-login">
+    <div class="auth-card auth-card-login">
+        <div class="auth-card-body">
+            <div class="auth-brand-lockup">
+                <img src="{{ url_for('static', filename='images/logo1.png') }}" alt="{{ config['APP_NAME'] }} logo" class="auth-brand-image">
+                <div>
+                    <span class="eyebrow mb-2">Al Rehman Goods Transport</span>
+                    <h1 class="auth-title">Create your account</h1>
+                    <p class="auth-copy">Set up a secure user profile for the operations workspace with the same clean sign-in experience.</p>
+                </div>
+            </div>
+            <form method="POST" class="auth-form-stack">
+                <div class="form-field">
+                    <label for="username" class="form-label">Username</label>
+                    <input type="text" class="form-control form-control-lg" id="username" name="username" autocomplete="username" required>
+                </div>
+                <div class="form-field">
+                    <label for="email" class="form-label">Email</label>
+                    <input type="email" class="form-control form-control-lg" id="email" name="email" autocomplete="email" required>
+                </div>
+                <div class="form-field">
+                    <label for="password" class="form-label">Password</label>
+                    <input type="password" class="form-control form-control-lg" id="password" name="password" autocomplete="new-password" required>
+                </div>
+                <div class="form-field">
+                    <label for="confirm_password" class="form-label">Confirm Password</label>
+                    <input type="password" class="form-control form-control-lg" id="confirm_password" name="confirm_password" autocomplete="new-password" required>
+                </div>
+                {{ form_actions("Register", url_for('auth.login'), "Back to Login") }}
+            </form>
+            <p class="auth-footer-note">Only authorized team members should create access for this workspace.</p>
+        </div>
+    </div>
+</section>
+{% endblock %}

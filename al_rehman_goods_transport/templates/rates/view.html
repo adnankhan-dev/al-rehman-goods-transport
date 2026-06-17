@@ -1,0 +1,80 @@
+{% extends "base.html" %}
+{% from "_formhelpers.html" import detail_value, erp_top_bar %}
+
+{% block title %}Rate #{{ rate.id }} - Al Rehman Goods Transport{% endblock %}
+
+{% block content %}
+<section class="form-screen">
+    {% set actions %}
+        {% if current_user.can('rates.edit') %}
+        <a href="{{ url_for('rates.edit', id=rate.id) }}" class="btn btn-ui-edit btn-sm">
+            <i class="bi bi-pencil"></i> Edit
+        </a>
+        {% endif %}
+        <a href="{{ url_for('rates.print_contractor', contractor_id=rate.contractor_id) }}" class="btn btn-ui-midnight btn-sm" target="_blank">
+            <i class="bi bi-printer"></i> Print Contractor Rates
+        </a>
+        {% if current_user.can('rates.delete') %}
+        <form action="{{ url_for('rates.delete', id=rate.id) }}" method="POST" class="d-inline">
+            <button type="submit" class="btn btn-sm btn-ui-danger" onclick="return confirm('Delete this rate record?')">
+                <i class="bi bi-trash"></i> Delete
+            </button>
+        </form>
+        {% endif %}
+    {% endset %}
+    {{ erp_top_bar(url_for('rates.index'), "Back to Rates", actions) }}
+
+    <div class="detail-grid mt-3">
+        <div class="detail-panel">
+            <h3>Rate Details</h3>
+            <div class="detail-list">
+                {{ detail_value("Rate ID", "#" ~ rate.id) }}
+                {{ detail_value("Contractor", rate.contractor.name) }}
+                {{ detail_value("From Site", rate.from_site.name if rate.from_site else "—") }}
+                {{ detail_value("To Site (Delivery)", rate.site.name) }}
+                {{ detail_value("Material", rate.material.name if rate.material else "All Materials") }}
+                {{ detail_value("Unit", rate.unit|upper) }}
+            </div>
+        </div>
+
+        <div class="detail-panel">
+            <h3>Rate &amp; Validity</h3>
+            <div class="detail-list">
+                <div class="detail-item">
+                    <span class="detail-label">Rate per {{ rate.unit|upper }}</span>
+                    <span class="detail-value" style="font-size: 1.4rem; font-weight: 700; color: var(--primary);">Rs. {{ "%.2f"|format(rate.rate) }}</span>
+                </div>
+                {{ detail_value("Vehicle Rate per " ~ rate.unit|upper, ("Rs. %.2f"|format(rate.vehicle_rate)) if rate.vehicle_rate else "Not set (entered per trip)") }}
+                {{ detail_value("Effective From", rate.effective_from.strftime('%d %B %Y')) }}
+                {{ detail_value("Effective To", rate.effective_to.strftime('%d %B %Y') if rate.effective_to else "Open-ended (no expiry)") }}
+                <div class="detail-item">
+                    <span class="detail-label">Status</span>
+                    <span class="detail-value">
+                        {% if rate.is_currently_active %}
+                        <span class="badge bg-success">Active</span>
+                        {% elif rate.effective_from > today %}
+                        <span class="badge bg-info">Upcoming</span>
+                        {% else %}
+                        <span class="badge bg-secondary">Expired</span>
+                        {% endif %}
+                    </span>
+                </div>
+                {{ detail_value("Added On", rate.created_at.strftime('%d %b %Y') if rate.created_at else "—") }}
+            </div>
+        </div>
+    </div>
+
+    {% if rate.notes %}
+    <div class="detail-panel mt-3">
+        <h3>Notes</h3>
+        <p class="mb-0" style="white-space: pre-line;">{{ rate.notes }}</p>
+    </div>
+    {% endif %}
+</section>
+{% endblock %}
+
+{% block page_scripts %}
+<script>
+    const today = new Date();
+</script>
+{% endblock %}

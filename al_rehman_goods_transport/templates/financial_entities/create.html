@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% from "_formhelpers.html" import form_shell %}
+
+{% block title %}Add Financial Entity - Al Rehman Goods Transport{% endblock %}
+
+{% block content %}
+{% call form_shell("Add Financial Entity", "Create an account for a person or party you do financial transactions with outside of normal operations.", "Finance", url_for('financial_entities.index'), "Back to Entities") %}
+<form method="POST" class="form-stack">
+    <section class="form-section-panel">
+        <div class="form-section-heading">
+            <h3>Entity Details</h3>
+            <p class="form-section-copy">Basic information about this person or party.</p>
+        </div>
+        <div class="form-grid-two">
+            <div class="form-field">
+                <label class="form-label" for="name">Name <span class="text-danger">*</span></label>
+                <input class="form-control" type="text" id="name" name="name" required placeholder="Full name or company name">
+            </div>
+            <div class="form-field">
+                <label class="form-label" for="phone">Phone</label>
+                <input class="form-control" type="text" id="phone" name="phone" placeholder="Contact number">
+            </div>
+            <div class="form-field">
+                <label class="form-label" for="initial_balance">Opening Balance (Rs.)</label>
+                <input class="form-control" type="number" step="0.01" id="initial_balance" name="initial_balance" value="0" placeholder="0.00">
+                <div class="form-help">Positive = they already owe us. Negative = we already owe them.</div>
+            </div>
+            <div class="form-field" style="grid-column: 1 / -1;">
+                <label class="form-label" for="notes">Notes</label>
+                <textarea class="form-control" id="notes" name="notes" rows="3" placeholder="Who is this person, relationship, purpose of dealings, etc."></textarea>
+            </div>
+        </div>
+    </section>
+    <div class="form-actions">
+        <button type="submit" class="btn btn-ui-primary">Create Entity</button>
+        <a href="{{ url_for('financial_entities.index') }}" class="btn btn-ui-neutral">Cancel</a>
+    </div>
+</form>
+{% endcall %}
+{% endblock %}

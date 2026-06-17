@@ -1,0 +1,132 @@
+{% extends "base.html" %}
+{% from "_formhelpers.html" import form_shell, metric_tile, table_tools, empty_state %}
+
+{% block title %}Contractor Rates - Al Rehman Goods Transport{% endblock %}
+
+{% block content %}
+{% call form_shell("Contractor Rates", "Fixed rate schedules per contractor, route, and date range. Rates are auto-applied when creating orders.", "Operations Masters", (url_for('rates.create') if current_user.can('rates.create') else None), "Add Rate", "btn btn-ui-ocean") %}
+<section class="content-stack">
+    <div class="collection-overview">
+        {{ metric_tile("Total Rate Records", rates|length, "Across all contractors", "primary", "bi bi-tag-fill") }}
+        {{ metric_tile("Active Rates", rates|selectattr('is_currently_active')|list|length, "Valid for today's date", "accent", "bi bi-check-circle-fill") }}
+        {{ metric_tile("Contractors with Rates", rates|map(attribute='contractor_id')|unique|list|length, "Distinct contractors", "ocean", "bi bi-people-fill") }}
+    </div>
+
+    <form method="GET" action="{{ url_for('rates.index') }}" class="mb-3">
+        <div class="d-flex gap-2 align-items-end flex-wrap">
+            <div class="form-field" style="min-width: 220px; margin: 0;">
+                <label class="form-label" for="contractor_id">Filter by Contractor</label>
+                <select name="contractor_id" id="contractor_id" class="form-select form-select-sm" onchange="this.form.submit()">
+                    <option value="">All Contractors</option>
+                    {% for contractor in contractors %}
+                    <option value="{{ contractor.id }}" {% if selected_contractor_id == contractor.id %}selected{% endif %}>{{ contractor.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            {% if selected_contractor_id %}
+            <div class="d-flex gap-2">
+                <a href="{{ url_for('rates.index') }}" class="btn btn-sm btn-ui-neutral">Clear Filter</a>
+                {% if current_user.can('rates.view') %}
+                <a href="{{ url_for('rates.print_contractor', contractor_id=selected_contractor_id) }}" class="btn btn-sm btn-ui-midnight" target="_blank">
+                    <i class="bi bi-printer"></i> Print / Share PDF
+                </a>
+                {% endif %}
+            </div>
+            {% endif %}
+        </div>
+    </form>
+
+    {{ table_tools("ratesTable", "Search by contractor, site, material, rate…") }}
+    <div class="table-panel">
+        <div class="table-panel-header">
+            <div>
+                <h3 class="table-panel-title">Rate schedules</h3>
+            </div>
+            <div class="table-toolbar">
+                <span class="section-count">{{ rates|length }} records</span>
+            </div>
+        </div>
+        <div class="table-responsive">
+            <table id="ratesTable" class="table detail-table">
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>Contractor</th>
+                        <th>From Site</th>
+                        <th>To Site</th>
+                        <th>Material</th>
+                        <th>Unit</th>
+                        <th>Rate (Rs.)</th>
+                        <th>Vehicle Rate (Rs.)</th>
+                        <th>Effective From</th>
+                        <th>Effective To</th>
+                        <th>Status</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for rate in rates %}
+                    <tr>
+                        <td><span class="table-id-badge">#{{ rate.id }}</span></td>
+                        <td>
+                            <div class="table-main">
+                                <strong>{{ rate.contractor.name }}</strong>
+                            </div>
+                        </td>
+                        <td><span class="table-text">{{ rate.from_site.name if rate.from_site else "-" }}</span></td>
+                        <td><span class="table-text">{{ rate.site.name }}</span></td>
+                        <td><span class="table-text">{{ rate.material.name if rate.material else "All Materials" }}</span></td>
+                        <td><span class="table-text">{{ rate.unit|upper }}</span></td>
+                        <td><span class="table-amount">Rs. {{ "%.2f"|format(rate.rate) }}</span></td>
+                        <td><span class="table-amount">{{ "Rs. %.2f"|format(rate.vehicle_rate) if rate.vehicle_rate else "—" }}</span></td>
+                        <td><span class="table-text">{{ rate.effective_from.strftime('%d %b %Y') }}</span></td>
+                        <td><span class="table-text">{{ rate.effective_to.strftime('%d %b %Y') if rate.effective_to else "Open-ended" }}</span></td>
+                        <td>
+                            {% if rate.is_currently_active %}
+                            <span class="status-chip status-chip-complete">Active</span>
+                            {% elif rate.effective_from > today %}
+                            <span class="status-chip status-chip-billed">Upcoming</span>
+                            {% else %}
+                            <span class="status-chip status-chip-muted">Expired</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <div class="table-action-group">
+                                <a href="{{ url_for('rates.view', id=rate.id) }}" class="btn btn-sm btn-ui-ghost" title="View">
+                                    <i class="bi bi-eye"></i>
+                                </a>
+                                {% if current_user.can('rates.edit') %}
+                                <a href="{{ url_for('rates.edit', id=rate.id) }}" class="btn btn-sm btn-ui-edit" title="Edit">
+                                    <i class="bi bi-pencil"></i>
+                                </a>
+                                {% endif %}
+                                {% if current_user.can('rates.delete') %}
+                                <form action="{{ url_for('rates.delete', id=rate.id) }}" method="POST" class="d-inline">
+                                    <button type="submit" class="btn btn-sm btn-ui-danger" title="Delete" onclick="return confirm('Delete this rate record?')">
+                                        <i class="bi bi-trash"></i>
+                                    </button>
+                                </form>
+                                {% endif %}
+                            </div>
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="12">
+                            {{ empty_state("No rates found. Add a rate to get started.", "bi-tag") }}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</section>
+{% endcall %}
+{% endblock %}
+
+{% block page_scripts %}
+<script>
+    const today = new Date().toISOString().slice(0, 10);
+</script>
+{% endblock %}

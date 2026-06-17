@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% from "_formhelpers.html" import form_actions, form_shell, render_field %}
+
+{% block title %}Edit Site - Al Rehman Goods Transport{% endblock %}
+
+{% block content %}
+{% call form_shell("Edit Site " ~ site.name, "Update contact and contractor assignment details for this site record.", "Sites", url_for('sites.view_site', id=site.id), "View Site") %}
+<form method="POST" class="form-stack">
+    {{ form.hidden_tag() }}
+    <div class="form-grid-two">
+        {{ render_field(form.name, placeholder="Site name") }}
+        {{ render_field(form.contact_person, placeholder="Contact person") }}
+        {{ render_field(form.phone, placeholder="Phone number") }}
+        {{ render_field(form.contractor_id, help_text="Optional when the site is used as a business-owned from site.") }}
+    </div>
+    {{ render_field(form.is_business_site, wrapper_class="mb-3", label_class="form-check-label", class="form-check-input") }}
+    {{ render_field(form.is_archived, wrapper_class="mb-3", label_class="form-check-label", class="form-check-input", help_text="Archived sites stay on past orders and bills but are hidden when creating new orders.") }}
+    {{ render_field(form.address, rows=3, placeholder="Address") }}
+    {{ form_actions("Update Site", url_for('sites.sites')) }}
+</form>
+{% endcall %}
+{% endblock %}

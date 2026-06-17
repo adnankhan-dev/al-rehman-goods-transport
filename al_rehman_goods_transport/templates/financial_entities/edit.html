@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% from "_formhelpers.html" import form_shell %}
+
+{% block title %}Edit {{ entity.name }} - Al Rehman Goods Transport{% endblock %}
+
+{% block content %}
+{% call form_shell("Edit — " ~ entity.name, "Update the contact details for this financial entity.", "Finance", url_for('financial_entities.view', id=entity.id), "Back to Entity") %}
+<form method="POST" class="form-stack">
+    <section class="form-section-panel">
+        <div class="form-grid-two">
+            <div class="form-field">
+                <label class="form-label" for="name">Name <span class="text-danger">*</span></label>
+                <input class="form-control" type="text" id="name" name="name" required value="{{ entity.name }}">
+            </div>
+            <div class="form-field">
+                <label class="form-label" for="phone">Phone</label>
+                <input class="form-control" type="text" id="phone" name="phone" value="{{ entity.phone or '' }}">
+            </div>
+            <div class="form-field" style="grid-column: 1 / -1;">
+                <label class="form-label" for="notes">Notes</label>
+                <textarea class="form-control" id="notes" name="notes" rows="3">{{ entity.notes or '' }}</textarea>
+            </div>
+        </div>
+    </section>
+    <div class="form-actions">
+        <button type="submit" class="btn btn-ui-primary">Save Changes</button>
+        <a href="{{ url_for('financial_entities.view', id=entity.id) }}" class="btn btn-ui-neutral">Cancel</a>
+    </div>
+</form>
+{% endcall %}
+{% endblock %}

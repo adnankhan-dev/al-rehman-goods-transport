@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% from "_formhelpers.html" import form_actions, form_shell, render_field %}
+
+{% block title %}Edit Petrol Pump - Al Rehman Goods Transport{% endblock %}
+
+{% block content %}
+{% call form_shell("Edit Petrol Pump", "Keep diesel references standardized across all orders.", "Records", url_for('petrol_pumps.view_petrol_pump', id=petrol_pump.id), "View Petrol Pump") %}
+<form method="POST" class="form-stack">
+    {{ form.hidden_tag() }}
+    {{ render_field(form.name, placeholder="Petrol pump name") }}
+    {{ form_actions("Update Petrol Pump", url_for('petrol_pumps.index')) }}
+</form>
+{% endcall %}
+{% endblock %}

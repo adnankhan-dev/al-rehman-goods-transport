@@ -1,0 +1,93 @@
+{% extends "base.html" %}
+{% from "_formhelpers.html" import form_shell, metric_tile %}
+
+{% block title %}Balance Reconciliation - Al Rehman Goods Transport{% endblock %}
+
+{% set type_labels = {
+    "company": "Company",
+    "contractor": "Contractor",
+    "vehicle_owner": "Vehicle Owner",
+    "plant": "Plant",
+    "petrol_pump": "Petrol Pump",
+    "financial_entity": "Financial Entity",
+} %}
+
+{% block content %}
+{% call form_shell("Balance Reconciliation", "Stored account balances compared against balances recomputed from orders, diesel entries, and transactions.", "Admin", url_for('settings.index'), "Back to Settings") %}
+<section class="detail-shell">
+    <div class="collection-overview">
+        {{ metric_tile("Accounts Checked", rows|length, "Company, contractors, owners, plants, pumps, financial entities", "primary", "bi bi-clipboard-check-fill") }}
+        {{ metric_tile("In Sync", rows|length - drift_count, "Stored balance matches recorded activity", "ocean", "bi bi-check-circle-fill") }}
+        {{ metric_tile("With Drift", drift_count, "Stored balance differs from recorded activity", "accent" if drift_count == 0 else "slate", "bi bi-exclamation-triangle-fill") }}
+    </div>
+
+    <div class="detail-panel">
+        <h3>How to read this report</h3>
+        <p class="form-note">
+            "Expected" is rebuilt from every completed order, diesel entry, bill settlement, and payment on record.
+            An account created with a manually entered opening balance will show that opening amount as a standing
+            difference — that is not an error. Use <strong>Apply Expected</strong> only when you are confident the
+            recorded activity is the complete truth for that account; the stored balance is then overwritten.
+            Individual vehicles are not listed because owner payments are spread across vehicles without
+            per-vehicle records — reconcile at the vehicle-owner level.
+        </p>
+    </div>
+
+    <div class="table-panel">
+        <div class="table-panel-header">
+            <div>
+                <h3 class="table-panel-title">Account Balances</h3>
+                <p class="table-panel-copy">Differences beyond Rs. 0.01 are flagged and can be repaired.</p>
+            </div>
+        </div>
+        <div class="table-responsive">
+            <table class="table detail-table">
+                <thead>
+                    <tr>
+                        <th>Account</th>
+                        <th>Type</th>
+                        <th class="text-end">Stored Balance</th>
+                        <th class="text-end">Expected (from activity)</th>
+                        <th class="text-end">Difference</th>
+                        <th>Action</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for row in rows %}
+                    <tr>
+                        <td><strong>{{ row.name }}</strong></td>
+                        <td><span class="table-text">{{ type_labels.get(row.entity_type, row.entity_type) }}</span></td>
+                        <td class="text-end">Rs. {{ "{:,.2f}".format(row.stored_balance) }}</td>
+                        <td class="text-end">Rs. {{ "{:,.2f}".format(row.expected_balance) }}</td>
+                        <td class="text-end">
+                            {% if row.has_drift %}
+                            <span class="status-chip status-chip-pending">{{ "−" if row.difference < 0 }}Rs. {{ "{:,.2f}".format(row.difference|abs) }}</span>
+                            {% else %}
+                            <span class="status-chip status-chip-complete">Matched</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if row.has_drift %}
+                            <form action="{{ url_for('settings.reconciliation_repair') }}" method="POST" class="d-inline">
+                                <input type="hidden" name="entity_type" value="{{ row.entity_type }}">
+                                <input type="hidden" name="entity_id" value="{{ row.entity_id }}">
+                                <button type="submit" class="btn btn-sm btn-ui-ocean"
+                                        onclick="return confirm('Set {{ row.name }} balance to Rs. {{ "{:,.2f}".format(row.expected_balance) }}? The current stored balance will be overwritten.')">
+                                    Apply Expected
+                                </button>
+                            </form>
+                            {% else %}
+                            <span class="table-muted">—</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr><td colspan="6" class="text-center table-muted">No accounts found.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</section>
+{% endcall %}
+{% endblock %}

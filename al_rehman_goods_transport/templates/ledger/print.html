@@ -1,0 +1,482 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ERP Ledger — Al Rehman Goods Transport</title>
+    <style>
+        :root {
+            --ink: #0f172a;
+            --muted: #475569;
+            --soft: #e2e8f0;
+            --panel: #f8fafc;
+            --brand: #0b2742;
+            --green: #157a6e;
+            --red: #dc2626;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            background: #eef2f7;
+            color: var(--ink);
+            font-family: "Segoe UI", Arial, sans-serif;
+            font-size: 13px;
+            line-height: 1.5;
+            padding: 24px;
+        }
+
+        .shell {
+            background: #fff;
+            border-radius: 20px;
+            box-shadow: 0 24px 60px rgba(15, 23, 42, 0.14);
+            max-width: 1200px;
+            margin: 0 auto;
+            overflow: hidden;
+        }
+
+        /* ── Screen-only toolbar ─────────────────────────────────────────── */
+        .toolbar {
+            align-items: center;
+            background: #fff;
+            border-bottom: 1px solid var(--soft);
+            display: flex;
+            gap: 10px;
+            justify-content: space-between;
+            padding: 14px 28px;
+        }
+
+        .toolbar-left { display: flex; align-items: center; gap: 12px; }
+        .toolbar-title { font-size: 0.9rem; font-weight: 700; color: var(--brand); }
+        .toolbar-sub { font-size: 0.8rem; color: var(--muted); }
+
+        .btn {
+            appearance: none;
+            border: 1px solid var(--soft);
+            border-radius: 999px;
+            background: #fff;
+            color: var(--ink);
+            cursor: pointer;
+            font: inherit;
+            font-size: 0.85rem;
+            padding: 7px 16px;
+            text-decoration: none;
+        }
+
+        .btn-primary {
+            background: var(--brand);
+            border-color: var(--brand);
+            color: #fff;
+        }
+
+        /* ── Document body ───────────────────────────────────────────────── */
+        .doc-body { padding: 28px 32px 36px; }
+
+        /* ── Header ─────────────────────────────────────────────────────── */
+        .doc-header {
+            border-bottom: 3px solid var(--brand);
+            display: grid;
+            grid-template-columns: 1fr auto;
+            gap: 1.5rem;
+            margin-bottom: 24px;
+            padding-bottom: 18px;
+        }
+
+        .company-name {
+            color: var(--brand);
+            font-size: 1.6rem;
+            font-weight: 800;
+            letter-spacing: -0.02em;
+        }
+
+        .company-contact {
+            color: var(--muted);
+            font-size: 0.8rem;
+            line-height: 1.5;
+        }
+
+        .doc-title {
+            color: var(--muted);
+            font-size: 0.72rem;
+            font-weight: 700;
+            letter-spacing: 0.12em;
+            margin-top: 6px;
+            text-transform: uppercase;
+        }
+
+        .doc-meta { text-align: right; }
+
+        .doc-meta-item {
+            color: var(--muted);
+            font-size: 0.8rem;
+            line-height: 1.8;
+        }
+
+        .doc-meta-item strong { color: var(--ink); }
+
+        /* ── Summary tiles ───────────────────────────────────────────────── */
+        .summary-strip {
+            display: grid;
+            gap: 12px;
+            grid-template-columns: repeat(4, 1fr);
+            margin-bottom: 24px;
+        }
+
+        .summary-tile {
+            background: var(--panel);
+            border: 1px solid var(--soft);
+            border-radius: 12px;
+            padding: 12px 14px;
+        }
+
+        .summary-tile-label {
+            color: var(--muted);
+            font-size: 0.72rem;
+            font-weight: 600;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+        }
+
+        .summary-tile-value {
+            color: var(--ink);
+            font-size: 1.15rem;
+            font-weight: 800;
+            line-height: 1.3;
+            margin-top: 3px;
+        }
+
+        .summary-tile-value.pos { color: var(--green); }
+        .summary-tile-value.neg { color: var(--red); }
+
+        /* ── Active filters bar ──────────────────────────────────────────── */
+        .filters-bar {
+            background: #fef9f5;
+            border: 1px solid #f0e0d0;
+            border-radius: 8px;
+            color: var(--muted);
+            font-size: 0.78rem;
+            margin-bottom: 20px;
+            padding: 8px 14px;
+        }
+
+        .filters-bar strong { color: var(--ink); }
+
+        /* ── Main table ──────────────────────────────────────────────────── */
+        table {
+            border-collapse: collapse;
+            width: 100%;
+        }
+
+        thead tr {
+            background: var(--brand);
+            color: #fff;
+        }
+
+        thead th {
+            font-size: 0.72rem;
+            font-weight: 700;
+            letter-spacing: 0.06em;
+            padding: 10px 12px;
+            text-align: left;
+            text-transform: uppercase;
+            white-space: nowrap;
+        }
+
+        tbody tr:nth-child(even) td { background: #fafbfc; }
+
+        tbody td {
+            border-bottom: 1px solid var(--soft);
+            font-size: 0.8rem;
+            padding: 8px 12px;
+            vertical-align: middle;
+        }
+
+        tbody tr:last-child td { border-bottom: none; }
+
+        .td-date { color: var(--muted); white-space: nowrap; }
+        .td-ref  { font-weight: 700; white-space: nowrap; }
+        .td-entity-name { font-weight: 600; }
+        .td-entity-type { color: var(--muted); font-size: 0.72rem; }
+        .td-status { font-size: 0.72rem; white-space: nowrap; }
+
+        .badge {
+            border-radius: 999px;
+            display: inline-block;
+            font-size: 0.68rem;
+            font-weight: 700;
+            letter-spacing: 0.04em;
+            padding: 2px 9px;
+            text-transform: uppercase;
+        }
+
+        .badge-bill        { background: #fef3c7; color: #92400e; }
+        .badge-transaction { background: #d1fae5; color: #065f46; }
+        .badge-ext         { background: #dbeafe; color: #1e40af; }
+        .badge-settled     { background: #d1fae5; color: #065f46; }
+        .badge-open        { background: #fee2e2; color: #991b1b; }
+
+        .amount-in  { color: var(--green); font-weight: 700; }
+        .amount-out { color: var(--red);   font-weight: 700; }
+        .amount-neu { color: var(--muted); }
+
+        .balance-pos { color: var(--green); font-weight: 700; }
+        .balance-neg { color: var(--red);   font-weight: 700; }
+        .balance-dash{ color: var(--soft); }
+
+        /* ── Footer totals row ───────────────────────────────────────────── */
+        .tfoot-row td {
+            background: var(--brand) !important;
+            border-bottom: none;
+            color: #fff;
+            font-size: 0.8rem;
+            font-weight: 700;
+            padding: 10px 12px;
+        }
+
+        /* ── Document footer ─────────────────────────────────────────────── */
+        .doc-footer {
+            border-top: 1px solid var(--soft);
+            color: var(--muted);
+            font-size: 0.72rem;
+            margin-top: 24px;
+            padding-top: 14px;
+            display: flex;
+            justify-content: space-between;
+        }
+
+        /* ── Print styles ────────────────────────────────────────────────── */
+        @page {
+            size: A4 landscape;
+            margin: 15mm 12mm 15mm 12mm;
+        }
+
+        @media print {
+            body {
+                background: #fff;
+                padding: 0;
+                font-size: 10px;
+            }
+
+            .shell {
+                border-radius: 0;
+                box-shadow: none;
+                max-width: none;
+            }
+
+            .toolbar { display: none; }
+
+            .doc-body { padding: 0; }
+
+            thead th { font-size: 0.65rem; padding: 7px 8px; }
+            tbody td  { font-size: 0.72rem; padding: 5px 8px; }
+            .tfoot-row td { font-size: 0.72rem; padding: 7px 8px; }
+
+            .summary-strip { grid-template-columns: repeat(4, 1fr); margin-bottom: 16px; }
+            .summary-tile  { padding: 8px 10px; }
+            .summary-tile-value { font-size: 0.95rem; }
+
+            table { page-break-inside: auto; }
+            tr    { page-break-inside: avoid; page-break-after: auto; }
+            thead { display: table-header-group; }
+        }
+    </style>
+</head>
+<body>
+<div class="shell">
+
+    <!-- Screen toolbar (hidden on print) -->
+    <div class="toolbar">
+        <div class="toolbar-left">
+            <a href="{{ url_for('ledger.index') }}{% if filters.date_from or filters.date_to or filters.kind or filters.entity_type %}?date_from={{ filters.date_from }}&date_to={{ filters.date_to }}&kind={{ filters.kind }}&entity_type={{ filters.entity_type }}{% endif %}" class="btn">
+                ← Back to Ledger
+            </a>
+            <div>
+                <div class="toolbar-title">ERP Ledger — Print Preview</div>
+                <div class="toolbar-sub">{{ ledger_entries|length }} entries</div>
+            </div>
+        </div>
+        <button class="btn btn-primary" onclick="window.print()">
+            🖨 Print / Save as PDF
+        </button>
+    </div>
+
+    <div class="doc-body">
+
+        <!-- Document header -->
+        <div class="doc-header">
+            <div>
+                <div class="company-name">Al Rehman Goods Transport</div>
+                <div class="company-contact">Bahtr Mor Wah Cantt</div>
+                <div class="company-contact">Contact No. Ahsan Niazi 0307-2342827</div>
+                <div class="company-contact">Inam Khan - 0301-5749086</div>
+                <div class="doc-title">ERP Ledger Register</div>
+            </div>
+            <div class="doc-meta">
+                <div class="doc-meta-item">Printed: <strong>{{ now.strftime('%d %b %Y, %H:%M') if now is defined else '' }}</strong></div>
+                <div class="doc-meta-item">Entries: <strong>{{ ledger_entries|length }}</strong></div>
+                {% if filters.date_from or filters.date_to %}
+                <div class="doc-meta-item">
+                    Period:
+                    <strong>{{ filters.date_from or '—' }}</strong>
+                    to
+                    <strong>{{ filters.date_to or '—' }}</strong>
+                </div>
+                {% endif %}
+                {% if filters.kind %}
+                <div class="doc-meta-item">Kind: <strong>{{ filters.kind|title }}</strong></div>
+                {% endif %}
+                {% if filters.entity_type %}
+                <div class="doc-meta-item">Entity: <strong>{{ filters.entity_type|replace('_',' ')|title }}</strong></div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Summary strip -->
+        <div class="summary-strip">
+            <div class="summary-tile">
+                <div class="summary-tile-label">Bills</div>
+                <div class="summary-tile-value">{{ bill_count }}</div>
+            </div>
+            <div class="summary-tile">
+                <div class="summary-tile-label">Transactions</div>
+                <div class="summary-tile-value">{{ transaction_count }}</div>
+            </div>
+            <div class="summary-tile">
+                <div class="summary-tile-label">Open Bill Amount</div>
+                <div class="summary-tile-value neg">Rs. {{ "{:,.0f}".format(open_bill_amount) }}</div>
+            </div>
+            <div class="summary-tile">
+                <div class="summary-tile-label">Company Balance</div>
+                {% if current_company_balance >= 0 %}
+                <div class="summary-tile-value pos">Rs. {{ "{:,.0f}".format(current_company_balance) }}</div>
+                {% else %}
+                <div class="summary-tile-value neg">− Rs. {{ "{:,.0f}".format(current_company_balance|abs) }}</div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Active filters notice -->
+        {% if filters.date_from or filters.date_to or filters.kind or filters.entity_type %}
+        <div class="filters-bar">
+            <strong>Active filters:</strong>
+            {% if filters.date_from %}From {{ filters.date_from }}{% endif %}
+            {% if filters.date_to %} to {{ filters.date_to }}{% endif %}
+            {% if filters.kind %} · Kind: {{ filters.kind|title }}{% endif %}
+            {% if filters.entity_type %} · Entity: {{ filters.entity_type|replace('_',' ')|title }}{% endif %}
+        </div>
+        {% endif %}
+
+        <!-- Ledger table -->
+        <table>
+            <thead>
+                <tr>
+                    <th>Date</th>
+                    <th>Kind</th>
+                    <th>Entity</th>
+                    <th>Type</th>
+                    <th>Reference</th>
+                    <th>Status</th>
+                    <th style="text-align:right">Amount</th>
+                    <th style="text-align:right">Company Balance</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for entry in ledger_entries %}
+                <tr>
+                    <td class="td-date">{{ entry.date.strftime('%d %b %Y') }}<br><span style="font-size:0.68rem;">{{ entry.date.strftime('%H:%M') }}</span></td>
+                    <td>
+                        {% if entry.kind == 'bill' %}
+                        <span class="badge badge-bill">Bill</span>
+                        {% elif entry.kind == 'transaction' %}
+                        <span class="badge badge-transaction">Txn</span>
+                        {% else %}
+                        <span class="badge badge-ext">Ext.</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <div class="td-entity-name">{{ entry.entity_name }}</div>
+                        <div class="td-entity-type">{{ entry.entity_type|replace('_',' ')|title }}</div>
+                    </td>
+                    <td class="td-ref">{{ entry.reference }}</td>
+                    <td>—</td>
+                    <td class="td-status">
+                        {% if entry.status in ('Settled', 'Posted') %}
+                        <span class="badge badge-settled">{{ entry.status }}</span>
+                        {% elif entry.status == 'Open' %}
+                        <span class="badge badge-open">{{ entry.status }}</span>
+                        {% else %}
+                        {{ entry.status }}
+                        {% endif %}
+                    </td>
+                    <td style="text-align:right">
+                        {% if entry.balance_delta > 0 %}
+                        <span class="amount-in">↑ Rs. {{ "{:,.2f}".format(entry.amount) }}</span>
+                        {% elif entry.balance_delta < 0 %}
+                        <span class="amount-out">↓ Rs. {{ "{:,.2f}".format(entry.amount) }}</span>
+                        {% else %}
+                        <span class="amount-neu">Rs. {{ "{:,.2f}".format(entry.amount) }}</span>
+                        {% endif %}
+                    </td>
+                    <td style="text-align:right">
+                        {% if entry.balance_delta != 0 %}
+                            {% if entry.running_balance >= 0 %}
+                            <span class="balance-pos">Rs. {{ "{:,.2f}".format(entry.running_balance) }}</span>
+                            {% else %}
+                            <span class="balance-neg">− Rs. {{ "{:,.2f}".format(entry.running_balance|abs) }}</span>
+                            {% endif %}
+                        {% else %}
+                        <span class="balance-dash">—</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="8" style="text-align:center;color:var(--muted);padding:24px 0;">
+                        No entries match the current filters.
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+            {% if ledger_entries %}
+            <tfoot>
+                <tr class="tfoot-row">
+                    <td colspan="6">
+                        <strong>{{ ledger_entries|length }} entries</strong>
+                        {% if filters.date_from or filters.date_to or filters.kind or filters.entity_type %}
+                        (filtered view)
+                        {% endif %}
+                    </td>
+                    <td style="text-align:right">
+                        <strong>
+                            Rs. {{ "{:,.2f}".format(ledger_entries | sum(attribute='amount')) }}
+                        </strong>
+                    </td>
+                    <td style="text-align:right">
+                        {% if current_company_balance >= 0 %}
+                        Rs. {{ "{:,.2f}".format(current_company_balance) }}
+                        {% else %}
+                        − Rs. {{ "{:,.2f}".format(current_company_balance|abs) }}
+                        {% endif %}
+                    </td>
+                </tr>
+            </tfoot>
+            {% endif %}
+        </table>
+
+        <!-- Document footer -->
+        <div class="doc-footer">
+            <span>Al Rehman Goods Transport — ERP Ledger Register. This document is generated from the live ERP system.</span>
+            <span>Printed {{ now.strftime('%d %b %Y at %H:%M') if now is defined else '' }}</span>
+        </div>
+
+    </div>
+</div>
+
+<script>
+    // Auto-open print dialog if ?autoprint=1 is in the URL
+    if (new URLSearchParams(window.location.search).get('autoprint') === '1') {
+        window.addEventListener('load', function() { window.print(); });
+    }
+</script>
+</body>
+</html>

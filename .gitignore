@@ -1,0 +1,31 @@
+# ---- Python ----
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+
+# ---- Virtual environments ----
+.venv/
+venv/
+env/
+
+# ---- App data: NEVER commit real business data to a public repo ----
+data/
+*.db
+*.sqlite
+*.sqlite3
+al_rehman_goods_transport/static/uploads/
+
+# ---- Tests ----
+al_rehman_goods_transport/tests/_test_app.db
+
+# ---- Secrets / environment ----
+.env
+.env.*
+
+# ---- Editor / OS / tooling ----
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+.claude/

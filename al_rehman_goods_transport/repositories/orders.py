@@ -1,0 +1,123 @@
+from datetime import timedelta
+
+from sqlalchemy import case, func
+
+from ..extensions import db
+from ..models import Order
+
+
+class OrderRepository:
+    def __init__(self, session=None):
+        self.session = session or db.session
+
+    def list_all(self):
+        return self.session.query(Order).order_by(Order.order_date.desc(), Order.id.desc()).all()
+
+    def list_filtered(self, filters):
+        return self._filtered_query(filters).all()
+
+    def list_filtered_page(self, filters, page, per_page):
+        query = self._filtered_query(filters)
+        total = query.count()
+        items = query.offset(max(0, (page - 1)) * per_page).limit(per_page).all()
+        return items, total
+
+    def total_count(self):
+        return self.session.query(func.count(Order.id)).scalar() or 0
+
+    def filtered_pnl(self, filters):
+        """Profit & loss over the FULL filtered set.
+
+        Profit = revenue (contractor) - net vehicle amount - plant amount, where
+        net vehicle = gross vehicle (qty * vehicle_rate) - commission. This mirrors
+        Order.profit_amount() exactly (diesel/advance are payment methods inside
+        the vehicle amount, not separate costs)."""
+        delivered = func.coalesce(Order.delivered_quantity, Order.quantity)
+        base = self._filtered_query(filters).order_by(None)
+        revenue, gross_vehicle, commission, plant = base.with_entities(
+            func.coalesce(func.sum(delivered * func.coalesce(Order.contractor_rate, 0.0)), 0.0),
+            func.coalesce(func.sum(delivered * func.coalesce(Order.vehicle_rate, 0.0)), 0.0),
+            func.coalesce(func.sum(func.coalesce(Order.commission, 0.0)), 0.0),
+            func.coalesce(func.sum(func.coalesce(Order.plant_amount, 0.0)), 0.0),
+        ).one()
+        revenue = float(revenue or 0.0)
+        net_vehicle = float(gross_vehicle or 0.0) - float(commission or 0.0)
+        plant = float(plant or 0.0)
+        return {
+            "revenue": revenue,
+            "net_vehicle": net_vehicle,
+            "plant": plant,
+            "profit": revenue - net_vehicle - plant,
+        }
+
+    def filtered_summary(self, filters):
+        """Aggregates over the FULL filtered set (not just the current page)."""
+        delivered = func.coalesce(Order.delivered_quantity, Order.quantity)
+        base = self._filtered_query(filters).order_by(None)
+        row = base.with_entities(
+            func.count(Order.id),
+            func.coalesce(func.sum(delivered), 0.0),
+            func.coalesce(func.sum(delivered * func.coalesce(Order.contractor_rate, 0.0)), 0.0),
+            func.coalesce(func.sum(case((Order.bill_id.isnot(None), 1), else_=0)), 0),
+        ).one()
+        total, total_delivered, total_amount, billed_count = row
+        return {
+            "total_trips": int(total or 0),
+            "total_delivered": float(total_delivered or 0.0),
+            "total_amount": float(total_amount or 0.0),
+            "billed_count": int(billed_count or 0),
+            "unbilled_count": int((total or 0) - (billed_count or 0)),
+        }
+
+    def _filtered_query(self, filters):
+        query = self.session.query(Order)
+
+        if filters.get("contractor_id"):
+            query = query.filter(Order.contractor_id == filters["contractor_id"])
+        if filters.get("site_id"):
+            query = query.filter(Order.site_id == filters["site_id"])
+        if filters.get("from_site_id"):
+            query = query.filter(Order.from_site_id == filters["from_site_id"])
+        if filters.get("material_id"):
+            query = query.filter(Order.material_id == filters["material_id"])
+        if filters.get("vehicle_id"):
+            query = query.filter(Order.vehicle_id == filters["vehicle_id"])
+        if filters.get("billing_status") == "billed":
+            query = query.filter(Order.bill_id.is_not(None))
+        elif filters.get("billing_status") == "unbilled":
+            query = query.filter(Order.bill_id.is_(None))
+        if filters.get("date_from"):
+            query = query.filter(Order.order_date >= filters["date_from"])
+        if filters.get("date_to"):
+            query = query.filter(Order.order_date < (filters["date_to"] + timedelta(days=1)))
+        if filters.get("search"):
+            search_term = f"%{filters['search']}%"
+            query = query.filter(
+                Order.driver_name.ilike(search_term)
+                | Order.builty_number.ilike(search_term)
+                | Order.receipt_number.ilike(search_term)
+                | Order.material_type.ilike(search_term)
+            )
+
+        return query.order_by(Order.order_date.desc(), Order.id.desc())
+
+    def get(self, order_id):
+        return self.session.get(Order, order_id)
+
+    def add(self, order):
+        self.session.add(order)
+        self.session.flush()
+        return order
+
+    def delete(self, order):
+        self.session.delete(order)
+
+    def get_by_builty_number(self, builty_number, exclude_id=None):
+        normalized = (builty_number or "").strip()
+        if not normalized:
+            return None
+
+        query = self.session.query(Order).filter(Order.builty_number == normalized)
+        if exclude_id is not None:
+            query = query.filter(Order.id != exclude_id)
+        return query.first()

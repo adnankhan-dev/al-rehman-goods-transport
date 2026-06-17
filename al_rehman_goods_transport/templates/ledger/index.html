@@ -1,0 +1,200 @@
+{% extends "base.html" %}
+{% from "_formhelpers.html" import form_shell, metric_tile, pagination_nav %}
+
+{% block title %}ERP Ledger - Al Rehman Goods Transport{% endblock %}
+
+{% block content %}
+{% call form_shell("ERP Ledger", "Bills, settlements, and external finance movements in one chronological register.", "Finance", (url_for('ledger.create') if current_user.can('ledger.create') else None), "Create Entry", "btn btn-ui-midnight") %}
+<section class="content-stack">
+
+    <div class="detail-actions">
+        {% if current_user.can('ledger.create') %}
+        <a href="{{ url_for('ledger.create') }}?mode=bill" class="btn btn-ui-primary">
+            <i class="bi bi-file-earmark-plus"></i> Create Bill
+        </a>
+        <a href="{{ url_for('ledger.create') }}?mode=transaction" class="btn btn-ui-neutral">
+            <i class="bi bi-plus-slash-minus"></i> Post Transaction
+        </a>
+        {% endif %}
+        <a href="{{ url_for('ledger.print') }}{% if filters.date_from or filters.date_to or filters.kind or filters.entity_type %}?date_from={{ filters.date_from }}&date_to={{ filters.date_to }}&kind={{ filters.kind }}&entity_type={{ filters.entity_type }}{% endif %}"
+           class="btn btn-ui-midnight" target="_blank" rel="noopener">
+            <i class="bi bi-printer-fill"></i> Print Ledger
+        </a>
+    </div>
+
+    <div class="collection-overview">
+        {{ metric_tile("Bills", bill_count, "Obligation documents issued", "primary", "bi bi-file-earmark-text-fill", url_for('ledger.create') ~ '?mode=bill') }}
+        {{ metric_tile("Transactions", transaction_count, "Settlements and external finance movements", "accent", "bi bi-arrow-left-right", url_for('ledger.create') ~ '?mode=transaction') }}
+        {{ metric_tile("Open Bill Amount", "Rs. " ~ ("%.2f"|format(open_bill_amount)), "Unsettled value awaiting payment", "ocean", "bi bi-hourglass-split") }}
+        {% if current_company_balance >= 0 %}
+        {{ metric_tile("Company Balance", "Rs. " ~ ("%.2f"|format(current_company_balance)), "Net cash position — receipts minus payments", "accent", "bi bi-bank2") }}
+        {% else %}
+        {{ metric_tile("Company Balance", "− Rs. " ~ ("%.2f"|format(current_company_balance|abs)), "Net cash position — receipts minus payments", "primary", "bi bi-bank2") }}
+        {% endif %}
+    </div>
+
+    {# ── Balance Summary Panel ─────────────────────────────────────────────── #}
+    <div class="detail-panel">
+        <h3><i class="bi bi-pie-chart-fill"></i> Outstanding Position</h3>
+        <div class="detail-grid" style="grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 0.75rem;">
+            <div class="detail-panel detail-panel-nested">
+                <div class="detail-label">Contractor Receivables</div>
+                <div style="font-size:1.25rem;font-weight:700;color:#157a6e;margin-top:0.25rem;">
+                    Rs. {{ "%.2f"|format(balance_summary_panel.contractor_receivables) }}
+                </div>
+                <small style="color:var(--muted);">Pending from contractors</small>
+            </div>
+            <div class="detail-panel detail-panel-nested">
+                <div class="detail-label">Vehicle Owner Payables</div>
+                <div style="font-size:1.25rem;font-weight:700;color:#dc2626;margin-top:0.25rem;">
+                    Rs. {{ "%.2f"|format(balance_summary_panel.owner_payables) }}
+                </div>
+                <small style="color:var(--muted);">Pending to vehicle owners</small>
+            </div>
+            <div class="detail-panel detail-panel-nested">
+                <div class="detail-label">Plant Payables</div>
+                <div style="font-size:1.25rem;font-weight:700;color:#dc2626;margin-top:0.25rem;">
+                    Rs. {{ "%.2f"|format(balance_summary_panel.plant_payables) }}
+                </div>
+                <small style="color:var(--muted);">Pending to plants</small>
+            </div>
+            <div class="detail-panel detail-panel-nested">
+                <div class="detail-label">Petrol Pump Payables</div>
+                <div style="font-size:1.25rem;font-weight:700;color:#dc2626;margin-top:0.25rem;">
+                    Rs. {{ "%.2f"|format(balance_summary_panel.pump_payables) }}
+                </div>
+                <small style="color:var(--muted);">Pending to pumps</small>
+            </div>
+            <div class="detail-panel detail-panel-nested">
+                <div class="detail-label">Net Bill Position</div>
+                <div style="font-size:1.25rem;font-weight:700;margin-top:0.25rem;
+                    color:{% if balance_summary_panel.net_position >= 0 %}#157a6e{% else %}#dc2626{% endif %};">
+                    {% if balance_summary_panel.net_position >= 0 %}
+                    Rs. {{ "%.2f"|format(balance_summary_panel.net_position) }}
+                    {% else %}
+                    − Rs. {{ "%.2f"|format(balance_summary_panel.net_position|abs) }}
+                    {% endif %}
+                </div>
+                <small style="color:var(--muted);">Receivables minus all payables</small>
+            </div>
+        </div>
+    </div>
+
+    {# ── Filter Bar ────────────────────────────────────────────────────────── #}
+    <form method="GET" class="detail-panel">
+        <div class="filter-grid filter-grid-four">
+            <div class="form-field">
+                <label class="form-label" for="date_from">From Date</label>
+                <input class="form-control" type="date" id="date_from" name="date_from" value="{{ filters.date_from }}">
+            </div>
+            <div class="form-field">
+                <label class="form-label" for="date_to">To Date</label>
+                <input class="form-control" type="date" id="date_to" name="date_to" value="{{ filters.date_to }}">
+            </div>
+            <div class="form-field">
+                <label class="form-label" for="kind">Kind</label>
+                <select class="form-select" id="kind" name="kind">
+                    <option value="">All entries</option>
+                    <option value="bill" {% if filters.kind == 'bill' %}selected{% endif %}>Bills only</option>
+                    <option value="transaction" {% if filters.kind == 'transaction' %}selected{% endif %}>Transactions only</option>
+                    <option value="ext. finance" {% if filters.kind == 'ext. finance' %}selected{% endif %}>External Finance only</option>
+                </select>
+            </div>
+            <div class="form-field">
+                <label class="form-label" for="entity_type">Entity Type</label>
+                <select class="form-select" id="entity_type" name="entity_type">
+                    <option value="">All entities</option>
+                    <option value="contractor" {% if filters.entity_type == 'contractor' %}selected{% endif %}>Contractor</option>
+                    <option value="vehicle_owner" {% if filters.entity_type == 'vehicle_owner' %}selected{% endif %}>Vehicle Owner</option>
+                    <option value="plant" {% if filters.entity_type == 'plant' %}selected{% endif %}>Plant</option>
+                    <option value="petrol_pump" {% if filters.entity_type == 'petrol_pump' %}selected{% endif %}>Petrol Pump</option>
+                    <option value="financial entity" {% if filters.entity_type == 'financial entity' %}selected{% endif %}>Financial Entity</option>
+                </select>
+            </div>
+        </div>
+        <div class="filter-actions mt-2">
+            <button type="submit" class="btn btn-ui-midnight">Apply Filters</button>
+            <a href="{{ url_for('ledger.index') }}" class="btn btn-ui-neutral">Clear</a>
+        </div>
+    </form>
+
+    {# ── Unified Register ──────────────────────────────────────────────────── #}
+    <div class="table-panel">
+        <div class="table-panel-header">
+            <div>
+                <h3 class="table-panel-title">Unified Ledger</h3>
+                <p class="table-panel-copy">Every bill, transaction, and external finance entry in one chronological register. Company balance reflects actual cash movements only.</p>
+            </div>
+            <span class="section-count">{{ ledger_entries|length }} entries</span>
+        </div>
+        <div class="table-responsive">
+            <table class="table detail-table">
+                <thead>
+                    <tr>
+                        <th>Date</th>
+                        <th>Kind</th>
+                        <th>Entity</th>
+                        <th>Reference</th>
+                        <th>Status</th>
+                        <th>Amount</th>
+                        <th>Company Balance</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for entry in ledger_entries %}
+                    <tr>
+                        <td>{{ entry.date.strftime('%Y-%m-%d') }}<br><small style="color:var(--muted);">{{ entry.date.strftime('%H:%M') }}</small></td>
+                        <td>
+                            {% if entry.kind == 'bill' %}
+                            <span class="status-badge status-badge-pending">Bill</span>
+                            {% elif entry.kind == 'transaction' %}
+                            <span class="status-badge status-badge-completed">Transaction</span>
+                            {% else %}
+                            <span class="status-badge">Ext. Finance</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <strong>{{ entry.entity_name }}</strong>
+                            <br><small style="color:var(--muted);">{{ entry.entity_type|replace('_', ' ')|title }}</small>
+                        </td>
+                        <td>{{ entry.reference }}</td>
+                        <td>{{ entry.status }}</td>
+                        <td>
+                            {% if entry.balance_delta > 0 %}
+                            <span style="color:#157a6e;font-weight:600;">↑ Rs. {{ "%.2f"|format(entry.amount) }}</span>
+                            {% elif entry.balance_delta < 0 %}
+                            <span style="color:#dc2626;font-weight:600;">↓ Rs. {{ "%.2f"|format(entry.amount) }}</span>
+                            {% else %}
+                            <span style="color:var(--muted);">Rs. {{ "%.2f"|format(entry.amount) }}</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if entry.balance_delta != 0 %}
+                            {% if entry.running_balance >= 0 %}
+                            <span style="color:#157a6e;font-weight:600;">Rs. {{ "%.2f"|format(entry.running_balance) }}</span>
+                            {% else %}
+                            <span style="color:#dc2626;font-weight:600;">− Rs. {{ "%.2f"|format(entry.running_balance|abs) }}</span>
+                            {% endif %}
+                            {% else %}
+                            <span style="color:var(--muted);">—</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <a href="{{ url_for(entry.detail_route, id=entry.id) }}" class="btn btn-sm btn-ui-ghost">
+                                <i class="bi bi-eye"></i>
+                            </a>
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr><td colspan="8" class="text-center">No ledger entries match the current filters.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {{ pagination_nav(request, ledger_pagination) }}
+    </div>
+
+</section>
+{% endcall %}
+{% endblock %}

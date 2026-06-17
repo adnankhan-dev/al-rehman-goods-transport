@@ -1,0 +1,254 @@
+{% extends "base.html" %}
+{% from "_formhelpers.html" import report_print_tools %}
+
+{% block title %}{{ print_title }} - Print{% endblock %}
+
+{% block content %}
+{{ report_print_tools(print_title, filter_chips|join(' | ') if filter_chips else 'All records') }}
+<section class="content-stack">
+    <div class="collection-overview collection-overview-list">
+        {% for card in summary_cards %}
+        <article class="metric-tile metric-tile-{{ card.tone }}">
+            <span>{{ card.label }}</span>
+            <strong>{{ card.value }}</strong>
+            <small>{{ card.hint }}</small>
+        </article>
+        {% endfor %}
+    </div>
+
+    {% if report_type == 'profit_loss' %}
+    <div class="report-panel">
+        <div class="report-panel-header">
+            <div>
+                <h3 class="report-panel-title">Profit & Loss Statement</h3>
+                <p class="report-panel-copy">Filtered operational profitability snapshot.</p>
+            </div>
+        </div>
+        <div class="report-panel-body">
+            <table class="table detail-table mb-0">
+                <tbody>
+                    {% for line in statement_lines %}
+                    <tr>
+                        <td>{{ line.label }}</td>
+                        <td class="text-end">Rs. {{ "{:,.0f}".format(line.amount) }}</td>
+                    </tr>
+                    {% endfor %}
+                    <tr>
+                        <th>Total Expenses</th>
+                        <th class="text-end">Rs. {{ "{:,.0f}".format(statement_totals.expenses) }}</th>
+                    </tr>
+                    <tr>
+                        <th>Net Profit</th>
+                        <th class="text-end">Rs. {{ "{:,.0f}".format(statement_totals.profit) }}</th>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+    <div class="report-panel" style="break-before: page;">
+        <div class="report-panel-header">
+            <div>
+                <h3 class="report-panel-title">Profitability Register</h3>
+                <p class="report-panel-copy">Filtered completed orders with revenue, costs, and profit.</p>
+            </div>
+        </div>
+        <div class="report-panel-body">
+            <table class="table detail-table">
+                <thead>
+                    <tr>
+                        <th>Date</th>
+                        <th>Vehicle</th>
+                        <th>Contractor</th>
+                        <th>Material</th>
+                        <th>Delivered</th>
+                        <th>Revenue</th>
+                        <th>Vehicle Payable</th>
+                        <th>Profit</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for order in orders %}
+                    <tr>
+                        <td>{{ (order.completion_date or order.order_date).strftime('%Y-%m-%d') }}</td>
+                        <td>{{ order.vehicle.vehicle_number if order.vehicle else '-' }}</td>
+                        <td>{{ order.contractor.name if order.contractor else '-' }}</td>
+                        <td>{{ order.material_name }}</td>
+                        <td>{{ "%.2f"|format(order.delivered_quantity or order.quantity or 0) }} {{ order.unit.upper() }}</td>
+                        <td>Rs. {{ "%.2f"|format(order.total_contractor_amount()) }}</td>
+                        <td>Rs. {{ "%.2f"|format(order.remaining_vehicle_payment() - module_diesel_by_order.get(order.id, 0)) }}</td>
+                        <td>Rs. {{ "%.2f"|format(order.profit_amount()) }}</td>
+                    </tr>
+                    {% else %}
+                    <tr><td colspan="8" class="text-center">No rows matched the selected filters.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {% elif report_type == 'diesel' %}
+    <div class="report-panel">
+        <div class="report-panel-header">
+            <div>
+                <h3 class="report-panel-title">Diesel Register</h3>
+                <p class="report-panel-copy">Pump, receipt, litres, and amount only.</p>
+            </div>
+        </div>
+        <div class="report-panel-body">
+            <table class="table detail-table">
+                <thead>
+                    <tr>
+                        <th>Date</th>
+                        <th>Order</th>
+                        <th>Vehicle</th>
+                        <th>Pump</th>
+                        <th>Receipt</th>
+                        <th>Litres</th>
+                        <th>Amount</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for entry in diesel_entries %}
+                    <tr>
+                        <td>{{ entry.date.strftime('%Y-%m-%d') if entry.date else '-' }}</td>
+                        <td>{{ '#' ~ entry.order_id if entry.order_id else '-' }}</td>
+                        <td>{{ entry.vehicle_number }}</td>
+                        <td>{{ entry.pump_name }}</td>
+                        <td>{{ entry.receipt_number or '-' }}</td>
+                        <td>{{ "%.2f"|format(entry.litres) }}</td>
+                        <td>Rs. {{ "%.2f"|format(entry.amount) }}</td>
+                    </tr>
+                    {% else %}
+                    <tr><td colspan="7" class="text-center">No diesel entries matched the selected filters.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {% elif report_type == 'performance' %}
+    <div class="report-panel">
+        <div class="report-panel-header">
+            <div>
+                <h3 class="report-panel-title">Month By Month</h3>
+                <p class="report-panel-copy">Trips, quantity, revenue, and profit per month.</p>
+            </div>
+        </div>
+        <div class="report-panel-body">
+            <table class="table detail-table">
+                <thead>
+                    <tr><th>Month</th><th>Trips</th><th>Quantity</th><th>Revenue</th><th>Profit</th></tr>
+                </thead>
+                <tbody>
+                    {% for row in monthly_rows %}
+                    <tr>
+                        <td>{{ row.label }}</td>
+                        <td>{{ row.trips }}</td>
+                        <td>{{ "%.2f"|format(row.quantity) }}</td>
+                        <td>Rs. {{ "%.2f"|format(row.revenue) }}</td>
+                        <td>Rs. {{ "%.2f"|format(row.profit) }}</td>
+                    </tr>
+                    {% else %}
+                    <tr><td colspan="5" class="text-center">No rows matched the selected filters.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    <div class="report-panel">
+        <div class="report-panel-header">
+            <div>
+                <h3 class="report-panel-title">Contractor Ranking</h3>
+                <p class="report-panel-copy">Sorted by profit contribution.</p>
+            </div>
+        </div>
+        <div class="report-panel-body">
+            <table class="table detail-table">
+                <thead>
+                    <tr><th>Contractor</th><th>Trips</th><th>Quantity</th><th>Revenue</th><th>Profit</th></tr>
+                </thead>
+                <tbody>
+                    {% for row in contractor_rows %}
+                    <tr>
+                        <td>{{ row.name }}</td>
+                        <td>{{ row.trips }}</td>
+                        <td>{{ "%.2f"|format(row.quantity) }}</td>
+                        <td>Rs. {{ "%.2f"|format(row.revenue) }}</td>
+                        <td>Rs. {{ "%.2f"|format(row.profit) }}</td>
+                    </tr>
+                    {% else %}
+                    <tr><td colspan="5" class="text-center">No rows matched the selected filters.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    <div class="report-panel">
+        <div class="report-panel-header">
+            <div>
+                <h3 class="report-panel-title">Vehicle Utilization</h3>
+                <p class="report-panel-copy">Sorted by delivered quantity.</p>
+            </div>
+        </div>
+        <div class="report-panel-body">
+            <table class="table detail-table">
+                <thead>
+                    <tr><th>Vehicle</th><th>Owner</th><th>Trips</th><th>Quantity</th><th>Earnings</th><th>Profit Contribution</th></tr>
+                </thead>
+                <tbody>
+                    {% for row in vehicle_rows %}
+                    <tr>
+                        <td>{{ row.vehicle_number }}</td>
+                        <td>{{ row.owner_name }}</td>
+                        <td>{{ row.trips }}</td>
+                        <td>{{ "%.2f"|format(row.quantity) }}</td>
+                        <td>Rs. {{ "%.2f"|format(row.earnings) }}</td>
+                        <td>Rs. {{ "%.2f"|format(row.profit) }}</td>
+                    </tr>
+                    {% else %}
+                    <tr><td colspan="6" class="text-center">No rows matched the selected filters.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {% else %}
+    <div class="report-panel">
+        <div class="report-panel-header">
+            <div>
+                <h3 class="report-panel-title">Plant Activity Register</h3>
+                <p class="report-panel-copy">Only plant-facing trip details.</p>
+            </div>
+        </div>
+        <div class="report-panel-body">
+            <table class="table detail-table">
+                <thead>
+                    <tr>
+                        <th>Date</th>
+                        <th>Order</th>
+                        <th>Plant</th>
+                        <th>Vehicle</th>
+                        <th>Material</th>
+                        <th>Loaded Qty</th>
+                        <th>Plant Amount</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for loading in plant_loadings %}
+                    <tr>
+                        <td>{{ (loading.order.completion_date or loading.order.order_date).strftime('%Y-%m-%d') if loading.order else '-' }}</td>
+                        <td>#{{ loading.order_id }}</td>
+                        <td>{{ loading.plant.name if loading.plant else '-' }}</td>
+                        <td>{{ loading.order.vehicle.vehicle_number if loading.order and loading.order.vehicle else '-' }}</td>
+                        <td>{{ loading.order.material_name if loading.order else '-' }}</td>
+                        <td>{{ "%.2f"|format(loading.load_quantity or 0) }} {{ loading.order.unit.upper() if loading.order and loading.order.unit else '' }}</td>
+                        <td>Rs. {{ "%.2f"|format(loading.plant_amount or 0) }}</td>
+                    </tr>
+                    {% else %}
+                    <tr><td colspan="7" class="text-center">No plant records matched the selected filters.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {% endif %}
+</section>
+{% endblock %}

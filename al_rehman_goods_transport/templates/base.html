@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}{{ config['APP_NAME'] }}{% endblock %}</title>
+    <link rel="icon" type="image/png" href="{{ url_for('static', filename='images/logo1.png') }}">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,300..800;1,14..32,300..700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='vendor/bootstrap/css/bootstrap.min.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='vendor/bootstrap-icons/font/bootstrap-icons.min.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <script src="{{ url_for('static', filename='vendor/chartjs/chart.umd.min.js') }}"></script>
+</head>
+<body class="app-body sidebar-collapsed {{ body_class|default('') }}">
+    <div class="app-backdrop">
+        <div class="orb orb-sand"></div>
+        <div class="orb orb-mint"></div>
+    </div>
+    {% if show_nav|default(True) %}
+        {% set path = request.url.path %}
+        <div class="app-shell">
+            {% include 'navbar.html' %}
+            <div class="app-main-shell">
+                <header class="app-header">
+                    <div class="app-header-inner">
+                        <div class="app-header-left">
+                            <button type="button" class="btn btn-sm btn-ui-neutral hamburger-btn" id="sidebar-toggle-btn" aria-label="Toggle sidebar">
+                                <span class="hamburger-lines" aria-hidden="true">
+                                    <span></span>
+                                    <span></span>
+                                    <span></span>
+                                </span>
+                            </button>
+                            <a href="{{ url_for('dashboard.dashboard') }}" class="app-header-brand">
+                                <img src="{{ url_for('static', filename='images/logo1.png') }}" alt="{{ config['APP_NAME'] }} logo">
+                                <span>{{ config['APP_NAME'] }}</span>
+                            </a>
+                            <ul class="app-header-tabs">
+                                {% if current_user.can('dashboard.view') %}
+                                <li><a href="{{ url_for('dashboard.dashboard') }}" class="app-header-tab {% if path == '/' or path == '/dashboard' or path.startswith('/reports') %}active{% endif %}">Dashboard</a></li>
+                                {% endif %}
+                                {% if current_user.can('orders.view') or current_user.can('contractors.view') or current_user.can('sites.view') or current_user.can('materials.view') or current_user.can('vehicles.view') or current_user.can('vehicle_owners.view') or current_user.can('plants.view') or current_user.can('petrol_pumps.view') or current_user.can('diesel.view') %}
+                                <li><a href="{{ url_for('orders.orders') }}" class="app-header-tab {% if path.startswith('/orders') or path.startswith('/diesel') or path.startswith('/contractors') or path.startswith('/sites') or path.startswith('/materials') or path.startswith('/rates') or path.startswith('/vehicles') or path.startswith('/vehicle-owners') or path.startswith('/plants') or path.startswith('/petrol-pumps') %}active{% endif %}">Operations</a></li>
+                                {% endif %}
+                                {% if current_user.can('ledger.view') or current_user.can('settings.view') or current_user.can('users.manage') %}
+                                <li><a href="{{ url_for('ledger.index') }}" class="app-header-tab {% if path.startswith('/ledger') or path.startswith('/transactions') or path.startswith('/bills') or path.startswith('/financial-entities') or path.startswith('/settings') %}active{% endif %}">Finance</a></li>
+                                {% endif %}
+                            </ul>
+                        </div>
+                        <div class="app-header-right">
+                            <div class="app-header-history" role="group" aria-label="Page navigation">
+                                <button type="button" class="app-header-history-btn" title="Back" aria-label="Go back" onclick="window.history.back()">
+                                    <i class="bi bi-arrow-left"></i>
+                                </button>
+                                <button type="button" class="app-header-history-btn" title="Next" aria-label="Go forward" onclick="window.history.forward()">
+                                    <i class="bi bi-arrow-right"></i>
+                                </button>
+                            </div>
+                            <span class="app-header-user">{{ current_user.username }}</span>
+                            <a href="{{ url_for('auth.logout') }}" class="app-header-logout">Logout</a>
+                        </div>
+                    </div>
+                </header>
+                <main class="{{ main_class|default('app-content container-fluid px-3 px-lg-4 py-4') }}">
+    {% else %}
+        <main class="{{ main_class|default('container-xxl app-main') }}">
+    {% endif %}
+        {% if flashes %}
+            <div class="flash-stack">
+            {% for item in flashes %}
+                <div class="alert alert-{{ item.category }} alert-dismissible fade show shadow-sm" role="alert">
+                    {{ item.message }}
+                    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                </div>
+            {% endfor %}
+            </div>
+        {% endif %}
+        {% block content %}{% endblock %}
+    </main>
+    {% if show_nav|default(True) %}
+            <footer class="footer-modern mt-auto py-2">
+                <div class="container-fluid px-3 px-lg-4 footer-text opacity-75">
+                    <div class="row align-items-center g-2">
+                        <div class="col-12 col-md-4 text-center text-md-start">
+                            {{ config['APP_NAME'] }}
+                        </div>
+                        <div class="col-12 col-md-4 text-center">
+                            Transport operations workspace
+                        </div>
+                        <div class="col-12 col-md-4 text-center text-md-end footer-links">
+                            Dispatch
+                            <span class="mx-1">|</span>
+                            Accounts
+                            <span class="mx-1">|</span>
+                            Reporting
+                        </div>
+                    </div>
+                </div>
+            </footer>
+        </div>
+    </div>
+    <div class="app-sidebar-backdrop" id="app-sidebar-backdrop"></div>
+    {% endif %}
+    <script src="{{ url_for('static', filename='vendor/bootstrap/js/bootstrap.bundle.min.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/script.js') }}"></script>
+    <script>
+        (function () {
+            const body = document.body;
+            const sidebarToggleBtn = document.getElementById("sidebar-toggle-btn");
+            const sidebarCloseBtn = document.getElementById("sidebar-close-btn");
+            const backdrop = document.getElementById("app-sidebar-backdrop");
+
+            function isDesktopViewport() {
+                return window.matchMedia("(min-width: 992px)").matches;
+            }
+
+            function closeMobileSidebar() {
+                body.classList.remove("sidebar-open");
+            }
+
+            if (sidebarToggleBtn) {
+                sidebarToggleBtn.addEventListener("click", function () {
+                    if (isDesktopViewport()) {
+                        body.classList.toggle("sidebar-collapsed");
+                    } else {
+                        body.classList.toggle("sidebar-open");
+                    }
+                });
+            }
+
+            if (sidebarCloseBtn) {
+                sidebarCloseBtn.addEventListener("click", closeMobileSidebar);
+            }
+
+            if (backdrop) {
+                backdrop.addEventListener("click", closeMobileSidebar);
+            }
+
+            window.addEventListener("resize", function () {
+                if (isDesktopViewport()) {
+                    closeMobileSidebar();
+                }
+            });
+        })();
+    </script>
+    {% block page_scripts %}{% endblock %}
+</body>
+</html>
+
