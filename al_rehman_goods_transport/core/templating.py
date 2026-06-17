@@ -1,8 +1,9 @@
+import re
 from urllib.parse import urlencode
 
 from fastapi import Request
 from fastapi.templating import Jinja2Templates
-from starlette.routing import NoMatchFound
+from starlette.routing import Mount, NoMatchFound
 
 from .auth import get_optional_user
 from .config import settings
@@ -12,11 +13,18 @@ from .paths import TEMPLATES_DIR
 
 templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
 
+# Matches {id}, {id:int}, {path:path} etc. in a route path. Parsing route.path is
+# stable across Starlette versions (route.param_convertors was not).
+_PATH_PARAM_RE = re.compile(r"\{([a-zA-Z_][a-zA-Z0-9_]*)(?::[^}]+)?\}")
+
 
 def _route_path_param_names(request: Request, route_name: str) -> set[str]:
     for route in request.app.router.routes:
         if getattr(route, "name", None) == route_name:
-            return set(getattr(route, "param_convertors", {}).keys())
+            # Mounts (e.g. the StaticFiles "static" mount) always take a "path" param.
+            if isinstance(route, Mount):
+                return {"path"}
+            return set(_PATH_PARAM_RE.findall(getattr(route, "path", "") or ""))
     return set()
 
 
