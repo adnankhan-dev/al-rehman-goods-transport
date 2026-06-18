@@ -37,7 +37,7 @@ def _order_filter_state(source):
         "site_id": _parse_int(source.get("site_id")),
         "from_site_id": _parse_int(source.get("from_site_id")),
         "material_id": _parse_int(source.get("material_id")),
-        "vehicle_id": _parse_int(source.get("vehicle_id")),
+        "vehicle_owner_id": _parse_int(source.get("vehicle_owner_id")),
         "billing_status": (source.get("billing_status") or "").strip(),
         "date_from": _parse_date(source.get("date_from")),
         "date_to": _parse_date(source.get("date_to")),
@@ -50,14 +50,14 @@ def _describe_order_filters(filter_state, options):
     site = next((item for item in options["sites"] if item.id == filter_state["site_id"]), None)
     from_site = next((item for item in options["from_sites"] if item.id == filter_state["from_site_id"]), None)
     material = next((item for item in options["materials"] if item.id == filter_state["material_id"]), None)
-    vehicle = next((item for item in options["vehicles"] if item.id == filter_state["vehicle_id"]), None)
+    owner = next((item for item in options["vehicle_owners"] if item.id == filter_state["vehicle_owner_id"]), None)
     return {
         **filter_state,
         "contractor_name": contractor.name if contractor else None,
         "site_name": site.name if site else None,
         "from_site_name": from_site.name if from_site else None,
         "material_name": material.name if material else None,
-        "vehicle_name": vehicle.vehicle_number if vehicle else None,
+        "vehicle_owner_name": owner.name if owner else None,
         "date_from": filter_state["date_from"].strftime("%Y-%m-%d") if filter_state["date_from"] else None,
         "date_to": filter_state["date_to"].strftime("%Y-%m-%d") if filter_state["date_to"] else None,
     }
@@ -90,7 +90,7 @@ async def orders(request: Request, current_user=Depends(require_permission("orde
     filters_active = any(
         filter_state.get(key) for key in (
             "contractor_id", "site_id", "from_site_id", "material_id",
-            "vehicle_id", "billing_status", "date_from", "date_to", "search",
+            "vehicle_owner_id", "billing_status", "date_from", "date_to", "search",
         )
     )
 
@@ -127,8 +127,8 @@ def _pnl_filter_label(filter_state, options):
         parts.append(f"To Site: {desc['site_name']}")
     if desc.get("material_name"):
         parts.append(f"Material: {desc['material_name']}")
-    if desc.get("vehicle_name"):
-        parts.append(f"Vehicle: {desc['vehicle_name']}")
+    if desc.get("vehicle_owner_name"):
+        parts.append(f"Vehicle Owner: {desc['vehicle_owner_name']}")
     if filter_state.get("billing_status"):
         parts.append(f"Billing: {filter_state['billing_status'].replace('_', ' ').title()}")
     if desc.get("date_from"):

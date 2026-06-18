@@ -103,7 +103,7 @@ class OrderService:
             "sites": self.lookups.list_sites(include_archived=True),
             "from_sites": self.lookups.list_sites(business_only=True, include_archived=True),
             "materials": self.lookups.list_materials(),
-            "vehicles": self.lookups.list_vehicles(),
+            "vehicle_owners": self.lookups.list_vehicle_owners(),
         }
 
     def build_form_choices(self, contractor_id=None, site_id=None):
@@ -300,7 +300,7 @@ class OrderService:
             f"To Site: {filter_state.get('site_name')}" if filter_state.get("site_name") else None,
             f"From Site: {filter_state.get('from_site_name')}" if filter_state.get("from_site_name") else None,
             f"Material: {filter_state.get('material_name')}" if filter_state.get("material_name") else None,
-            f"Vehicle: {filter_state.get('vehicle_name')}" if filter_state.get("vehicle_name") else None,
+            f"Vehicle Owner: {filter_state.get('vehicle_owner_name')}" if filter_state.get("vehicle_owner_name") else None,
             f"Billing: {filter_state.get('billing_status')}" if filter_state.get("billing_status") else None,
             f"From: {filter_state.get('date_from')}" if filter_state.get("date_from") else None,
             f"To: {filter_state.get('date_to')}" if filter_state.get("date_to") else None,

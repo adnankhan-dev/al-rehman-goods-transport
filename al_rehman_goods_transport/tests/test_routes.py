@@ -201,7 +201,7 @@ class RouteTests(unittest.TestCase):
         export_response = self.client.get(f"/bills/{bill_id}/export/excel", follow_redirects=True)
 
         self.assertEqual(print_response.status_code, 200)
-        self.assertIn("Print / Save PDF", print_response.text)
+        self.assertIn("Download PDF", print_response.text)
         self.assertEqual(export_response.status_code, 200)
         self.assertIn("application/vnd.ms-excel", export_response.headers["content-type"])
 

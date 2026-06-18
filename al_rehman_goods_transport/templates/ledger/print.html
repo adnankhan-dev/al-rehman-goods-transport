@@ -279,6 +279,16 @@
             tr    { page-break-inside: avoid; page-break-after: auto; }
             thead { display: table-header-group; }
         }
+
+        @media (max-width: 575.98px) {
+            body { padding: 10px; }
+            .doc-body { padding: 16px; }
+            .doc-header { grid-template-columns: 1fr; }
+            .doc-meta { text-align: left; }
+            .summary-strip { grid-template-columns: repeat(2, 1fr); }
+            .toolbar { flex-wrap: wrap; }
+            table { display: block; overflow-x: auto; white-space: nowrap; }
+        }
     </style>
 </head>
 <body>

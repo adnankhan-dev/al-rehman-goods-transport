@@ -210,6 +210,52 @@
             </table>
         </div>
     </div>
+    {% elif report_type == 'finances' %}
+    <div class="report-panel">
+        <div class="report-panel-header">
+            <div>
+                <h3 class="report-panel-title">Receivables — money owed to you</h3>
+            </div>
+        </div>
+        <div class="report-panel-body">
+            <table class="table detail-table">
+                <thead><tr><th>Account</th><th>Type</th><th class="align-right">Amount</th></tr></thead>
+                <tbody>
+                    {% for row in receivables %}
+                    <tr><td>{{ row.name }}</td><td>{{ row.type }}</td><td class="align-right">Rs. {{ "{:,.0f}".format(row.amount) }}</td></tr>
+                    {% else %}
+                    <tr><td colspan="3" class="text-center">No outstanding receivables.</td></tr>
+                    {% endfor %}
+                    {% if receivables %}
+                    <tr style="font-weight:700;background:#f1f5f9;"><td colspan="2">Total Receivable</td><td class="align-right">Rs. {{ "{:,.0f}".format(total_receivable) }}</td></tr>
+                    {% endif %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    <div class="report-panel">
+        <div class="report-panel-header">
+            <div>
+                <h3 class="report-panel-title">Payables — money you owe</h3>
+            </div>
+        </div>
+        <div class="report-panel-body">
+            <table class="table detail-table">
+                <thead><tr><th>Account</th><th>Type</th><th class="align-right">Amount</th></tr></thead>
+                <tbody>
+                    {% for row in payables %}
+                    <tr><td>{{ row.name }}</td><td>{{ row.type }}</td><td class="align-right">Rs. {{ "{:,.0f}".format(row.amount) }}</td></tr>
+                    {% else %}
+                    <tr><td colspan="3" class="text-center">No outstanding payables.</td></tr>
+                    {% endfor %}
+                    {% if payables %}
+                    <tr style="font-weight:700;background:#f1f5f9;"><td colspan="2">Total Payable</td><td class="align-right">Rs. {{ "{:,.0f}".format(total_payable) }}</td></tr>
+                    {% endif %}
+                    <tr style="font-weight:800;background:#0b2742;color:#fff;"><td colspan="2">Net Position</td><td class="align-right">{% if net_position < 0 %}− {% endif %}Rs. {{ "{:,.0f}".format(net_position|abs) }}</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
     {% else %}
     <div class="report-panel">
         <div class="report-panel-header">

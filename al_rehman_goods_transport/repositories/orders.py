@@ -3,7 +3,7 @@ from datetime import timedelta
 from sqlalchemy import case, func
 
 from ..extensions import db
-from ..models import Order
+from ..models import Order, Vehicle
 
 
 class OrderRepository:
@@ -80,8 +80,12 @@ class OrderRepository:
             query = query.filter(Order.from_site_id == filters["from_site_id"])
         if filters.get("material_id"):
             query = query.filter(Order.material_id == filters["material_id"])
-        if filters.get("vehicle_id"):
-            query = query.filter(Order.vehicle_id == filters["vehicle_id"])
+        if filters.get("vehicle_owner_id"):
+            query = query.filter(
+                Order.vehicle_id.in_(
+                    self.session.query(Vehicle.id).filter(Vehicle.owner_id == filters["vehicle_owner_id"])
+                )
+            )
         if filters.get("billing_status") == "billed":
             query = query.filter(Order.bill_id.is_not(None))
         elif filters.get("billing_status") == "unbilled":

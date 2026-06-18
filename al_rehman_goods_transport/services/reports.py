@@ -25,6 +25,11 @@ REPORT_TYPES = (
         "label": "Performance",
         "description": "Monthly profit trend with contractor and vehicle rankings.",
     },
+    {
+        "key": "finances",
+        "label": "Finances",
+        "description": "Who owes you and whom you owe — detailed receivables and payables.",
+    },
 )
 
 
@@ -93,6 +98,8 @@ class ReportService:
             context.update(self._plants_context(filter_state))
         elif report_type == "performance":
             context.update(self._performance_context(filter_state))
+        elif report_type == "finances":
+            context.update(self._finances_context(filter_state))
         else:
             context.update(self._profit_loss_context(filter_state))
         return context
@@ -342,6 +349,62 @@ class ReportService:
                 "values": [round(row["profit"], 2) for row in contractor_rows[:8]],
             },
             "print_title": "Performance Report",
+        }
+
+    def _finances_context(self, filters):
+        """Point-in-time receivables (owed to us) and payables (we owe), per account.
+
+        Sign conventions: contractor +balance = receivable; vehicle owner / plant /
+        petrol pump +balance = payable; financial entity +balance = receivable.
+        A negative balance flips the side (an advance held the other way)."""
+        receivables = []
+        payables = []
+
+        def add(side_positive_is_receivable, label, name, balance):
+            value = float(balance or 0.0)
+            if abs(value) <= 0.005:
+                return
+            is_receivable = (value > 0) == side_positive_is_receivable
+            target = receivables if is_receivable else payables
+            target.append({"type": label, "name": name, "amount": abs(value)})
+
+        for c in self.repository.list_contractors():
+            add(True, "Contractor", c.name, c.balance)
+        for o in self.repository.list_vehicle_owners():
+            add(False, "Vehicle Owner", o.name, o.balance)
+        for p in self.repository.list_plants():
+            add(False, "Plant", p.name, p.balance)
+        for p in self.repository.list_petrol_pumps():
+            add(False, "Petrol Pump", p.name, p.balance)
+        for fe in self.repository.list_financial_entities():
+            add(True, "Financial Entity", fe.name, fe.balance)
+
+        receivables.sort(key=lambda r: r["amount"], reverse=True)
+        payables.sort(key=lambda r: r["amount"], reverse=True)
+        total_receivable = sum(r["amount"] for r in receivables)
+        total_payable = sum(r["amount"] for r in payables)
+        net = total_receivable - total_payable
+
+        return {
+            "report_heading": "Finances Report",
+            "report_intro_title": "Everything you are owed and everything you owe, in one place.",
+            "report_intro_copy": "Live balances per account — receivables (money coming to you) and payables (money you must pay), with a net position.",
+            "summary_cards": [
+                {"label": "Total Receivable", "value": f"Rs. {total_receivable:,.0f}", "hint": "Money owed to you", "tone": "accent"},
+                {"label": "Total Payable", "value": f"Rs. {total_payable:,.0f}", "hint": "Money you owe others", "tone": "ocean"},
+                {"label": "Net Position", "value": f"Rs. {net:,.0f}", "hint": "Receivable minus payable", "tone": "primary" if net >= 0 else "slate"},
+                {"label": "Open Accounts", "value": len(receivables) + len(payables), "hint": "Accounts with a balance", "tone": "slate"},
+            ],
+            "receivables": receivables,
+            "payables": payables,
+            "total_receivable": total_receivable,
+            "total_payable": total_payable,
+            "net_position": net,
+            "finance_chart": {
+                "labels": ["Receivable", "Payable"],
+                "values": [round(total_receivable, 2), round(total_payable, 2)],
+            },
+            "print_title": "Finances Report",
         }
 
     def _filter_chips(self, filters, options):

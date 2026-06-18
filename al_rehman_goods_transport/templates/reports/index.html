@@ -409,6 +409,76 @@
             </table>
         </div>
     </div>
+    {% elif report_type == 'finances' %}
+    <div class="finance-net-banner {% if net_position >= 0 %}finance-net-positive{% else %}finance-net-negative{% endif %}">
+        <div>
+            <span class="finance-net-label">Net Position</span>
+            <strong class="finance-net-value">{% if net_position < 0 %}− {% endif %}Rs. {{ "{:,.0f}".format(net_position|abs) }}</strong>
+            <span class="finance-net-sub">{% if net_position >= 0 %}Overall you are owed more than you owe{% else %}Overall you owe more than you are owed{% endif %}</span>
+        </div>
+        <div class="finance-net-split">
+            <div><span>Receivable</span><strong class="text-success">Rs. {{ "{:,.0f}".format(total_receivable) }}</strong></div>
+            <div><span>Payable</span><strong class="text-danger">Rs. {{ "{:,.0f}".format(total_payable) }}</strong></div>
+        </div>
+    </div>
+
+    <div class="report-grid">
+        <div class="table-panel table-panel-list">
+            <div class="table-panel-header">
+                <div>
+                    <h3 class="table-panel-title">Receivables — money owed to you</h3>
+                    <p class="table-panel-copy">Accounts that owe the company.</p>
+                </div>
+            </div>
+            <div class="table-responsive">
+                <table class="table detail-table">
+                    <thead><tr><th>Account</th><th>Type</th><th class="text-end">Amount</th></tr></thead>
+                    <tbody>
+                        {% for row in receivables %}
+                        <tr>
+                            <td><strong>{{ row.name }}</strong></td>
+                            <td><span class="status-chip status-chip-complete">{{ row.type }}</span></td>
+                            <td class="text-end table-amount">Rs. {{ "{:,.0f}".format(row.amount) }}</td>
+                        </tr>
+                        {% else %}
+                        <tr><td colspan="3" class="text-center table-muted">No outstanding receivables.</td></tr>
+                        {% endfor %}
+                    </tbody>
+                    {% if receivables %}
+                    <tfoot><tr class="bill-grand-total-row"><td colspan="2"><strong>Total Receivable</strong></td><td class="text-end"><strong>Rs. {{ "{:,.0f}".format(total_receivable) }}</strong></td></tr></tfoot>
+                    {% endif %}
+                </table>
+            </div>
+        </div>
+
+        <div class="table-panel table-panel-list">
+            <div class="table-panel-header">
+                <div>
+                    <h3 class="table-panel-title">Payables — money you owe</h3>
+                    <p class="table-panel-copy">Accounts the company must pay.</p>
+                </div>
+            </div>
+            <div class="table-responsive">
+                <table class="table detail-table">
+                    <thead><tr><th>Account</th><th>Type</th><th class="text-end">Amount</th></tr></thead>
+                    <tbody>
+                        {% for row in payables %}
+                        <tr>
+                            <td><strong>{{ row.name }}</strong></td>
+                            <td><span class="status-chip status-chip-pending">{{ row.type }}</span></td>
+                            <td class="text-end table-amount">Rs. {{ "{:,.0f}".format(row.amount) }}</td>
+                        </tr>
+                        {% else %}
+                        <tr><td colspan="3" class="text-center table-muted">No outstanding payables.</td></tr>
+                        {% endfor %}
+                    </tbody>
+                    {% if payables %}
+                    <tfoot><tr class="bill-grand-total-row"><td colspan="2"><strong>Total Payable</strong></td><td class="text-end"><strong>Rs. {{ "{:,.0f}".format(total_payable) }}</strong></td></tr></tfoot>
+                    {% endif %}
+                </table>
+            </div>
+        </div>
+    </div>
     {% else %}
     <div class="report-grid">
         <article class="report-panel">
@@ -508,11 +578,37 @@
             toggleScopedFilters();
         }
 
+        function formatRupees(value) {
+            const num = Number(value) || 0;
+            return 'Rs. ' + num.toLocaleString('en-PK', { maximumFractionDigits: 0 });
+        }
+
+        if (window.Chart) {
+            Chart.defaults.font.family = "'Segoe UI', system-ui, -apple-system, sans-serif";
+            Chart.defaults.font.size = window.innerWidth < 576 ? 11 : 12.5;
+            Chart.defaults.color = '#475569';
+            Chart.defaults.plugins.tooltip.backgroundColor = 'rgba(15, 23, 42, 0.92)';
+            Chart.defaults.plugins.tooltip.titleColor = '#f8fafc';
+            Chart.defaults.plugins.tooltip.bodyColor = '#e2e8f0';
+            Chart.defaults.plugins.tooltip.padding = 10;
+            Chart.defaults.plugins.tooltip.cornerRadius = 8;
+            Chart.defaults.plugins.tooltip.displayColors = false;
+            Chart.defaults.plugins.tooltip.titleFont = { weight: '700' };
+        }
+
+        function makeBarGradient(ctx, chartArea, color) {
+            const gradient = ctx.createLinearGradient(0, chartArea ? chartArea.top : 0, 0, chartArea ? chartArea.bottom : 300);
+            gradient.addColorStop(0, color.replace(/[\d.]+\)$/, '0.95)'));
+            gradient.addColorStop(1, color.replace(/[\d.]+\)$/, '0.55)'));
+            return gradient;
+        }
+
         function buildBarChart(id, labels, values, label, color) {
             const element = document.getElementById(id);
             if (!element) {
                 return;
             }
+            const isMobile = window.innerWidth < 576;
             new Chart(element.getContext('2d'), {
                 type: 'bar',
                 data: {
@@ -520,18 +616,54 @@
                     datasets: [{
                         label: label,
                         data: values,
-                        backgroundColor: color,
-                        borderRadius: 12,
-                        borderSkipped: false
+                        backgroundColor: function(context) {
+                            const chart = context.chart;
+                            const { ctx, chartArea } = chart;
+                            if (!chartArea) {
+                                return color;
+                            }
+                            return makeBarGradient(ctx, chartArea, color);
+                        },
+                        hoverBackgroundColor: color,
+                        borderRadius: 10,
+                        borderSkipped: false,
+                        maxBarThickness: 56
                     }]
                 },
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
-                    plugins: { legend: { display: false } },
+                    devicePixelRatio: Math.min(window.devicePixelRatio || 1, 3),
+                    animation: { duration: 600, easing: 'easeOutQuart' },
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    return label + ': ' + formatRupees(context.parsed.y);
+                                }
+                            }
+                        }
+                    },
                     scales: {
-                        y: { beginAtZero: true, ticks: { color: '#64748b' }, grid: { color: 'rgba(148, 163, 184, 0.16)' } },
-                        x: { ticks: { color: '#475569' }, grid: { display: false } }
+                        y: {
+                            beginAtZero: true,
+                            ticks: {
+                                color: '#64748b',
+                                callback: function(value) { return formatRupees(value); }
+                            },
+                            grid: { color: 'rgba(148, 163, 184, 0.14)' },
+                            border: { display: false }
+                        },
+                        x: {
+                            ticks: {
+                                color: '#475569',
+                                maxRotation: isMobile ? 60 : 0,
+                                autoSkip: true
+                            },
+                            grid: { display: false },
+                            border: { display: false }
+                        }
                     }
                 }
             });
@@ -542,6 +674,7 @@
             if (!element) {
                 return;
             }
+            const isMobile = window.innerWidth < 576;
             new Chart(element.getContext('2d'), {
                 type: 'doughnut',
                 data: {
@@ -549,16 +682,34 @@
                     datasets: [{
                         data: values,
                         backgroundColor: colors,
-                        borderWidth: 0
+                        borderWidth: 3,
+                        borderColor: '#ffffff',
+                        hoverOffset: 6
                     }]
                 },
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
+                    devicePixelRatio: Math.min(window.devicePixelRatio || 1, 3),
+                    cutout: '62%',
+                    animation: { duration: 600, easing: 'easeOutQuart' },
                     plugins: {
                         legend: {
-                            position: 'bottom',
-                            labels: { boxWidth: 14, color: '#475569' }
+                            position: isMobile ? 'bottom' : 'bottom',
+                            labels: {
+                                boxWidth: 12,
+                                boxHeight: 12,
+                                padding: 14,
+                                color: '#475569',
+                                font: { size: isMobile ? 10.5 : 12 }
+                            }
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    return context.label + ': ' + formatRupees(context.parsed);
+                                }
+                            }
                         }
                     }
                 }
@@ -574,6 +725,8 @@
         {% elif report_type == 'performance' %}
         buildBarChart('performanceTrendChart', {{ trend_chart['labels'] | tojson }}, {{ trend_chart['values'] | tojson }}, 'Profit', 'rgba(34, 184, 166, 0.82)');
         buildBarChart('performanceContractorChart', {{ contractor_chart['labels'] | tojson }}, {{ contractor_chart['values'] | tojson }}, 'Profit', 'rgba(58, 134, 255, 0.82)');
+        {% elif report_type == 'finances' %}
+        /* Finances report uses tables, no charts. */
         {% else %}
         buildBarChart('plantAmountChart', {{ plant_chart['labels'] | tojson }}, {{ plant_chart['values'] | tojson }}, 'Plant Amount', 'rgba(184, 92, 56, 0.82)');
         buildDoughnutChart('plantMaterialChart', {{ material_chart['labels'] | tojson }}, {{ material_chart['values'] | tojson }}, ['#157a6e', '#3a86ff', '#f59e0b', '#b85c38', '#6b7280']);

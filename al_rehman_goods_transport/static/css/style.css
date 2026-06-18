@@ -1103,6 +1103,67 @@ body.sidebar-collapsed .app-nav-link-icon {
     color: #fff;
 }
 
+/* Finances report net-position banner */
+.finance-net-banner {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 1.1rem 1.3rem;
+    border-radius: 18px;
+    margin-bottom: 1rem;
+    border: 1px solid rgba(15, 23, 42, 0.08);
+    background: linear-gradient(135deg, rgba(34, 197, 94, 0.12), rgba(59, 130, 246, 0.08));
+}
+
+.finance-net-banner.finance-net-negative {
+    background: linear-gradient(135deg, rgba(239, 68, 68, 0.12), rgba(245, 158, 11, 0.08));
+}
+
+.finance-net-label {
+    display: block;
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--muted, #64748b);
+    font-weight: 700;
+}
+
+.finance-net-value {
+    display: block;
+    font-size: 1.8rem;
+    font-weight: 800;
+    color: #0f172a;
+    line-height: 1.1;
+}
+
+.finance-net-sub {
+    font-size: 0.82rem;
+    color: var(--muted, #64748b);
+}
+
+.finance-net-split {
+    display: flex;
+    gap: 24px;
+}
+
+.finance-net-split > div {
+    display: flex;
+    flex-direction: column;
+}
+
+.finance-net-split span {
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--muted, #64748b);
+}
+
+.finance-net-split strong {
+    font-size: 1.2rem;
+}
+
 /* P&L summary card on the orders list */
 .pnl-card {
     background: #ffffff;
@@ -2133,12 +2194,22 @@ a.status-badge-completed:hover {
 }
 
 .chart-stage {
-    min-height: 320px;
     position: relative;
+    height: 300px;
+    width: 100%;
 }
 
 .chart-stage canvas {
-    max-height: 320px;
+    max-height: 300px;
+}
+
+@media (max-width: 575.98px) {
+    .chart-stage {
+        height: 240px;
+    }
+    .chart-stage canvas {
+        max-height: 240px;
+    }
 }
 
 .detail-shell {
@@ -2791,6 +2862,20 @@ body.orders-list-page .orders-register-table .table-amount {
     .auth-brand-mark {
         height: 56px;
         width: 56px;
+    }
+
+    .finance-net-banner {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    .finance-net-value {
+        font-size: 1.5rem;
+    }
+
+    .finance-net-split {
+        width: 100%;
+        gap: 18px;
     }
 }
 

@@ -45,11 +45,11 @@
                 </select>
             </div>
             <div class="form-field">
-                <label class="form-label" for="vehicle_id">Vehicle</label>
-                <select class="form-select" id="vehicle_id" name="vehicle_id">
-                    <option value="">All vehicles</option>
-                    {% for vehicle in filter_options.vehicles %}
-                    <option value="{{ vehicle.id }}" {% if filter_state.vehicle_id == vehicle.id %}selected{% endif %}>{{ vehicle.vehicle_number }}</option>
+                <label class="form-label" for="vehicle_owner_id">Vehicle Owner</label>
+                <select class="form-select" id="vehicle_owner_id" name="vehicle_owner_id">
+                    <option value="">All vehicle owners</option>
+                    {% for owner in filter_options.vehicle_owners %}
+                    <option value="{{ owner.id }}" {% if filter_state.vehicle_owner_id == owner.id %}selected{% endif %}>{{ owner.name }}</option>
                     {% endfor %}
                 </select>
             </div>
@@ -84,7 +84,7 @@
                 site_id=filter_state.site_id or '',
                 from_site_id=filter_state.from_site_id or '',
                 material_id=filter_state.material_id or '',
-                vehicle_id=filter_state.vehicle_id or '',
+                vehicle_owner_id=filter_state.vehicle_owner_id or '',
                 billing_status=filter_state.billing_status,
                 date_from=filter_state.date_from.strftime('%Y-%m-%d') if filter_state.date_from else '',
                 date_to=filter_state.date_to.strftime('%Y-%m-%d') if filter_state.date_to else '',

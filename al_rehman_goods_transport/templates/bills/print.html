@@ -312,12 +312,41 @@
                 grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
             }
         }
+
+        @media (max-width: 575.98px) {
+            body {
+                padding: 10px;
+            }
+
+            .statement-body {
+                padding: 18px 18px 24px;
+            }
+
+            .statement-header {
+                grid-template-columns: 1fr;
+            }
+
+            .summary-grid {
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+            }
+
+            .statement-table {
+                display: block;
+                overflow-x: auto;
+                white-space: nowrap;
+            }
+
+            .statement-actions {
+                flex-wrap: wrap;
+            }
+        }
     </style>
 </head>
 <body>
     <div class="statement-shell">
         <div class="statement-actions">
-            <button type="button" class="statement-btn statement-btn-primary" onclick="window.print()">Print / Save PDF</button>
+            <a href="{{ url_for('bills.export_bill_pdf', id=bill.id) }}" class="statement-btn statement-btn-primary">Download PDF</a>
+            <button type="button" class="statement-btn" onclick="window.print()">Print Page</button>
             <a href="{{ url_for('bills.export_bill_excel', id=bill.id) }}" class="statement-btn">Export Excel</a>
         </div>
 

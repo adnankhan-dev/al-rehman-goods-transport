@@ -11,6 +11,9 @@
             <i class="bi bi-arrow-left"></i> Vehicle Owners
         </a>
         <div class="erp-top-bar-actions">
+            <a href="{{ url_for('vehicle_owners.print_statement', id=owner.id) }}" class="btn btn-sm btn-ui-midnight" target="_blank" rel="noopener">
+                <i class="bi bi-printer"></i> Print Statement
+            </a>
             {% if current_user.can('vehicle_owners.edit') %}
             <a href="{{ url_for('vehicle_owners.edit', id=owner.id) }}" class="btn btn-sm btn-ui-edit">
                 <i class="bi bi-pencil"></i> Edit
@@ -72,17 +75,20 @@
         </div>
     </div>
     <div class="detail-panel">
-        <h3><i class="bi bi-truck"></i> Related Orders</h3>
+        <h3><i class="bi bi-truck"></i> Owner Account — Trips &amp; Payable</h3>
         <div class="table-responsive">
-            <table class="table table-striped detail-table">
+            <table class="table detail-table">
                 <thead>
                     <tr>
                         <th>Date</th>
                         <th>Vehicle</th>
-                        <th>Contractor</th>
                         <th>Material</th>
-                        <th>Delivered Qty</th>
-                        <th>Remaining Payable</th>
+                        <th>Delivered</th>
+                        <th class="text-end">Rate</th>
+                        <th class="text-end">Gross Amt</th>
+                        <th class="text-end">Diesel</th>
+                        <th class="text-end">Advance</th>
+                        <th class="text-end">Net Payable</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -90,15 +96,31 @@
                     <tr>
                         <td>{{ (order.completion_date or order.order_date).strftime('%Y-%m-%d') }}</td>
                         <td><a href="{{ url_for('vehicles.view_vehicle', id=order.vehicle.id) }}">{{ order.vehicle.vehicle_number }}</a></td>
-                        <td>{{ order.contractor.name if order.contractor else '-' }}</td>
                         <td>{{ order.material_name }}</td>
-                        <td>{{ "%.2f"|format(order.delivered_quantity or order.quantity or 0) }} {{ order.unit|upper }}</td>
-                        <td>Rs. {{ "%.2f"|format(order.remaining_vehicle_payment()) }}</td>
+                        <td>{{ "%.2f"|format(order.delivered_quantity or order.quantity or 0) }} {{ (order.unit or 'cft')|upper }}</td>
+                        <td class="text-end">{{ "%.2f"|format(order.vehicle_rate or 0) }}</td>
+                        <td class="text-end">Rs. {{ "%.0f"|format(order.total_vehicle_amount()) }}</td>
+                        <td class="text-end">{% if order.total_diesel_amount() %}− Rs. {{ "%.0f"|format(order.total_diesel_amount()) }}{% else %}—{% endif %}</td>
+                        <td class="text-end">{% if order.total_advance_amount() %}− Rs. {{ "%.0f"|format(order.total_advance_amount()) }}{% else %}—{% endif %}</td>
+                        <td class="text-end table-amount">Rs. {{ "%.0f"|format(order.remaining_vehicle_payment()) }}</td>
                     </tr>
                     {% else %}
-                    <tr><td colspan="6" class="text-center">No related orders found for this vehicle owner.</td></tr>
+                    <tr><td colspan="9" class="text-center">No related orders found for this vehicle owner.</td></tr>
                     {% endfor %}
                 </tbody>
+                {% if related_orders %}
+                <tfoot>
+                    <tr class="bill-grand-total-row">
+                        <td colspan="3"><strong>Totals — {{ owner_summary.trips }} trip{{ 's' if owner_summary.trips != 1 }}</strong></td>
+                        <td><strong>{{ "%.2f"|format(owner_summary.total_delivered) }}</strong></td>
+                        <td></td>
+                        <td class="text-end"><strong>Rs. {{ "%.0f"|format(owner_summary.gross) }}</strong></td>
+                        <td class="text-end"><strong>− Rs. {{ "%.0f"|format(owner_summary.diesel) }}</strong></td>
+                        <td class="text-end"><strong>− Rs. {{ "%.0f"|format(owner_summary.advance) }}</strong></td>
+                        <td class="text-end"><strong>Rs. {{ "%.0f"|format(owner_summary.net_payable) }}</strong></td>
+                    </tr>
+                </tfoot>
+                {% endif %}
             </table>
         </div>
     </div>

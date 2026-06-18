@@ -1,5 +1,5 @@
 from ..extensions import db
-from ..models import Contractor, Material, PetrolPump, Plant, Site, Vehicle
+from ..models import Contractor, Material, PetrolPump, Plant, Site, Vehicle, VehicleOwner
 
 
 class LookupRepository:
@@ -8,6 +8,9 @@ class LookupRepository:
 
     def list_vehicles(self):
         return self.session.query(Vehicle).order_by(Vehicle.vehicle_number.asc()).all()
+
+    def list_vehicle_owners(self):
+        return self.session.query(VehicleOwner).order_by(VehicleOwner.name.asc()).all()
 
     def list_contractors(self):
         return self.session.query(Contractor).order_by(Contractor.name.asc()).all()

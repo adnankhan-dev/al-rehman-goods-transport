@@ -3,7 +3,7 @@ from datetime import timedelta
 from sqlalchemy import func, or_
 
 from ..extensions import db
-from ..models import Contractor, DieselEntry, Material, Order, OrderDieselEntry, OrderLoading, PetrolPump, Plant, Site, Vehicle
+from ..models import Contractor, DieselEntry, FinancialEntity, Material, Order, OrderDieselEntry, OrderLoading, PetrolPump, Plant, Site, Vehicle, VehicleOwner
 
 
 class ReportRepository:
@@ -37,6 +37,12 @@ class ReportRepository:
 
     def list_petrol_pumps(self):
         return self.session.query(PetrolPump).order_by(PetrolPump.name.asc()).all()
+
+    def list_vehicle_owners(self):
+        return self.session.query(VehicleOwner).order_by(VehicleOwner.name.asc()).all()
+
+    def list_financial_entities(self):
+        return self.session.query(FinancialEntity).order_by(FinancialEntity.name.asc()).all()
 
     def filter_options(self):
         return {

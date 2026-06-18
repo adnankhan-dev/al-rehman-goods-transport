@@ -1,3 +1,5 @@
+from datetime import datetime
+
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import RedirectResponse
 
@@ -10,6 +12,24 @@ from ..models import VehicleOwner
 
 
 router = APIRouter()
+
+
+def _owner_orders_and_summary(owner):
+    related_orders = sorted(
+        [order for vehicle in owner.vehicles for order in vehicle.orders],
+        key=lambda order: (order.completion_date or order.order_date, order.id),
+        reverse=True,
+    )
+    completed = [o for o in related_orders if (o.status or "").lower() == "completed"]
+    summary = {
+        "trips": len(completed),
+        "total_delivered": sum((o.delivered_quantity or o.quantity or 0) for o in completed),
+        "gross": sum(o.total_vehicle_amount() for o in completed),
+        "diesel": sum(o.total_diesel_amount() for o in completed),
+        "advance": sum(o.total_advance_amount() for o in completed),
+        "net_payable": sum(o.remaining_vehicle_payment() for o in completed),
+    }
+    return related_orders, summary
 
 
 @router.get("/vehicle-owners", name="vehicle_owners.index")
@@ -40,18 +60,32 @@ async def view_vehicle_owner(id: int, request: Request, _current_user=Depends(re
     owner = db.session.get(VehicleOwner, id)
     if owner is None:
         raise HTTPException(status_code=404, detail="Vehicle owner not found")
-    related_orders = sorted(
-        [order for vehicle in owner.vehicles for order in vehicle.orders],
-        key=lambda order: (order.completion_date or order.order_date, order.id),
-        reverse=True,
-    )
+    related_orders, owner_summary = _owner_orders_and_summary(owner)
     related_transactions = sorted(owner.transactions, key=lambda transaction: (transaction.date, transaction.id), reverse=True)
     return render_template(
         request,
         "vehicle_owners/view.html",
         owner=owner,
         related_orders=related_orders,
+        owner_summary=owner_summary,
         related_transactions=related_transactions,
+    )
+
+
+@router.get("/vehicle-owners/{id}/print", name="vehicle_owners.print_statement")
+async def print_vehicle_owner(id: int, request: Request, _current_user=Depends(require_permission("vehicle_owners.view"))):
+    owner = db.session.get(VehicleOwner, id)
+    if owner is None:
+        raise HTTPException(status_code=404, detail="Vehicle owner not found")
+    related_orders, owner_summary = _owner_orders_and_summary(owner)
+    return render_template(
+        request,
+        "vehicle_owners/print.html",
+        show_nav=False,
+        owner=owner,
+        related_orders=related_orders,
+        owner_summary=owner_summary,
+        now=datetime.now(),
     )
 
 

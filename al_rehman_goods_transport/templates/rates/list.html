@@ -14,7 +14,7 @@
 
     <form method="GET" action="{{ url_for('rates.index') }}" class="mb-3">
         <div class="d-flex gap-2 align-items-end flex-wrap">
-            <div class="form-field" style="min-width: 220px; margin: 0;">
+            <div class="form-field" style="min-width: 220px; max-width: 100%; margin: 0;">
                 <label class="form-label" for="contractor_id">Filter by Contractor</label>
                 <select name="contractor_id" id="contractor_id" class="form-select form-select-sm" onchange="this.form.submit()">
                     <option value="">All Contractors</option>
