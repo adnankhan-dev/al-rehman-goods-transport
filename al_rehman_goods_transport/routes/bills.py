@@ -6,7 +6,7 @@ from starlette.datastructures import QueryParams
 
 from ..core.auth import require_permission
 from ..core.flash import flash
-from ..core.templating import render_template
+from ..core.templating import render_template, render_template_string
 from ..models import Contractor, PetrolPump, Plant, VehicleOwner
 from ..services import BillingService, NotFoundError, ValidationError
 from ..services.audit import record_audit
@@ -158,12 +158,16 @@ async def export_bill_excel(id: int, _current_user=Depends(require_permission("l
 
 
 @router.get("/bills/{id}/export/pdf", name="bills.export_bill_pdf")
-async def export_bill_pdf(id: int, _current_user=Depends(require_permission("ledger.view"))):
+async def export_bill_pdf(id: int, request: Request, _current_user=Depends(require_permission("ledger.view"))):
     service = BillingService()
     try:
-        filename, content = service.export_bill_pdf(id)
+        snapshot = service.bill_snapshot(id)
     except NotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    html = render_template_string(request, "bills/print.html", show_nav=False, **snapshot)
+    try:
+        filename, content = service.render_bill_pdf(snapshot["bill"], html)
     except ValidationError as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 

@@ -652,18 +652,6 @@ class OrderFinanceServiceTests(unittest.TestCase):
         with self.assertRaises(ValidationError):
             reconciliation.repair("contractor", self.contractor_id)
 
-    def test_bill_pdf_export_produces_pdf_bytes(self):
-        service = OrderService()
-        order = service.create_order(self._order_input())
-        bill, _ = create_contractor_bill(self.contractor_id, [order.id])
-        db.session.commit()
-
-        filename, content = BillingService().export_bill_pdf(bill.id)
-
-        self.assertTrue(filename.endswith(".pdf"))
-        self.assertTrue(content.startswith(b"%PDF"))
-        self.assertGreater(len(content), 1000)
-
     def test_financial_entity_transactions_move_company_balance(self):
         fe_service = FinancialEntityService()
         entity = fe_service.create_entity("Brother Account")

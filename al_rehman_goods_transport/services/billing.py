@@ -1,3 +1,4 @@
+import re
 from html import escape
 from io import BytesIO, StringIO
 
@@ -550,97 +551,43 @@ class BillingService:
         filename = f"{bill.bill_number.replace('/', '-')}.xls"
         return filename, workbook.getvalue().encode("utf-8")
 
-    def export_bill_pdf(self, bill_id):
-        snapshot = self.bill_snapshot(bill_id)
-        bill = snapshot["bill"]
-        orders_grouped = snapshot["orders_grouped"]
-        balance_meta = snapshot["balance_summary"]
+    _PDF_CSS_VARS = {
+        "--ink": "#0f172a",
+        "--muted": "#475569",
+        "--soft": "#e2e8f0",
+        "--panel": "#f8fafc",
+        "--brand": "#0b2742",
+        "--accent": "#d97706",
+    }
 
-        def _cell(value):
-            return escape("" if value is None else str(value))
+    def render_bill_pdf(self, bill, html):
+        # xhtml2pdf has no flexbox/grid support, so the screen layout's flex/grid
+        # containers are swapped for table-based equivalents here. The markup and
+        # data come straight from bills/print.html, so the PDF always matches it.
+        # xhtml2pdf also can't resolve CSS custom properties, so var(--x) is
+        # replaced with its literal value before conversion.
+        for name, value in self._PDF_CSS_VARS.items():
+            html = re.sub(rf"var\(\s*{re.escape(name)}\s*\)", value, html)
 
-        trip_rows = ""
-        for group in orders_grouped:
-            trip_rows += (
-                f"<tr class='group-row'><td colspan='7'><b>{_cell(group['material'])}</b> "
-                f"&mdash; {group['trip_count']} trip{'s' if group['trip_count'] != 1 else ''}</td></tr>"
-            )
-            for order in group["orders"]:
-                trip_rows += (
-                    "<tr>"
-                    f"<td>{_cell((order.completion_date or order.order_date).strftime('%d-%m-%Y'))}</td>"
-                    f"<td>{_cell(order.vehicle.vehicle_number if order.vehicle else '-')}</td>"
-                    f"<td>{_cell(order.site.name if order.site else '-')}</td>"
-                    f"<td>{_cell(order.receipt_number or '-')}</td>"
-                    f"<td class='num'>{_cell(f'{(order.delivered_quantity or order.quantity or 0):.2f} {order.unit.upper()}')}</td>"
-                    f"<td class='num'>{_cell(f'{(order.contractor_rate or 0):.2f}')}</td>"
-                    f"<td class='num'>{_cell(f'{order.billable_amount:,.2f}')}</td>"
-                    "</tr>"
-                )
-            trip_rows += (
-                "<tr class='subtotal-row'>"
-                f"<td colspan='4'>{_cell(group['material'])} subtotal</td>"
-                f"<td class='num'>{_cell(f'{group['total_quantity']:.2f} {group['unit']}')}</td>"
-                "<td></td>"
-                f"<td class='num'>{_cell(f'{group['total_amount']:,.2f}')}</td>"
-                "</tr>"
-            )
-        if not trip_rows:
-            trip_rows = "<tr><td colspan='7'>No linked trips</td></tr>"
-
-        html = f"""
-        <html>
-        <head>
+        pdf_overrides = """
         <style>
-            @page {{ size: A4; margin: 1.6cm 1.4cm; }}
-            body {{ font-family: Helvetica, Arial, sans-serif; font-size: 10pt; color: #111111; }}
-            h1 {{ font-size: 16pt; margin: 0; }}
-            h2 {{ font-size: 11pt; margin: 14pt 0 5pt 0; }}
-            .muted {{ color: #555555; font-size: 9pt; }}
-            table {{ width: 100%; border-collapse: collapse; }}
-            th, td {{ border: 0.6pt solid #999999; padding: 4pt 6pt; font-size: 9pt; }}
-            th {{ background-color: #e8eef7; text-align: left; }}
-            td.num {{ text-align: right; }}
-            .meta td {{ border: none; padding: 2pt 4pt; }}
-            .meta td.label {{ color: #555555; width: 130pt; }}
-            .group-row td {{ background-color: #f0f4fa; }}
-            .subtotal-row td {{ background-color: #f7f7f7; font-weight: bold; }}
-            .totals td {{ font-size: 10pt; }}
-            .totals .grand td {{ background-color: #0b2742; color: #ffffff; font-weight: bold; }}
+            .statement-actions { display: none; }
+            body { padding: 0; background: #ffffff; }
+            .statement-shell { box-shadow: none; border-radius: 0; max-width: none; }
+            .statement-body { padding: 0; }
+            .statement-header { display: table; width: 100%; }
+            .statement-company, .statement-meta { display: table-cell; vertical-align: top; }
+            .statement-meta { width: 38%; }
+            .meta-row { display: table-row; }
+            .meta-label, .meta-value { display: table-cell; padding: 3px 0; }
+            .meta-value { text-align: right; }
+            .summary-grid { display: table; width: 100%; table-layout: fixed; }
+            .summary-card { display: table-cell; }
+            .statement-table th, .statement-table td { font-size: 0.72rem; padding: 4px 6px; }
+            .statement-table td:first-child, .statement-table th:first-child { white-space: nowrap; }
         </style>
-        </head>
-        <body>
-            <h1>Al Rehman Goods Transport</h1>
-            <div class="muted">Dispatch &middot; Accounts &middot; Reports</div>
-
-            <h2>Bill {escape(bill.bill_number)}</h2>
-            <table class="meta">
-                <tr><td class="label">Billed To</td><td><b>{escape(bill.entity_name)}</b> ({escape(bill.entity_type.replace('_', ' ').title())})</td></tr>
-                <tr><td class="label">Bill Date</td><td>{escape(bill.bill_date.strftime('%d %B %Y'))}</td></tr>
-                <tr><td class="label">Period</td><td>{escape(bill.start_date.strftime('%d %b %Y') if bill.start_date else 'Start')} &mdash; {escape(bill.end_date.strftime('%d %b %Y') if bill.end_date else bill.bill_date.strftime('%d %b %Y'))}</td></tr>
-                <tr><td class="label">Notes</td><td>{escape(bill.notes or '-')}</td></tr>
-            </table>
-
-            <h2>Trips</h2>
-            <table>
-                <thead>
-                    <tr><th>Date</th><th>Vehicle</th><th>Site</th><th>Receipt</th><th>Quantity</th><th>Rate</th><th>Amount (Rs.)</th></tr>
-                </thead>
-                <tbody>{trip_rows}</tbody>
-            </table>
-
-            <h2>Summary</h2>
-            <table class="totals">
-                <tr><td>Total Amount</td><td class="num">Rs. {bill.total_amount:,.2f}</td></tr>
-                <tr><td>Settled Amount</td><td class="num">Rs. {(bill.settled_amount or 0):,.2f}</td></tr>
-                <tr class="grand"><td>Outstanding</td><td class="num">Rs. {bill.outstanding_amount:,.2f}</td></tr>
-                <tr><td>Account Position</td><td class="num">{escape(balance_meta['label'])} Rs. {balance_meta['amount']:,.2f}</td></tr>
-            </table>
-
-            <p class="muted">Generated on {datetime.now(UTC).strftime('%d %B %Y %H:%M')} &middot; This is a computer-generated bill.</p>
-        </body>
-        </html>
         """
+        html = html.replace("</head>", pdf_overrides + "</head>")
 
         from xhtml2pdf import pisa
 

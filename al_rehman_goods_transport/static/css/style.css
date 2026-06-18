@@ -259,6 +259,43 @@ body.auth-page {
 .icon-fleet    { color: #f43f5e; }   /* Fleet & Vendors — rose */
 .icon-system   { color: #14b8a6; }   /* System    — teal */
 
+/* Logout sits at the foot of the sidebar with its own danger-red treatment so it
+   reads as a distinct, deliberate action rather than another nav destination. */
+.app-nav-group-logout {
+    background: transparent;
+    border: none;
+    margin-top: 0.35rem;
+    padding: 0;
+}
+
+.app-nav-link-logout {
+    background: rgba(244, 63, 94, 0.14);
+    border-color: rgba(244, 63, 94, 0.4);
+    color: #fecdd3;
+    font-weight: 600;
+    justify-content: center;
+}
+
+.app-nav-link-logout:hover,
+.app-nav-link-logout:focus {
+    background: #f43f5e;
+    border-color: #f43f5e;
+    color: #ffffff;
+}
+
+.app-nav-link-logout .app-nav-link-icon i {
+    color: #f43f5e;
+}
+
+.app-nav-link-logout:hover .app-nav-link-icon i,
+.app-nav-link-logout:focus .app-nav-link-icon i {
+    color: #ffffff;
+}
+
+body.sidebar-collapsed .app-nav-link-logout {
+    justify-content: center;
+}
+
 .app-main-shell {
     display: flex;
     flex-direction: column;
@@ -593,54 +630,11 @@ body.sidebar-collapsed .app-nav-link-icon {
     white-space: nowrap;
 }
 
-.app-header-history {
-    align-items: center;
-    display: inline-flex;
-    gap: 0.4rem;
-    margin-right: 0.2rem;
-}
-
-.app-header-history-btn {
-    align-items: center;
-    background: rgba(255, 255, 255, 0.92);
-    border: 1px solid #d8e1ec;
-    border-radius: 999px;
-    color: #334155;
-    display: inline-flex;
-    height: 36px;
-    justify-content: center;
-    transition: all 0.15s ease;
-    width: 36px;
-}
-
-.app-header-history-btn:hover,
-.app-header-history-btn:focus {
-    background: #f8fafc;
-    border-color: #c4d0df;
-    color: #0f172a;
-}
-
 .app-header-user {
     color: #334155;
     font-size: 0.8125rem;
     font-weight: 500;
     letter-spacing: 0.01em;
-}
-
-.app-header-logout {
-    background: #fff;
-    border: 1px solid #cbd5e1;
-    border-radius: 999px;
-    color: #334155;
-    font-size: 0.8rem;
-    padding: 0.32rem 0.75rem;
-    text-decoration: none;
-}
-
-.app-header-logout:hover,
-.app-header-logout:focus {
-    background: #f8fafc;
-    color: #0f172a;
 }
 
 .app-content {
@@ -2839,7 +2833,21 @@ body.orders-list-page .orders-register-table .table-amount {
     .filter-grid.filter-grid-four,
     .permission-grid,
     .user-management-grid {
-        grid-template-columns: 1fr;
+        /* minmax(0, 1fr), not 1fr: keeps a wide child (e.g. the P&L table) from
+           forcing the column wider than the viewport and overflowing. */
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    /* A full-width panel must not keep spanning 2 tracks once the grid is single
+       column, or it reserves a phantom second column and overflows the screen. */
+    .report-grid-wide {
+        grid-column: auto;
+    }
+
+    /* Report tables aren't wrapped in .table-responsive, so let them scroll
+       inside their panel instead of stretching the whole page on small screens. */
+    .report-panel-body {
+        overflow-x: auto;
     }
 
     .auth-brand-lockup {
@@ -2935,6 +2943,21 @@ body.orders-list-page .orders-register-table .table-amount {
     background: #0b2742;
     color: #ffffff;
     font-weight: 700;
+}
+
+/* Compact variant of .detail-table for wide trip registers (e.g. vehicle owner account) */
+.detail-table-compact thead > tr > th {
+    font-size: 0.62rem;
+    padding: 0.55rem 0.6rem;
+}
+
+.detail-table-compact tbody > tr > td {
+    font-size: 0.82rem;
+    padding: 0.55rem 0.6rem !important;
+}
+
+.detail-table-compact tbody > tr > td:first-child {
+    padding-left: calc(0.6rem - 3px) !important;
 }
 
 /* ── ERP Top Action Bar (detail pages) ──────────────────────────────────── */

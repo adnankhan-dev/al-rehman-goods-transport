@@ -199,11 +199,16 @@ class RouteTests(unittest.TestCase):
 
         print_response = self.client.get(f"/bills/{bill_id}/print", follow_redirects=True)
         export_response = self.client.get(f"/bills/{bill_id}/export/excel", follow_redirects=True)
+        pdf_response = self.client.get(f"/bills/{bill_id}/export/pdf", follow_redirects=True)
 
         self.assertEqual(print_response.status_code, 200)
         self.assertIn("Download PDF", print_response.text)
         self.assertEqual(export_response.status_code, 200)
         self.assertIn("application/vnd.ms-excel", export_response.headers["content-type"])
+        self.assertEqual(pdf_response.status_code, 200)
+        self.assertEqual(pdf_response.headers["content-type"], "application/pdf")
+        self.assertTrue(pdf_response.content.startswith(b"%PDF"))
+        self.assertGreater(len(pdf_response.content), 1000)
 
     def test_business_site_can_be_created_without_contractor(self):
         self._login()

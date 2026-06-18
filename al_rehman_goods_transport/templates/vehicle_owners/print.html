@@ -22,7 +22,7 @@
         .meta-card span { display:block; color:var(--muted); font-size:0.78rem; margin-bottom:4px; }
         .meta-card strong { font-size:1.05rem; }
         table { width:100%; border-collapse:collapse; border:1px solid var(--soft); border-radius:12px; overflow:hidden; }
-        th, td { border-bottom:1px solid var(--soft); padding:9px 11px; text-align:left; font-size:0.9rem; }
+        th, td { border-bottom:1px solid var(--soft); padding:6px 8px; text-align:left; font-size:0.78rem; }
         th { background:#f1f5f9; color:var(--brand); }
         td.num, th.num { text-align:right; }
         .subtotal td { background:#f1f5f9; font-weight:700; }
@@ -34,7 +34,7 @@
             .shell { box-shadow:none; border-radius:0; max-width:none; }
             .actions { display:none; }
             .body { padding:0; }
-            th, td { font-size:0.72rem; padding:4px 6px; }
+            th, td { font-size:0.64rem; padding:3px 5px; }
             tr { break-inside:avoid; }
         }
         @media (max-width: 575.98px) {
@@ -80,6 +80,8 @@
                     <tr>
                         <th>Date</th>
                         <th>Vehicle</th>
+                        <th>From Site</th>
+                        <th>To Site</th>
                         <th>Material</th>
                         <th class="num">Delivered</th>
                         <th class="num">Rate</th>
@@ -94,6 +96,8 @@
                     <tr>
                         <td>{{ (order.completion_date or order.order_date).strftime('%d-%m-%Y') }}</td>
                         <td>{{ order.vehicle.vehicle_number if order.vehicle else '-' }}</td>
+                        <td>{{ order.from_site.name if order.from_site else "-" }}</td>
+                        <td>{{ order.site.name if order.site else "-" }}</td>
                         <td>{{ order.material_name }}</td>
                         <td class="num">{{ "%.2f"|format(order.delivered_quantity or order.quantity or 0) }} {{ (order.unit or 'cft')|upper }}</td>
                         <td class="num">{{ "%.2f"|format(order.vehicle_rate or 0) }}</td>
@@ -103,13 +107,13 @@
                         <td class="num">{{ "{:,.0f}".format(order.remaining_vehicle_payment()) }}</td>
                     </tr>
                     {% else %}
-                    <tr><td colspan="9" style="text-align:center;">No trips recorded for this owner.</td></tr>
+                    <tr><td colspan="11" style="text-align:center;">No trips recorded for this owner.</td></tr>
                     {% endfor %}
                 </tbody>
                 {% if related_orders %}
                 <tfoot>
                     <tr class="subtotal">
-                        <td colspan="3">Totals</td>
+                        <td colspan="5">Totals</td>
                         <td class="num">{{ "%.2f"|format(owner_summary.total_delivered) }}</td>
                         <td></td>
                         <td class="num">{{ "{:,.0f}".format(owner_summary.gross) }}</td>
@@ -118,7 +122,7 @@
                         <td class="num">{{ "{:,.0f}".format(owner_summary.net_payable) }}</td>
                     </tr>
                     <tr class="grand">
-                        <td colspan="8">Net Payable to {{ owner.name }}</td>
+                        <td colspan="10">Net Payable to {{ owner.name }}</td>
                         <td class="num">Rs. {{ "{:,.0f}".format(owner_summary.net_payable) }}</td>
                     </tr>
                 </tfoot>

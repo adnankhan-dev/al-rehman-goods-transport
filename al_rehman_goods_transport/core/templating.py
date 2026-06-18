@@ -8,7 +8,7 @@ from starlette.routing import Mount, NoMatchFound
 from .auth import get_optional_user
 from .config import settings
 from .flash import pop_flashes
-from .paths import TEMPLATES_DIR
+from .paths import STATIC_DIR, TEMPLATES_DIR
 
 
 templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
@@ -16,6 +16,15 @@ templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
 # Matches {id}, {id:int}, {path:path} etc. in a route path. Parsing route.path is
 # stable across Starlette versions (route.param_convertors was not).
 _PATH_PARAM_RE = re.compile(r"\{([a-zA-Z_][a-zA-Z0-9_]*)(?::[^}]+)?\}")
+
+
+def _static_asset_version(filename: str) -> str | None:
+    # Stamp static URLs with the file's mtime so browsers re-fetch CSS/JS after an
+    # edit instead of serving a stale cached copy (StaticFiles sends no Cache-Control).
+    try:
+        return str(int((STATIC_DIR / filename).stat().st_mtime))
+    except (OSError, ValueError):
+        return None
 
 
 def _route_path_param_names(request: Request, route_name: str) -> set[str]:
@@ -31,6 +40,9 @@ def _route_path_param_names(request: Request, route_name: str) -> set[str]:
 def template_url_for(request: Request, route_name: str, **params) -> str:
     if route_name == "static" and "filename" in params:
         params["path"] = params.pop("filename")
+        version = _static_asset_version(params["path"])
+        if version is not None:
+            params.setdefault("v", version)
 
     path_param_names = _route_path_param_names(request, route_name)
     path_params = {key: value for key, value in params.items() if key in path_param_names}
@@ -61,7 +73,7 @@ def template_url_for(request: Request, route_name: str, **params) -> str:
     return url
 
 
-def render_template(request: Request, template_name: str, status_code: int = 200, **context):
+def _base_context(request: Request, **context):
     base_context = {
         "request": request,
         "config": {"APP_NAME": settings.app_name},
@@ -70,4 +82,12 @@ def render_template(request: Request, template_name: str, status_code: int = 200
         "url_for": lambda route_name, **params: template_url_for(request, route_name, **params),
     }
     base_context.update(context)
-    return templates.TemplateResponse(request, template_name, base_context, status_code=status_code)
+    return base_context
+
+
+def render_template(request: Request, template_name: str, status_code: int = 200, **context):
+    return templates.TemplateResponse(request, template_name, _base_context(request, **context), status_code=status_code)
+
+
+def render_template_string(request: Request, template_name: str, **context) -> str:
+    return templates.get_template(template_name).render(_base_context(request, **context))

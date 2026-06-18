@@ -225,6 +225,20 @@
             </div>
             {% endif %}
 
+            {# ── Logout ───────────────────────────────────────────── #}
+            <div class="app-nav-group app-nav-group-logout">
+                <ul class="app-nav-list">
+                    <li>
+                        <a href="{{ url_for('auth.logout') }}"
+                           data-label="Logout" title="Logout"
+                           class="app-nav-link app-nav-link-logout">
+                            <span class="app-nav-link-icon"><i class="bi bi-box-arrow-right"></i></span>
+                            <span class="app-nav-link-text">Logout</span>
+                        </a>
+                    </li>
+                </ul>
+            </div>
+
         </div>
     </div>
 </aside>

@@ -50,16 +50,7 @@
                             </ul>
                         </div>
                         <div class="app-header-right">
-                            <div class="app-header-history" role="group" aria-label="Page navigation">
-                                <button type="button" class="app-header-history-btn" title="Back" aria-label="Go back" onclick="window.history.back()">
-                                    <i class="bi bi-arrow-left"></i>
-                                </button>
-                                <button type="button" class="app-header-history-btn" title="Next" aria-label="Go forward" onclick="window.history.forward()">
-                                    <i class="bi bi-arrow-right"></i>
-                                </button>
-                            </div>
                             <span class="app-header-user">{{ current_user.username }}</span>
-                            <a href="{{ url_for('auth.logout') }}" class="app-header-logout">Logout</a>
                         </div>
                     </div>
                 </header>
