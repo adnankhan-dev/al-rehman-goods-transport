@@ -14,7 +14,7 @@ if __package__ in {None, ""}:
     if str(PROJECT_ROOT) not in sys.path:
         sys.path.insert(0, str(PROJECT_ROOT))
 
-    from al_rehman_goods_transport.api import api_router
+    from al_rehman_goods_transport.api import api_route_objects, api_router
     from al_rehman_goods_transport.core.auth import AnonymousUser
     from al_rehman_goods_transport.core.config import settings
     from al_rehman_goods_transport.core.database import SessionLocal, init_db
@@ -23,7 +23,7 @@ if __package__ in {None, ""}:
     from al_rehman_goods_transport.models import *  # noqa: F401,F403
     from al_rehman_goods_transport.services.backups import run_automatic_backup
 else:
-    from .api import api_router
+    from .api import api_route_objects, api_router
     from .core.auth import AnonymousUser
     from .core.config import settings
     from .core.database import SessionLocal, init_db
@@ -85,43 +85,17 @@ def create_app() -> FastAPI:
         import starlette
         import fastapi
 
-        def describe(obj):
-            info = {"type": type(obj).__name__, "attrs": {}}
-            for attr in dir(obj):
-                if attr.startswith("__"):
-                    continue
-                try:
-                    val = getattr(obj, attr)
-                except Exception:
-                    continue
-                if callable(val):
-                    continue
-                if isinstance(val, (list, tuple)):
-                    info["attrs"][attr] = f"{type(val).__name__}[{len(val)}] of {set(type(x).__name__ for x in val)}"
-                elif isinstance(val, (str, int, bool, type(None))):
-                    info["attrs"][attr] = repr(val)[:80]
-                else:
-                    info["attrs"][attr] = type(val).__name__
-            return info
-
-        # Describe the nested _IncludedRouter objects so we can find where their
-        # child routes are stored on this Starlette version.
-        nested = []
-        for r in list(app.router.routes) + list(api_router.routes):
-            if getattr(r, "name", None) is None or "Included" in type(r).__name__:
-                nested.append(describe(r))
-
+        index = getattr(app.state, "route_index", {}) or {}
         return {
             "fastapi": fastapi.__version__,
             "starlette": starlette.__version__,
-            "app_routes": len(app.router.routes),
-            "api_router_routes": len(api_router.routes),
-            "nested_objects": nested[:6],
+            "index_size": len(index),
+            "bill_routes": sorted(f"{n} -> {getattr(index[n], 'path', None)}" for n in index if "bill" in n),
         }
 
     init_db()
     app.include_router(api_router)
-    app.state.route_index = build_route_index(list(app.router.routes), list(api_router.routes))
+    app.state.route_index = build_route_index(list(app.router.routes), api_route_objects)
     return app
 
 
