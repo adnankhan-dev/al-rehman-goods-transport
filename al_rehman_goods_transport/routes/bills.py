@@ -178,6 +178,22 @@ async def export_bill_pdf(id: int, request: Request, _current_user=Depends(requi
     )
 
 
+@router.post("/bills/{id}/delete", name="bills.delete_bill")
+async def delete_bill(id: int, request: Request, current_user=Depends(require_permission("ledger.delete"))):
+    service = BillingService()
+    try:
+        bill_number = service.delete_bill(id)
+    except NotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValidationError as exc:
+        flash(request, str(exc), "warning")
+        return RedirectResponse(url=str(request.url_for("bills.view_bill", id=id)), status_code=303)
+
+    record_audit(current_user, "delete", "bill", id, f"Bill {bill_number} deleted; linked records released for re-billing.")
+    flash(request, f"Bill {bill_number} deleted. Its trips and entries are available to bill again.", "success")
+    return RedirectResponse(url=str(request.url_for("ledger.index")), status_code=303)
+
+
 @router.post("/bills/{id}/settle", name="bills.settle_bill")
 async def settle_bill(id: int, request: Request, current_user=Depends(require_permission("ledger.edit"))):
     form_data = await request.form()

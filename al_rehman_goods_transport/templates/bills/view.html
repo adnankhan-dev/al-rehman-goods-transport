@@ -14,12 +14,20 @@
             <a href="{{ url_for('bills.print_bill', id=bill.id) }}" class="btn btn-sm btn-ui-midnight" target="_blank" rel="noopener">
                 <i class="bi bi-printer"></i> Print View
             </a>
-            <a href="{{ url_for('bills.export_bill_pdf', id=bill.id) }}" class="btn btn-sm btn-ui-primary">
+            <a href="{{ url_for('bills.print_bill', id=bill.id, autoprint='1') }}" class="btn btn-sm btn-ui-primary" target="_blank" rel="noopener">
                 <i class="bi bi-file-earmark-pdf"></i> Download PDF
             </a>
             <a href="{{ url_for('bills.export_bill_excel', id=bill.id) }}" class="btn btn-sm btn-ui-ocean">
                 <i class="bi bi-file-earmark-spreadsheet"></i> Export Excel
             </a>
+            {% if current_user.can('ledger.delete') and (bill.settled_amount or 0) <= 0 %}
+            <form method="POST" action="{{ url_for('bills.delete_bill', id=bill.id) }}" class="d-inline"
+                  onsubmit="return confirm('Delete bill {{ bill.bill_number }}? Its linked trips and entries will be released so you can recreate the bill. This cannot be undone.');">
+                <button type="submit" class="btn btn-sm btn-ui-danger">
+                    <i class="bi bi-trash"></i> Delete Bill
+                </button>
+            </form>
+            {% endif %}
         </div>
     </div>
     {% if bill.entity_type == 'contractor' and bill.contractor_id %}

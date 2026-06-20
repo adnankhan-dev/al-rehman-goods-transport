@@ -266,6 +266,66 @@ class OrderFinanceServiceTests(unittest.TestCase):
         self.assertEqual(order.bill_id, bill.id)
         self.assertEqual(bill.total_amount, 1500)
 
+    def test_delete_bill_releases_linked_orders_for_rebilling(self):
+        order = Order(
+            vehicle_id=self.vehicle_one_id,
+            contractor_id=self.contractor_id,
+            site_id=self.site_id,
+            driver_name="Driver",
+            material_id=self.material_id,
+            material_type="Sand",
+            quantity=100,
+            delivered_quantity=100,
+            contractor_rate=15,
+            vehicle_rate=10,
+            plant_id=self.plant_id,
+            plant_amount=120,
+            status="Completed",
+        )
+        db.session.add(order)
+        db.session.commit()
+
+        billing_service = BillingService()
+        bill, _ = billing_service.create_bill("contractor", self.contractor_id, order_ids=[order.id])
+        bill_id = bill.id
+
+        db.session.refresh(order)
+        self.assertTrue(order.is_billed)
+
+        billing_service.delete_bill(bill_id)
+
+        db.session.refresh(order)
+        self.assertIsNone(db.session.get(Bill, bill_id))
+        self.assertFalse(order.is_billed)
+        self.assertIsNone(order.bill_id)
+        self.assertIsNone(order.billed_at)
+
+        # Released trip is billable again — a fresh bill can be created.
+        rebill, _ = billing_service.create_bill("contractor", self.contractor_id, order_ids=[order.id])
+        self.assertIsInstance(rebill, Bill)
+
+    def test_settled_bill_cannot_be_deleted(self):
+        pump = db.session.get(PetrolPump, self.pump_id)
+        pump.balance = 500
+        entry = DieselEntry(
+            vehicle_id=self.vehicle_one_id,
+            petrol_pump_id=self.pump_id,
+            date=date(2026, 4, 10),
+            amount=500,
+            balance_applied=True,
+            vehicle_balance_applied=True,
+        )
+        db.session.add(entry)
+        db.session.commit()
+
+        billing_service = BillingService()
+        bill, _ = billing_service.create_bill("petrol_pump", self.pump_id, entry_ids=[entry.id])
+        billing_service.settle_bill(bill.id, 200, payment_method="cash")
+
+        with self.assertRaises(ValidationError):
+            billing_service.delete_bill(bill.id)
+        self.assertIsNotNone(db.session.get(Bill, bill.id))
+
     def test_non_contractor_bill_can_be_settled(self):
         pump = db.session.get(PetrolPump, self.pump_id)
         pump.balance = 500

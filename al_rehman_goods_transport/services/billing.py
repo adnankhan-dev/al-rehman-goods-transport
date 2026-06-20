@@ -312,6 +312,40 @@ class BillingService:
             raise
         return bill
 
+    def delete_bill(self, bill_id):
+        bill = self.get_bill(bill_id)
+        if (bill.settled_amount or 0.0) > 0:
+            raise ValidationError(
+                "This bill has recorded settlements and cannot be deleted. Reverse the settlement transactions first, then delete and recreate the bill."
+            )
+
+        # Release every record this bill claimed so the trips/entries become
+        # available for billing again, then remove the bill itself.
+        self.session.query(Order).filter(Order.bill_id == bill.id).update(
+            {Order.bill_id: None, Order.billed_at: None}, synchronize_session=False
+        )
+        self.session.query(Order).filter(Order.vehicle_owner_bill_id == bill.id).update(
+            {Order.vehicle_owner_bill_id: None}, synchronize_session=False
+        )
+        self.session.query(DieselEntry).filter(DieselEntry.bill_id == bill.id).update(
+            {DieselEntry.bill_id: None}, synchronize_session=False
+        )
+        self.session.query(DieselEntry).filter(DieselEntry.vehicle_owner_bill_id == bill.id).update(
+            {DieselEntry.vehicle_owner_bill_id: None}, synchronize_session=False
+        )
+        self.session.query(OrderLoading).filter(OrderLoading.bill_id == bill.id).update(
+            {OrderLoading.bill_id: None}, synchronize_session=False
+        )
+
+        bill_number = bill.bill_number
+        try:
+            self.session.delete(bill)
+            self.session.commit()
+        except Exception:
+            self.session.rollback()
+            raise
+        return bill_number
+
     def related_transactions(self, bill):
         return self.transactions.transactions_for_entity(bill.entity_type, self._bill_entity_id(bill))
 

@@ -301,11 +301,25 @@
                 white-space: nowrap;
             }
 
-            .trip-group,
-            .statement-section,
-            .summary-card,
-            table {
+            /* Let content flow and fill each page. Only keep atomic units intact
+               (table rows + the small summary cards). Avoiding breaks inside whole
+               sections/tables was forcing a tall section onto a fresh page, which
+               left page 1 blank right after the summary cards. */
+            tr,
+            .summary-card {
                 break-inside: avoid;
+            }
+
+            /* Repeat the column headers at the top of each printed page. */
+            thead {
+                display: table-header-group;
+            }
+
+            /* Don't strand a section/group heading alone at the bottom of a page. */
+            .statement-section h3,
+            .trip-group-label,
+            .material-summary-heading {
+                break-after: avoid;
             }
 
             .summary-grid {
@@ -345,8 +359,7 @@
 <body>
     <div class="statement-shell">
         <div class="statement-actions">
-            <a href="{{ url_for('bills.export_bill_pdf', id=bill.id) }}" class="statement-btn statement-btn-primary">Download PDF</a>
-            <button type="button" class="statement-btn" onclick="window.print()">Print Page</button>
+            <button type="button" class="statement-btn statement-btn-primary" onclick="window.print()">Print / Save PDF</button>
             <a href="{{ url_for('bills.export_bill_excel', id=bill.id) }}" class="statement-btn">Export Excel</a>
         </div>
 
@@ -773,5 +786,13 @@
             </footer>
         </div>
     </div>
+    <script>
+        // When opened via the "Download PDF" action, show the browser's
+        // print / Save-as-PDF dialog automatically so the saved file is exactly
+        // this print view.
+        if (new URLSearchParams(window.location.search).get('autoprint') === '1') {
+            window.addEventListener('load', function () { window.print(); });
+        }
+    </script>
 </body>
 </html>
