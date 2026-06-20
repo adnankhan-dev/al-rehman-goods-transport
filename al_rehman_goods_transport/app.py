@@ -78,6 +78,25 @@ def create_app() -> FastAPI:
     def health_check():
         return {"status": "OK"}
 
+    @app.get("/__diag/routes", name="diag_routes")
+    def diag_routes():
+        import starlette
+        import fastapi
+
+        routes = []
+        for route in app.router.routes:
+            routes.append({
+                "name": getattr(route, "name", None),
+                "path": getattr(route, "path", None),
+                "type": type(route).__name__,
+            })
+        return {
+            "fastapi": fastapi.__version__,
+            "starlette": starlette.__version__,
+            "count": len(routes),
+            "routes": routes,
+        }
+
     init_db()
     app.include_router(api_router)
     return app
