@@ -19,6 +19,7 @@ if __package__ in {None, ""}:
     from al_rehman_goods_transport.core.config import settings
     from al_rehman_goods_transport.core.database import SessionLocal, init_db
     from al_rehman_goods_transport.core.paths import STATIC_DIR
+    from al_rehman_goods_transport.core.templating import build_route_index
     from al_rehman_goods_transport.models import *  # noqa: F401,F403
     from al_rehman_goods_transport.services.backups import run_automatic_backup
 else:
@@ -27,6 +28,7 @@ else:
     from .core.config import settings
     from .core.database import SessionLocal, init_db
     from .core.paths import STATIC_DIR
+    from .core.templating import build_route_index
     from .models import *  # noqa: F401,F403
     from .services.backups import run_automatic_backup
 
@@ -83,22 +85,18 @@ def create_app() -> FastAPI:
         import starlette
         import fastapi
 
-        from .core.templating import iter_routes
-
-        bills = []
-        for route in iter_routes(app.router.routes):
-            name = getattr(route, "name", None)
-            if name and "bill" in name:
-                bills.append({"name": name, "path": getattr(route, "path", None)})
+        index = getattr(app.state, "route_index", {}) or {}
+        bills = sorted(n for n in index if "bill" in n)
         return {
             "fastapi": fastapi.__version__,
             "starlette": starlette.__version__,
-            "total_routes_found": sum(1 for _ in iter_routes(app.router.routes)),
-            "bill_routes": bills,
+            "index_size": len(index),
+            "bill_routes": [{"name": n, "path": getattr(index[n], "path", None)} for n in bills],
         }
 
     init_db()
     app.include_router(api_router)
+    app.state.route_index = build_route_index(list(app.router.routes), list(api_router.routes))
     return app
 
 

@@ -52,7 +52,30 @@ def iter_routes(routes, _seen=None):
                 yield from iter_routes(sub, _seen)
 
 
+def build_route_index(*route_collections) -> dict:
+    """Map every named route to its route object.
+
+    Built once at startup from the flat FastAPI APIRouter (whose .routes list
+    is reliable across Starlette versions) plus the app's own top-level routes
+    (static mount, health). This avoids depending on how Starlette nests
+    included routers in app.router.routes, which changed in 1.x.
+    """
+    index: dict = {}
+    for routes in route_collections:
+        for route in iter_routes(routes):
+            name = getattr(route, "name", None)
+            if name and name not in index:
+                index[name] = route
+    return index
+
+
 def _find_route(request: Request, route_name: str):
+    index = getattr(request.app.state, "route_index", None)
+    if index:
+        route = index.get(route_name)
+        if route is not None:
+            return route
+    # Fallback: walk the live route tree (covers any route not in the prebuilt index).
     for route in iter_routes(request.app.router.routes):
         if getattr(route, "name", None) == route_name:
             return route
