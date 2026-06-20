@@ -3,7 +3,7 @@ from urllib.parse import urlencode
 
 from fastapi import Request
 from fastapi.templating import Jinja2Templates
-from starlette.routing import Mount, NoMatchFound
+from starlette.routing import Mount
 
 from .auth import get_optional_user
 from .config import settings
@@ -14,7 +14,8 @@ from .paths import STATIC_DIR, TEMPLATES_DIR
 templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
 
 # Matches {id}, {id:int}, {path:path} etc. in a route path. Parsing route.path is
-# stable across Starlette versions (route.param_convertors was not).
+# stable across Starlette versions (route.param_convertors and request.url_for
+# name resolution were not).
 _PATH_PARAM_RE = re.compile(r"\{([a-zA-Z_][a-zA-Z0-9_]*)(?::[^}]+)?\}")
 
 
@@ -27,50 +28,52 @@ def _static_asset_version(filename: str) -> str | None:
         return None
 
 
-def _route_path_param_names(request: Request, route_name: str) -> set[str]:
+def _find_route(request: Request, route_name: str):
     for route in request.app.router.routes:
         if getattr(route, "name", None) == route_name:
-            # Mounts (e.g. the StaticFiles "static" mount) always take a "path" param.
-            if isinstance(route, Mount):
-                return {"path"}
-            return set(_PATH_PARAM_RE.findall(getattr(route, "path", "") or ""))
-    return set()
+            return route
+    return None
 
 
 def template_url_for(request: Request, route_name: str, **params) -> str:
+    """Resolve a named route to a root-relative URL.
+
+    We build the path directly from the route table instead of calling
+    request.url_for(). Starlette's named-route resolution has proven unreliable
+    across versions on the deployed server (raising NoMatchFound for APIRouter
+    routes that plainly exist), and that previously 500'd whole pages. Building
+    the path ourselves is version-independent, proxy-safe (root-relative URLs
+    avoid http/https mismatches behind Render's proxy), and never raises.
+    """
     if route_name == "static" and "filename" in params:
         params["path"] = params.pop("filename")
         version = _static_asset_version(params["path"])
         if version is not None:
             params.setdefault("v", version)
 
-    path_param_names = _route_path_param_names(request, route_name)
-    path_params = {key: value for key, value in params.items() if key in path_param_names}
-    query_params = {key: value for key, value in params.items() if key not in path_param_names}
+    route = _find_route(request, route_name)
+    if route is None:
+        # Unknown route name: fail soft so a single bad link never 500s the page.
+        return "#"
 
-    url = None
-    # 1) Use our introspected path/query split.
-    try:
-        url = str(request.url_for(route_name, **path_params))
-    except NoMatchFound:
-        url = None
-    # 2) Route introspection differs across Starlette versions; if the split was
-    #    wrong, retry treating every supplied param as a path param.
-    if url is None and params:
-        try:
-            url = str(request.url_for(route_name, **params))
-            query_params = {}
-        except NoMatchFound:
-            url = None
-    # 3) Last resort: the route takes no path params.
-    if url is None:
-        url = str(request.url_for(route_name))
+    if isinstance(route, Mount):
+        # e.g. the StaticFiles "static" mount — the remaining "path" is the asset.
+        base = getattr(route, "path", "") or ""
+        sub = str(params.pop("path", "")).lstrip("/")
+        url = f"{base}/{sub}" if sub else base
+    else:
+        def _substitute(match: "re.Match[str]") -> str:
+            key = match.group(1)
+            return str(params.pop(key)) if key in params else match.group(0)
 
-    if query_params:
+        url = _PATH_PARAM_RE.sub(_substitute, getattr(route, "path", "") or "")
+
+    # Anything left over becomes the query string.
+    if params:
         separator = "&" if "?" in url else "?"
-        url = f"{url}{separator}{urlencode(query_params, doseq=True)}"
+        url = f"{url}{separator}{urlencode(params, doseq=True)}"
 
-    return url
+    return url or "/"
 
 
 def _base_context(request: Request, **context):
