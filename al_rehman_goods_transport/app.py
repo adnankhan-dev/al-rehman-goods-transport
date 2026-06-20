@@ -85,13 +85,38 @@ def create_app() -> FastAPI:
         import starlette
         import fastapi
 
-        index = getattr(app.state, "route_index", {}) or {}
-        bills = sorted(n for n in index if "bill" in n)
+        def describe(obj):
+            info = {"type": type(obj).__name__, "attrs": {}}
+            for attr in dir(obj):
+                if attr.startswith("__"):
+                    continue
+                try:
+                    val = getattr(obj, attr)
+                except Exception:
+                    continue
+                if callable(val):
+                    continue
+                if isinstance(val, (list, tuple)):
+                    info["attrs"][attr] = f"{type(val).__name__}[{len(val)}] of {set(type(x).__name__ for x in val)}"
+                elif isinstance(val, (str, int, bool, type(None))):
+                    info["attrs"][attr] = repr(val)[:80]
+                else:
+                    info["attrs"][attr] = type(val).__name__
+            return info
+
+        # Describe the nested _IncludedRouter objects so we can find where their
+        # child routes are stored on this Starlette version.
+        nested = []
+        for r in list(app.router.routes) + list(api_router.routes):
+            if getattr(r, "name", None) is None or "Included" in type(r).__name__:
+                nested.append(describe(r))
+
         return {
             "fastapi": fastapi.__version__,
             "starlette": starlette.__version__,
-            "index_size": len(index),
-            "bill_routes": [{"name": n, "path": getattr(index[n], "path", None)} for n in bills],
+            "app_routes": len(app.router.routes),
+            "api_router_routes": len(api_router.routes),
+            "nested_objects": nested[:6],
         }
 
     init_db()
