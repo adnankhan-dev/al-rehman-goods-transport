@@ -80,19 +80,6 @@ def create_app() -> FastAPI:
     def health_check():
         return {"status": "OK"}
 
-    @app.get("/__diag/routes", name="diag_routes")
-    def diag_routes():
-        import starlette
-        import fastapi
-
-        index = getattr(app.state, "route_index", {}) or {}
-        return {
-            "fastapi": fastapi.__version__,
-            "starlette": starlette.__version__,
-            "index_size": len(index),
-            "bill_routes": sorted(f"{n} -> {getattr(index[n], 'path', None)}" for n in index if "bill" in n),
-        }
-
     init_db()
     app.include_router(api_router)
     app.state.route_index = build_route_index(list(app.router.routes), api_route_objects)
