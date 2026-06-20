@@ -83,18 +83,18 @@ def create_app() -> FastAPI:
         import starlette
         import fastapi
 
-        routes = []
-        for route in app.router.routes:
-            routes.append({
-                "name": getattr(route, "name", None),
-                "path": getattr(route, "path", None),
-                "type": type(route).__name__,
-            })
+        from .core.templating import iter_routes
+
+        bills = []
+        for route in iter_routes(app.router.routes):
+            name = getattr(route, "name", None)
+            if name and "bill" in name:
+                bills.append({"name": name, "path": getattr(route, "path", None)})
         return {
             "fastapi": fastapi.__version__,
             "starlette": starlette.__version__,
-            "count": len(routes),
-            "routes": routes,
+            "total_routes_found": sum(1 for _ in iter_routes(app.router.routes)),
+            "bill_routes": bills,
         }
 
     init_db()

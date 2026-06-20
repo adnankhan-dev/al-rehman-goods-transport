@@ -28,8 +28,32 @@ def _static_asset_version(filename: str) -> str | None:
         return None
 
 
+def iter_routes(routes, _seen=None):
+    """Yield every route, recursing into nested routers and mounts.
+
+    Starlette 1.x (which Render installs) stops flattening included routers into
+    app.router.routes and instead nests them inside a single _IncludedRouter,
+    so a top-level scan misses every APIRouter route. Walking the tree finds
+    them regardless of Starlette version.
+    """
+    if _seen is None:
+        _seen = set()
+    for route in routes:
+        if id(route) in _seen:
+            continue
+        _seen.add(id(route))
+        yield route
+        # Recurse into nested route collections (mounts, sub-apps, included routers).
+        for holder in (route, getattr(route, "app", None), getattr(route, "router", None)):
+            if holder is None:
+                continue
+            sub = getattr(holder, "routes", None)
+            if sub is not None and sub is not routes:
+                yield from iter_routes(sub, _seen)
+
+
 def _find_route(request: Request, route_name: str):
-    for route in request.app.router.routes:
+    for route in iter_routes(request.app.router.routes):
         if getattr(route, "name", None) == route_name:
             return route
     return None
