@@ -141,12 +141,16 @@ def _pnl_filter_label(filter_state, options):
 
 
 @router.get("/orders/print", name="orders.print_orders")
-async def print_orders(request: Request, _current_user=Depends(require_permission("orders.view"))):
+async def print_orders(request: Request, current_user=Depends(require_permission("orders.view"))):
     service = OrderService()
     filter_state = _order_filter_state(request.query_params)
     orders_list = service.list_orders_filtered(filter_state)
     filter_options = service.order_filter_options()
-    return HTMLResponse(content=service.export_orders_print_html(orders_list, _describe_order_filters(filter_state, filter_options)))
+    # Net profit is gated like the orders P&L card: only reports.view users see it.
+    can_view_pnl = bool(getattr(current_user, "can", lambda _c: False)("reports.view"))
+    return HTMLResponse(content=service.export_orders_print_html(
+        orders_list, _describe_order_filters(filter_state, filter_options), include_profit=can_view_pnl
+    ))
 
 
 @router.api_route("/orders/create", methods=["GET", "POST"], name="orders.create_order")

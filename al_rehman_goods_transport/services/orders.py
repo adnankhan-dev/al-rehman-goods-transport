@@ -2,9 +2,11 @@ from dataclasses import dataclass
 from datetime import UTC, date, datetime
 from io import StringIO
 
+from html import escape
+
 from ..extensions import db
 from ..models import Order, OrderLoading
-from ..repositories import LookupRepository, OrderRepository
+from ..repositories import BillingRepository, LookupRepository, OrderRepository
 from ..utils.uploads import save_upload
 from .exceptions import ConflictError, NotFoundError, ValidationError
 from .order_finance import reverse_order_financials, snapshot_order, sync_order_financials
@@ -276,24 +278,195 @@ class OrderService:
         base_time = (existing_value or utc_now()).time().replace(tzinfo=None)
         return datetime.combine(order_date_value, base_time)
 
-    def export_orders_print_html(self, orders, filter_state):
-        order_rows = "".join(
-            (
-                "<tr>"
-                f"<td>{(order.order_date.strftime('%Y-%m-%d'))}</td>"
-                f"<td>{(order.vehicle.vehicle_number if order.vehicle else '-')}"
-                f"<br><span style='color:#64748b;font-size:0.85em;'>{(order.vehicle.owner_display_name if order.vehicle else '-')}</span></td>"
-                f"<td>{order.contractor.name if order.contractor else '-'}</td>"
-                f"<td>{order.from_site.name if order.from_site else '-'}</td>"
-                f"<td>{order.site.name if order.site else '-'}</td>"
-                f"<td>{order.material_name}</td>"
-                f"<td>{order.receipt_number or '-'}</td>"
-                f"<td>{(order.delivered_quantity or order.quantity or 0):.2f} {(order.unit or 'cft').upper()}</td>"
-                f"<td>{'Billed' if order.is_billed else 'Ready for Bill'}</td>"
-                "</tr>"
+    def export_orders_print_html(self, orders, filter_state, include_profit=False):
+        """Detailed transport statement: orders grouped by material (like a bill),
+        showing contractor and vehicle rates per row, with end-of-statement
+        payment summaries per contractor, per vehicle owner, and per plant. When
+        include_profit is set, a net profit summary (revenue minus vehicle and
+        plant costs) is appended."""
+
+        def money(value):
+            return f"Rs. {float(value or 0):,.2f}"
+
+        def rate_str(value, unit):
+            return f"Rs. {float(value):,.2f}/{unit}" if value else "&mdash;"
+
+        def parse_date(value):
+            if not value:
+                return None
+            try:
+                return datetime.strptime(value, "%Y-%m-%d").date()
+            except (TypeError, ValueError):
+                return None
+
+        diesel_from = parse_date(filter_state.get("date_from"))
+        diesel_to = parse_date(filter_state.get("date_to"))
+
+        # ---- group orders by material + contractor rate (mirrors the bill) ----
+        groups = {}
+        for order in orders:
+            material = order.material_name or "Unknown"
+            unit = (order.unit or "cft").upper()
+            contractor_rate = round(order.contractor_rate, 4) if order.contractor_rate else None
+            key = (material, unit, contractor_rate)
+            group = groups.setdefault(key, {
+                "material": material, "unit": unit, "contractor_rate": contractor_rate,
+                "orders": [], "qty": 0.0, "contractor_amount": 0.0, "vehicle_amount": 0.0,
+            })
+            group["orders"].append(order)
+            group["qty"] += float(order.delivered_quantity or order.quantity or 0)
+            group["contractor_amount"] += float(order.billable_amount)
+            group["vehicle_amount"] += float(order.total_vehicle_amount())
+        group_list = sorted(
+            groups.values(),
+            key=lambda g: (g["material"], g["contractor_rate"] if g["contractor_rate"] is not None else float("inf")),
+        )
+
+        groups_html = ""
+        for group in group_list:
+            unit = group["unit"]
+            rows = ""
+            for order in group["orders"]:
+                qty = float(order.delivered_quantity or order.quantity or 0)
+                owner = order.vehicle.owner_display_name if order.vehicle else "-"
+                vehicle_no = order.vehicle.vehicle_number if order.vehicle else "-"
+                rows += (
+                    "<tr>"
+                    f"<td>{(order.completion_date or order.order_date).strftime('%Y-%m-%d')}</td>"
+                    f"<td><strong>{escape(vehicle_no)}</strong>"
+                    f"<br><span class='sub'>{escape(owner)}</span>"
+                    f"<br><span class='rate'>@ {rate_str(order.vehicle_rate, unit)}</span></td>"
+                    f"<td>{escape(order.contractor.name if order.contractor else '-')}"
+                    f"<br><span class='rate'>@ {rate_str(order.contractor_rate, unit)}</span></td>"
+                    f"<td>{escape(order.from_site.name if order.from_site else '-')} &rarr; {escape(order.site.name if order.site else '-')}</td>"
+                    f"<td>{escape(order.receipt_number or '-')}</td>"
+                    f"<td class='num'>{qty:.2f} {unit}</td>"
+                    f"<td class='num'>{money(order.billable_amount)}</td>"
+                    f"<td class='num'>{money(order.total_vehicle_amount())}</td>"
+                    "</tr>"
+                )
+            breakdown = ""
+            if group["contractor_rate"]:
+                breakdown = (
+                    "<tr class='breakdown'><td colspan='8'>"
+                    f"@ Rs. {group['contractor_rate']:,.2f}/{unit} &times; {group['qty']:.2f} {unit} "
+                    f"= {money(group['contractor_amount'])} (contractor)"
+                    "</td></tr>"
+                )
+            groups_html += f"""
+                <div class="group">
+                    <div class="group-head"><strong>{escape(group['material'])}</strong>
+                        <span class="chip">{len(group['orders'])} trip{'s' if len(group['orders']) != 1 else ''}</span></div>
+                    <table>
+                        <thead><tr>
+                            <th>Date</th><th>Vehicle / Owner</th><th>Contractor</th>
+                            <th>From &rarr; To</th><th>Receipt</th>
+                            <th class="num">Delivered</th><th class="num">Contractor Amt</th><th class="num">Vehicle Amt</th>
+                        </tr></thead>
+                        <tbody>
+                            {rows}
+                            <tr class="subtotal"><td colspan="5"><strong>{escape(group['material'])} Subtotal</strong></td>
+                                <td class="num"><strong>{group['qty']:.2f} {unit}</strong></td>
+                                <td class="num"><strong>{money(group['contractor_amount'])}</strong></td>
+                                <td class="num"><strong>{money(group['vehicle_amount'])}</strong></td></tr>
+                            {breakdown}
+                        </tbody>
+                    </table>
+                </div>
+            """
+
+        # ---- per-contractor payable summary ----
+        contractor_summary = {}
+        for order in orders:
+            cid = order.contractor_id
+            entry = contractor_summary.setdefault(cid, {
+                "name": order.contractor.name if order.contractor else "Unassigned",
+                "trips": 0, "qty": 0.0, "amount": 0.0,
+            })
+            entry["trips"] += 1
+            entry["qty"] += float(order.delivered_quantity or order.quantity or 0)
+            entry["amount"] += float(order.billable_amount)
+        contractor_rows = "".join(
+            f"<tr><td>{escape(c['name'])}</td><td class='num'>{c['trips']}</td>"
+            f"<td class='num'>{c['qty']:.2f}</td><td class='num'>{money(c['amount'])}</td></tr>"
+            for c in sorted(contractor_summary.values(), key=lambda x: x["name"])
+        ) or "<tr><td colspan='4'>No contractors.</td></tr>"
+        contractor_total = sum(c["amount"] for c in contractor_summary.values())
+
+        # ---- per-vehicle-owner net payable summary (advances + diesel deducted) ----
+        billing_repo = BillingRepository(self.session)
+        owner_summary = {}
+        for order in orders:
+            owner = order.vehicle.owner if order.vehicle else None
+            owner_id = owner.id if owner else None
+            key = owner_id if owner_id is not None else f"name:{order.vehicle.owner_display_name if order.vehicle else 'Unassigned'}"
+            entry = owner_summary.setdefault(key, {
+                "id": owner_id,
+                "name": owner.name if owner else (order.vehicle.owner_display_name if order.vehicle else "Unassigned"),
+                "gross": 0.0, "advance": 0.0, "order_diesel": 0.0,
+            })
+            entry["gross"] += float(order.total_vehicle_amount())
+            entry["advance"] += float(order.total_advance_amount())
+            entry["order_diesel"] += float(order.total_diesel_amount())
+
+        owner_rows = ""
+        owner_total_net = 0.0
+        for entry in sorted(owner_summary.values(), key=lambda x: x["name"]):
+            standalone_diesel = 0.0
+            if entry["id"] is not None:
+                standalone_diesel = sum(
+                    float(e.amount or 0)
+                    for e in billing_repo.diesel_entries_for_vehicle_owner(entry["id"], diesel_from, diesel_to)
+                )
+            net = entry["gross"] - entry["advance"] - entry["order_diesel"] - standalone_diesel
+            owner_total_net += net
+            owner_rows += (
+                f"<tr><td>{escape(entry['name'])}</td>"
+                f"<td class='num'>{money(entry['gross'])}</td>"
+                f"<td class='num'>&minus; {money(entry['advance'])}</td>"
+                f"<td class='num'>&minus; {money(entry['order_diesel'])}</td>"
+                f"<td class='num'>&minus; {money(standalone_diesel)}</td>"
+                f"<td class='num'><strong>{money(net)}</strong></td></tr>"
             )
-            for order in orders
-        ) or "<tr><td colspan='9'>No orders found.</td></tr>"
+        owner_rows = owner_rows or "<tr><td colspan='6'>No vehicle owners.</td></tr>"
+
+        # ---- per-plant payable summary (loading cost we pay the plant) ----
+        plant_summary = {}
+        for order in orders:
+            if not order.plant_id and not (order.plant_amount or 0):
+                continue
+            key = order.plant_id if order.plant_id is not None else f"name:{order.plant.name if order.plant else 'Unassigned'}"
+            entry = plant_summary.setdefault(key, {
+                "name": order.plant.name if order.plant else "Unassigned",
+                "trips": 0, "qty": 0.0, "amount": 0.0,
+            })
+            entry["trips"] += 1
+            entry["qty"] += float(order.delivered_quantity or order.quantity or 0)
+            entry["amount"] += float(order.plant_amount or 0)
+        plant_rows = "".join(
+            f"<tr><td>{escape(p['name'])}</td><td class='num'>{p['trips']}</td>"
+            f"<td class='num'>{p['qty']:.2f}</td><td class='num'>{money(p['amount'])}</td></tr>"
+            for p in sorted(plant_summary.values(), key=lambda x: x["name"])
+        ) or "<tr><td colspan='4'>No plant charges.</td></tr>"
+        plant_total = sum(p["amount"] for p in plant_summary.values())
+
+        # ---- net profit (revenue minus vehicle and plant cost), gated by caller ----
+        total_vehicle_cost = sum(float(order.total_vehicle_amount()) for order in orders)
+        net_profit = contractor_total - total_vehicle_cost - plant_total
+        profit_html = ""
+        if include_profit:
+            profit_html = f"""
+                        <h2 class="section">Net Profit Summary</h2>
+                        <table>
+                            <tbody>
+                                <tr><td>Revenue (Contractor receivable)</td><td class="num">{money(contractor_total)}</td></tr>
+                                <tr><td>Vehicle Cost (owner payable)</td><td class="num">&minus; {money(total_vehicle_cost)}</td></tr>
+                                <tr><td>Plant Cost (plant payable)</td><td class="num">&minus; {money(plant_total)}</td></tr>
+                                <tr class="grand"><td>Net {'Profit' if net_profit >= 0 else 'Loss'}</td>
+                                    <td class="num">{'&minus; ' if net_profit < 0 else ''}{money(abs(net_profit))}</td></tr>
+                            </tbody>
+                        </table>
+            """
 
         active_filters = [
             f"Contractor: {filter_state.get('contractor_name')}" if filter_state.get("contractor_name") else None,
@@ -307,6 +480,8 @@ class OrderService:
             f"Search: {filter_state.get('search')}" if filter_state.get("search") else None,
         ]
         active_filters = [item for item in active_filters if item]
+        total_qty = sum((order.delivered_quantity or order.quantity or 0) for order in orders)
+        groups_html = groups_html or "<p style='color:#64748b;'>No orders found.</p>"
 
         html = StringIO()
         html.write(
@@ -315,7 +490,7 @@ class OrderService:
             <html lang="en">
             <head>
                 <meta charset="utf-8">
-                <title>Orders Print View</title>
+                <title>Transport Statement</title>
                 <style>
                     body {{ font-family: 'Segoe UI', Arial, sans-serif; background: #f8fafc; margin: 0; padding: 24px; color: #0f172a; }}
                     .shell {{ max-width: 1200px; margin: 0 auto; background: #fff; padding: 32px; border-radius: 20px; box-shadow: 0 20px 50px rgba(15,23,42,0.12); }}
@@ -325,25 +500,43 @@ class OrderService:
                     .letterhead-line {{ color: #64748b; font-size: 0.82rem; line-height: 1.6; }}
                     .letterhead-meta {{ text-align: right; }}
                     .button {{ appearance: none; border: none; border-radius: 999px; background: #0f172a; color: #fff; padding: 10px 16px; cursor: pointer; font: inherit; text-decoration: none; }}
-                    .button-light {{ background: #dbe4f0; color: #0f172a; }}
-                    .filters {{ margin: 18px 0; color: #475569; }}
+                    .filters {{ margin: 14px 0; color: #475569; font-size: 0.85rem; }}
                     .metrics {{ display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 20px; }}
-                    .metric {{ border: 1px solid #dbe4f0; border-radius: 16px; padding: 12px 16px; background: #f8fbff; min-width: 180px; }}
-                    table {{ width: 100%; border-collapse: collapse; }}
-                    th, td {{ border: 1px solid #dbe4f0; padding: 10px 12px; text-align: left; }}
+                    .metric {{ border: 1px solid #dbe4f0; border-radius: 16px; padding: 12px 16px; background: #f8fbff; min-width: 170px; }}
+                    .metric strong {{ font-size: 1.15rem; }}
+                    table {{ width: 100%; border-collapse: collapse; margin-top: 6px; }}
+                    th, td {{ border: 1px solid #dbe4f0; padding: 8px 10px; text-align: left; font-size: 0.86rem; vertical-align: top; }}
                     th {{ background: #e8f0fb; }}
+                    td.num, th.num {{ text-align: right; white-space: nowrap; }}
+                    .sub {{ color: #64748b; font-size: 0.82em; }}
+                    .rate {{ color: #0b6b3a; font-size: 0.8em; font-weight: 600; }}
+                    .group {{ margin-bottom: 22px; }}
+                    .group-head {{ display: flex; align-items: center; gap: 10px; font-size: 1.02rem; margin-top: 10px; }}
+                    .chip {{ background: #e2e8f0; border-radius: 999px; padding: 2px 10px; font-size: 0.74rem; color: #334155; }}
+                    tr.subtotal td {{ background: #f1f5f9; }}
+                    tr.breakdown td {{ background: #fff; color: #475569; text-align: right; font-size: 0.8rem; border-top: none; }}
+                    .summary {{ margin-top: 28px; }}
+                    .summary h3 {{ font-size: 1.05rem; margin: 18px 0 6px; color: #0b2742; }}
+                    tr.grand td {{ background: #0b2742; color: #fff; font-weight: 700; }}
+                    h2.section {{ font-size: 1.1rem; color: #0b2742; border-bottom: 2px solid #dbe4f0; padding-bottom: 6px; margin-top: 26px; }}
                     @media print {{
                         body {{ background: #fff; padding: 0; }}
                         .shell {{ box-shadow: none; border-radius: 0; max-width: none; padding: 0; }}
                         .toolbar {{ display: none; }}
+                        /* Only keep table rows atomic. Avoiding breaks inside whole
+                           groups forces a tall first group onto page 2, leaving page 1
+                           blank right after the header. */
+                        tr {{ break-inside: avoid; }}
+                        thead {{ display: table-header-group; }}
+                        .group-head {{ break-after: avoid; }}
                     }}
                 </style>
             </head>
             <body>
                 <div class="shell">
                     <div class="toolbar">
-                        <div style="text-transform: uppercase; letter-spacing: 0.14em; color: #64748b; font-size: 0.78rem;">Orders Register</div>
-                        <button type="button" class="button" onclick="window.print()">Print Orders</button>
+                        <div style="text-transform: uppercase; letter-spacing: 0.14em; color: #64748b; font-size: 0.78rem;">Transport Statement</div>
+                        <button type="button" class="button" onclick="window.print()">Print / Save PDF</button>
                     </div>
                     <header class="letterhead">
                         <div class="letterhead-brand">
@@ -353,33 +546,55 @@ class OrderService:
                             <div class="letterhead-line">Inam Khan - 0301-5749086</div>
                         </div>
                         <div class="letterhead-meta">
-                            <div style="text-transform: uppercase; letter-spacing: 0.14em; color: #d97706; font-size: 0.74rem; font-weight: 700;">Orders Register</div>
+                            <div style="text-transform: uppercase; letter-spacing: 0.14em; color: #d97706; font-size: 0.74rem; font-weight: 700;">Detailed Statement</div>
                             <div style="color:#475569; font-size:0.82rem; margin-top:4px;">Printed: {datetime.now().strftime('%d %b %Y')}</div>
-                            <div style="color:#475569; font-size:0.82rem;">Total Orders: {len(orders)}</div>
+                            <div style="color:#475569; font-size:0.82rem;">Total Trips: {len(orders)}</div>
                         </div>
                     </header>
                     <div class="metrics">
-                        <div class="metric"><strong>{len(orders)}</strong><div>Total Orders</div></div>
-                        <div class="metric"><strong>{sum(1 for order in orders if order.is_billed)}</strong><div>Billed Orders</div></div>
-                        <div class="metric"><strong>{sum((order.delivered_quantity or order.quantity or 0) for order in orders):.2f}</strong><div>Total Quantity</div></div>
+                        <div class="metric"><strong>{len(orders)}</strong><div>Total Trips</div></div>
+                        <div class="metric"><strong>{total_qty:.2f}</strong><div>Total Quantity</div></div>
+                        <div class="metric"><strong>{money(contractor_total)}</strong><div>Contractor Payable</div></div>
+                        <div class="metric"><strong>{money(owner_total_net)}</strong><div>Vehicle Owner Payable</div></div>
+                        <div class="metric"><strong>{money(plant_total)}</strong><div>Plant Payable</div></div>
                     </div>
                     <div class="filters"><strong>Active Filters:</strong> {' | '.join(active_filters) if active_filters else 'None'}</div>
-                    <table>
-                        <thead>
-                            <tr>
-                                <th>Date</th>
-                                <th>Vehicle / Owner</th>
-                                <th>Contractor</th>
-                                <th>From Site</th>
-                                <th>To Site</th>
-                                <th>Material</th>
-                                <th>Receipt</th>
-                                <th>Delivered</th>
-                                <th>Billing</th>
-                            </tr>
-                        </thead>
-                        <tbody>{order_rows}</tbody>
-                    </table>
+
+                    <h2 class="section">Trips by Material</h2>
+                    {groups_html}
+
+                    <div class="summary">
+                        <h2 class="section">Payment Summary &mdash; Contractors (Receivable)</h2>
+                        <table>
+                            <thead><tr><th>Contractor</th><th class="num">Trips</th><th class="num">Quantity</th><th class="num">Amount</th></tr></thead>
+                            <tbody>
+                                {contractor_rows}
+                                <tr class="grand"><td>Grand Total</td><td class="num"></td><td class="num"></td><td class="num">{money(contractor_total)}</td></tr>
+                            </tbody>
+                        </table>
+
+                        <h2 class="section">Payment Summary &mdash; Vehicle Owners (Payable)</h2>
+                        <table>
+                            <thead><tr>
+                                <th>Vehicle Owner</th><th class="num">Gross Vehicle</th><th class="num">Advances</th>
+                                <th class="num">Order Diesel</th><th class="num">Owner Diesel</th><th class="num">Net Payable</th>
+                            </tr></thead>
+                            <tbody>
+                                {owner_rows}
+                                <tr class="grand"><td>Grand Total</td><td class="num"></td><td class="num"></td><td class="num"></td><td class="num"></td><td class="num">{money(owner_total_net)}</td></tr>
+                            </tbody>
+                        </table>
+
+                        <h2 class="section">Payment Summary &mdash; Plants (Payable)</h2>
+                        <table>
+                            <thead><tr><th>Plant</th><th class="num">Trips</th><th class="num">Quantity</th><th class="num">Plant Cost</th></tr></thead>
+                            <tbody>
+                                {plant_rows}
+                                <tr class="grand"><td>Grand Total</td><td class="num"></td><td class="num"></td><td class="num">{money(plant_total)}</td></tr>
+                            </tbody>
+                        </table>
+                        {profit_html}
+                    </div>
                 </div>
             </body>
             </html>

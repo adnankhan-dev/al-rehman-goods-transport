@@ -14,7 +14,7 @@ if str(PACKAGE_PARENT) not in sys.path:
     sys.path.insert(0, str(PACKAGE_PARENT))
 
 from al_rehman_goods_transport import create_app, db
-from al_rehman_goods_transport.core.database import Base, engine
+from al_rehman_goods_transport.core.database import Base, engine  # engine rebound to the test DB in tests/__init__.py
 from al_rehman_goods_transport.core.permissions import role_permissions
 from al_rehman_goods_transport.models import Contractor, Material, Order, OrderDieselEntry, Plant, Site, Transaction, User, Vehicle
 
