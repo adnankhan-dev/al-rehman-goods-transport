@@ -59,11 +59,22 @@ class SettingsService:
         from html import escape
         from io import StringIO
 
+        # (label, width). From/To kept wide; rates and quantities narrowed with
+        # abbreviations (Del. Qty = delivered, Load. Qty = loading).
         columns = [
-            "#", "Vehicle No.", "From", "To", "Delivered Qty", "Vehicle Rate",
-            "Contractor Rate", "Plant", "Plant Receipt", "Loading Qty",
+            ("#", "3%"),
+            ("Vehicle No.", "12%"),
+            ("From", "19%"),
+            ("To", "19%"),
+            ("Del. Qty", "7%"),
+            ("Veh. Rate", "7%"),
+            ("Con. Rate", "7%"),
+            ("Plant", "11%"),
+            ("Plant Receipt", "8%"),
+            ("Load. Qty", "7%"),
         ]
-        header_cells = "".join(f"<th>{escape(c)}</th>" for c in columns)
+        colgroup = "<colgroup>" + "".join(f"<col style='width:{w}'>" for _, w in columns) + "</colgroup>"
+        header_cells = "".join(f"<th>{escape(label)}</th>" for label, _ in columns)
         days_in_month = calendar.monthrange(year, month)[1]
         month_label = date(year, month, 1).strftime("%B %Y")
 
@@ -83,6 +94,7 @@ class SettingsService:
                 <div class="day-block">
                     <div class="day-head">{current.strftime('%A, %d %b %Y')}</div>
                     <table class="entry-table">
+                        {colgroup}
                         <thead><tr>{header_cells}</tr></thead>
                         <tbody>{rows}</tbody>
                     </table>
@@ -106,7 +118,7 @@ class SettingsService:
         .meta strong {{ color: #0b2742; }}
         .day-block {{ margin-bottom: 16px; }}
         .day-head {{ font-weight: 800; color: #0b2742; background: #e8f0fb; border: 1px solid #cbd9ec; border-bottom: none; padding: 6px 10px; border-radius: 8px 8px 0 0; font-size: 0.92rem; }}
-        table.entry-table {{ width: 100%; border-collapse: collapse; }}
+        table.entry-table {{ width: 100%; border-collapse: collapse; table-layout: fixed; }}
         .entry-table th, .entry-table td {{ border: 1px solid #b9c7dc; padding: 0; text-align: left; font-size: 0.8rem; }}
         .entry-table th {{ background: #f1f6fc; padding: 5px 6px; text-align: center; }}
         .entry-table td {{ height: 26px; }}
