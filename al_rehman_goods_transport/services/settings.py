@@ -181,7 +181,119 @@ class SettingsService:
             "media_type": "application/x-sqlite3",
         }
 
+    def create_data_snapshot(self):
+        """Universal backup that works on ANY database backend (including
+        Supabase/Postgres): every table's rows exported to one JSON file."""
+        import base64
+        import json
+        from datetime import date, datetime
+        from decimal import Decimal
+
+        from ..core.database import Base
+
+        def _encode(value):
+            if isinstance(value, (datetime, date)):
+                return value.isoformat()
+            if isinstance(value, Decimal):
+                return float(value)
+            if isinstance(value, (bytes, bytearray, memoryview)):
+                return {"__b64__": base64.b64encode(bytes(value)).decode("ascii")}
+            return str(value)
+
+        bind = self.session.get_bind()
+        tables = {}
+        for table in Base.metadata.sorted_tables:
+            result = self.session.execute(table.select())
+            tables[table.name] = [dict(row._mapping) for row in result]
+
+        payload = {
+            "meta": {
+                "app": "al_rehman_goods_transport",
+                "format": "json-snapshot-v1",
+                "dialect": getattr(bind.dialect, "name", "unknown") if bind else "unknown",
+                "created_at": datetime.now().isoformat(timespec="seconds"),
+            },
+            "tables": tables,
+        }
+        content = json.dumps(payload, default=_encode, ensure_ascii=False).encode("utf-8")
+        filename = f"al_rehman_goods_transport_backup_{datetime.now():%Y%m%d_%H%M%S}.json"
+        return {"filename": filename, "content": content, "media_type": "application/json"}
+
+    def restore_data_snapshot(self, filename, content):
+        """Restore a JSON snapshot produced by create_data_snapshot: replace all
+        rows in every table, in foreign-key-safe order. Works on Postgres + SQLite."""
+        import base64
+        import json
+        from datetime import date, datetime
+
+        from sqlalchemy import Date, DateTime, text
+
+        from ..core.database import Base
+
+        if not content:
+            raise ValidationError("Select a backup file to restore.")
+        if (filename or "").strip() and not filename.lower().endswith(".json"):
+            raise ValidationError("Upload a .json data backup created by this ERP.")
+        try:
+            payload = json.loads(content.decode("utf-8"))
+        except (ValueError, UnicodeDecodeError) as exc:
+            raise ValidationError("Backup file is not valid JSON.") from exc
+
+        tables_data = payload.get("tables")
+        if not isinstance(tables_data, dict):
+            raise ValidationError("Backup file does not contain table data.")
+
+        sorted_tables = list(Base.metadata.sorted_tables)
+        bind = self.session.get_bind()
+        is_postgres = getattr(bind.dialect, "name", "") == "postgresql"
+
+        def _decode_row(table, row):
+            out = {}
+            for column in table.columns:
+                if column.name not in row:
+                    continue
+                value = row[column.name]
+                if value is not None:
+                    if isinstance(value, str) and isinstance(column.type, DateTime):
+                        value = datetime.fromisoformat(value)
+                    elif isinstance(value, str) and isinstance(column.type, Date):
+                        value = date.fromisoformat(value)
+                    elif isinstance(value, dict) and "__b64__" in value:
+                        value = base64.b64decode(value["__b64__"])
+                out[column.name] = value
+            return out
+
+        try:
+            self.session.rollback()
+            for table in reversed(sorted_tables):
+                self.session.execute(table.delete())
+            for table in sorted_tables:
+                rows = tables_data.get(table.name) or []
+                cleaned = [_decode_row(table, row) for row in rows]
+                if cleaned:
+                    self.session.execute(table.insert(), cleaned)
+            if is_postgres:
+                # Re-sync auto-increment sequences to the restored max(id).
+                for table in sorted_tables:
+                    pk_columns = list(table.primary_key.columns)
+                    if len(pk_columns) == 1 and pk_columns[0].name == "id":
+                        self.session.execute(
+                            text(
+                                "SELECT setval(pg_get_serial_sequence(:tbl, 'id'), "
+                                f'GREATEST((SELECT COALESCE(MAX(id), 0) FROM "{table.name}"), 1))'
+                            ),
+                            {"tbl": table.name},
+                        )
+            self.session.commit()
+        except Exception as exc:
+            self.session.rollback()
+            raise ValidationError(f"Restore failed: {exc}") from exc
+
     def restore_backup(self, filename, content):
+        # JSON snapshots are universal (and the only option on Postgres/Supabase).
+        if (filename or "").strip().lower().endswith(".json"):
+            return self.restore_data_snapshot(filename, content)
+
         database_path = self._database_path(required=True)
         uploaded_name = (filename or "").strip()
 

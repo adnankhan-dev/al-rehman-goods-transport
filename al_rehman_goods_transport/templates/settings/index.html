@@ -66,9 +66,38 @@
         </form>
     </div>
 
+    <div class="detail-panel">
+        <h3>Data Backup &amp; Restore</h3>
+        <p class="form-note">Works with the live online (Supabase) database. Downloads every record as a single JSON file you can keep safe and re-import here. Take one before major changes or at month-end.</p>
+        <div class="detail-grid">
+            <div class="detail-panel detail-panel-nested">
+                <h4>Download Data Backup</h4>
+                <p class="form-note mt-2">A complete JSON snapshot of all tables and rows.</p>
+                <div class="form-actions">
+                    <a href="{{ url_for('settings.download_data_backup') }}" class="btn btn-ui-ocean">
+                        <i class="bi bi-download"></i> Download Data Backup (JSON)
+                    </a>
+                </div>
+            </div>
+            <div class="detail-panel detail-panel-nested">
+                <h4>Restore Data Backup</h4>
+                <p class="form-note">Restoring <strong>replaces all current data</strong> with the file's contents. Only use a JSON backup created here.</p>
+                <form method="POST" action="{{ url_for('settings.restore_backup') }}" enctype="multipart/form-data" class="form-stack mt-2">
+                    <div class="form-field">
+                        <label class="form-label" for="data_backup_file">Backup File (.json)</label>
+                        <input type="file" class="form-control" id="data_backup_file" name="backup_file" accept=".json" required>
+                    </div>
+                    <div class="form-actions">
+                        <button type="submit" class="btn btn-ui-danger" onclick="return confirm('This will REPLACE all current data with the uploaded backup. Continue?')">Restore Data Backup</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
     {% if backup_supported %}
     <div class="detail-panel">
-        <h3>Backup &amp; Restore</h3>
+        <h3>Backup &amp; Restore (SQLite file)</h3>
         <div class="detail-grid">
             <div class="detail-panel detail-panel-nested">
                 <h4>Automatic Backups</h4>

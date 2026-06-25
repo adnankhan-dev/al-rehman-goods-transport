@@ -28,6 +28,16 @@ async def download_backup(_request: Request, _current_user=Depends(require_permi
     )
 
 
+@router.get("/settings/backup/download-data", name="settings.download_data_backup")
+async def download_data_backup(_request: Request, _current_user=Depends(require_permission("settings.manage"))):
+    backup = SettingsService().create_data_snapshot()
+    return Response(
+        content=backup["content"],
+        media_type=backup["media_type"],
+        headers={"Content-Disposition": f'attachment; filename="{backup["filename"]}"'},
+    )
+
+
 @router.post("/settings/backup/restore", name="settings.restore_backup")
 async def restore_backup(request: Request, current_user=Depends(require_permission("settings.manage"))):
     form_data = await request.form()
