@@ -3,7 +3,7 @@ from datetime import timedelta
 from sqlalchemy import case, func
 
 from ..extensions import db
-from ..models import Order, Vehicle
+from ..models import Contractor, Order, Site, Vehicle
 
 
 class OrderRepository:
@@ -90,6 +90,14 @@ class OrderRepository:
                     self.session.query(Vehicle.id).filter(Vehicle.owner_id == filters["vehicle_owner_id"])
                 )
             )
+        if filters.get("entered_by_id"):
+            query = query.filter(Order.created_by_id == filters["entered_by_id"])
+        if filters.get("entry_date"):
+            entry_start = filters["entry_date"]
+            query = query.filter(
+                Order.created_at >= entry_start,
+                Order.created_at < (entry_start + timedelta(days=1)),
+            )
         if filters.get("billing_status") == "billed":
             query = query.filter(Order.bill_id.is_not(None))
         elif filters.get("billing_status") == "unbilled":
@@ -100,11 +108,20 @@ class OrderRepository:
             query = query.filter(Order.order_date < (filters["date_to"] + timedelta(days=1)))
         if filters.get("search"):
             search_term = f"%{filters['search']}%"
+            vehicle_ids = self.session.query(Vehicle.id).filter(Vehicle.vehicle_number.ilike(search_term))
+            contractor_ids = self.session.query(Contractor.id).filter(Contractor.name.ilike(search_term))
+            site_ids_q = self.session.query(Site.id).filter(Site.name.ilike(search_term))
             query = query.filter(
                 Order.driver_name.ilike(search_term)
                 | Order.builty_number.ilike(search_term)
                 | Order.receipt_number.ilike(search_term)
                 | Order.material_type.ilike(search_term)
+                | Order.driver_contact.ilike(search_term)
+                | Order.remarks.ilike(search_term)
+                | Order.vehicle_id.in_(vehicle_ids)
+                | Order.contractor_id.in_(contractor_ids)
+                | Order.site_id.in_(site_ids_q)
+                | Order.from_site_id.in_(site_ids_q)
             )
 
         return query.order_by(Order.order_date.desc(), Order.id.desc())

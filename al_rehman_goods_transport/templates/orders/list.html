@@ -6,13 +6,18 @@
 {% block content %}
 {% call form_shell("Orders", None, "Orders", (url_for('orders.create_order') if current_user.can('orders.create') else None), "Add New Order", "btn btn-ui-primary") %}
 <section class="content-stack">
-    <details class="filter-disclosure detail-panel mb-4"{% if filters_active %} open{% endif %}>
-        <summary class="filter-disclosure-summary">
-            <span class="filter-disclosure-title"><i class="bi bi-funnel-fill"></i> Filters</span>
-            {% if filters_active %}<span class="filter-active-pill">Applied</span>{% endif %}
-            <span class="filter-disclosure-hint">tap to show / hide</span>
-        </summary>
-    <form method="GET" class="filter-disclosure-body">
+    <form method="GET" class="mb-4">
+        <div class="orders-search-bar">
+            <input class="form-control orders-search-field" type="text" id="search" name="search" value="{{ filter_state.search }}" placeholder="Search vehicle, driver, builty, receipt, contractor, site, material" aria-label="Search orders">
+            <button type="submit" class="btn btn-sm btn-ui-primary orders-search-btn"><i class="bi bi-search"></i></button>
+        </div>
+        <details class="filter-disclosure detail-panel"{% if filters_active %} open{% endif %}>
+            <summary class="filter-disclosure-summary">
+                <span class="filter-disclosure-title"><i class="bi bi-funnel-fill"></i> Filters</span>
+                {% if filters_active %}<span class="filter-active-pill">Applied</span>{% endif %}
+                <span class="filter-disclosure-hint">tap to show / hide</span>
+            </summary>
+            <div class="filter-disclosure-body">
         <div class="filter-grid filter-grid-four">
             <div class="form-field">
                 <label class="form-label" for="contractor_id">Contractor</label>
@@ -87,12 +92,21 @@
                 <label class="form-label" for="date_to">To Date</label>
                 <input class="form-control" type="date" id="date_to" name="date_to" value="{{ filter_state.date_to.strftime('%Y-%m-%d') if filter_state.date_to else '' }}">
             </div>
-        </div>
-        <div class="filter-grid mt-3">
+            {% if is_admin %}
             <div class="form-field">
-                <label class="form-label" for="search">Search</label>
-                <input class="form-control" type="text" id="search" name="search" value="{{ filter_state.search }}" placeholder="Driver, builty, receipt, or material">
+                <label class="form-label" for="entered_by_id">Entered By</label>
+                <select class="form-select" id="entered_by_id" name="entered_by_id">
+                    <option value="">Anyone</option>
+                    {% for u in filter_options.users %}
+                    <option value="{{ u.id }}" {% if filter_state.entered_by_id == u.id %}selected{% endif %}>{{ u.username }}</option>
+                    {% endfor %}
+                </select>
             </div>
+            <div class="form-field">
+                <label class="form-label" for="entry_date">Entry Date</label>
+                <input class="form-control" type="date" id="entry_date" name="entry_date" value="{{ filter_state.entry_date.strftime('%Y-%m-%d') if filter_state.entry_date else '' }}">
+            </div>
+            {% endif %}
         </div>
         <div class="detail-actions mt-3">
             <button type="submit" class="btn btn-ui-primary">Apply Filters</button>
@@ -106,14 +120,17 @@
                 billing_status=filter_state.billing_status,
                 date_from=filter_state.date_from.strftime('%Y-%m-%d') if filter_state.date_from else '',
                 date_to=filter_state.date_to.strftime('%Y-%m-%d') if filter_state.date_to else '',
+                entered_by_id=filter_state.entered_by_id or '',
+                entry_date=filter_state.entry_date.strftime('%Y-%m-%d') if filter_state.entry_date else '',
                 search=filter_state.search
             ) }}" class="btn btn-ui-neutral table-tools-print" target="_blank" rel="noopener">
                 <i class="bi bi-printer" aria-hidden="true"></i>
                 <span>Print Statement</span>
             </a>
         </div>
+            </div>
+        </details>
     </form>
-    </details>
 
     <div class="collection-overview">
         {{ metric_tile("Total Orders", summary.all_orders_count, "All orders in the system", "primary", "bi bi-truck-fill") }}

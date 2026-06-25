@@ -54,6 +54,9 @@ def _order_filter_state(source):
         "billing_status": (source.get("billing_status") or "").strip(),
         "date_from": _parse_date(source.get("date_from")),
         "date_to": _parse_date(source.get("date_to")),
+        # Admin audit filters: who entered the order and on what entry date.
+        "entered_by_id": _parse_int(source.get("entered_by_id")),
+        "entry_date": _parse_date(source.get("entry_date")),
         "search": (source.get("search") or "").strip(),
     }
 
@@ -66,6 +69,7 @@ def _names_for_ids(options_list, ids):
 def _describe_order_filters(filter_state, options):
     contractor = next((item for item in options["contractors"] if item.id == filter_state["contractor_id"]), None)
     owner = next((item for item in options["vehicle_owners"] if item.id == filter_state["vehicle_owner_id"]), None)
+    entered_by = next((u for u in options.get("users", []) if u.id == filter_state.get("entered_by_id")), None)
     site_names = _names_for_ids(options["sites"], filter_state["site_ids"])
     from_site_names = _names_for_ids(options["from_sites"], filter_state["from_site_ids"])
     material_names = _names_for_ids(options["materials"], filter_state["material_ids"])
@@ -76,6 +80,8 @@ def _describe_order_filters(filter_state, options):
         "from_site_name": ", ".join(from_site_names) if from_site_names else None,
         "material_name": ", ".join(material_names) if material_names else None,
         "vehicle_owner_name": owner.name if owner else None,
+        "entered_by_name": entered_by.username if entered_by else None,
+        "entry_date": filter_state["entry_date"].strftime("%Y-%m-%d") if filter_state.get("entry_date") else None,
         "date_from": filter_state["date_from"].strftime("%Y-%m-%d") if filter_state["date_from"] else None,
         "date_to": filter_state["date_to"].strftime("%Y-%m-%d") if filter_state["date_to"] else None,
     }
@@ -108,9 +114,12 @@ async def orders(request: Request, current_user=Depends(require_permission("orde
     filters_active = any(
         filter_state.get(key) for key in (
             "contractor_id", "site_ids", "from_site_ids", "material_ids",
-            "vehicle_owner_id", "billing_status", "date_from", "date_to", "search",
+            "vehicle_owner_id", "billing_status", "date_from", "date_to",
+            "entered_by_id", "entry_date", "search",
         )
     )
+    # The "Entered by" / "Entry date" audit filters are admin-only.
+    is_admin = bool(getattr(current_user, "can", lambda _c: False)("settings.manage"))
 
     # Profit & Loss summary follows the same access as the Reports P&L: anyone who
     # can view Reports can see it; data-entry users (no reports.view) cannot.
@@ -130,6 +139,7 @@ async def orders(request: Request, current_user=Depends(require_permission("orde
         pnl_filter_label=pnl_filter_label,
         filter_state=filter_state,
         filter_options=filter_options,
+        is_admin=is_admin,
         body_class="orders-list-page",
     )
 
@@ -182,7 +192,7 @@ async def create_order(request: Request, current_user=Depends(require_permission
 
     if request.method == "POST" and form.validate():
         try:
-            order = service.create_order(service.input_from_form(form, form_data))
+            order = service.create_order(service.input_from_form(form, form_data), created_by_id=getattr(current_user, "id", None))
             record_audit(current_user, "create", "order", order.id, f"Order #{order.id} — {order.material_name}, {order.delivered_quantity or order.quantity} {order.unit}")
             flash(request, "Order added successfully!", "success")
             return RedirectResponse(url=str(request.url_for("orders.orders")), status_code=303)

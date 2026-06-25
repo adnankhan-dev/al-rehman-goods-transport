@@ -62,7 +62,26 @@ DATA_BACKFILL_VERSION = "1"
 def init_db():
     Base.metadata.create_all(bind=engine)
     _upgrade_schema()
+    _add_order_entry_audit_columns()
     _run_one_time_backfills()
+
+
+def _add_order_entry_audit_columns():
+    """Add Order.created_at / created_by_id to existing databases.
+
+    Unlike _upgrade_schema (SQLite-only), this runs on Postgres too: create_all
+    does not ALTER an existing 'orders' table, so a live Supabase DB would
+    otherwise be missing these columns. TIMESTAMP/INTEGER are portable across
+    SQLite and Postgres."""
+    inspector = inspect(engine)
+    if "orders" not in inspector.get_table_names():
+        return
+    columns = {column["name"] for column in inspector.get_columns("orders")}
+    with engine.begin() as connection:
+        if "created_at" not in columns:
+            connection.execute(text("ALTER TABLE orders ADD COLUMN created_at TIMESTAMP"))
+        if "created_by_id" not in columns:
+            connection.execute(text("ALTER TABLE orders ADD COLUMN created_by_id INTEGER"))
 
 
 def _get_backfill_version():

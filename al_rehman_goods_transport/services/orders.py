@@ -100,12 +100,15 @@ class OrderService:
     def order_filter_options(self):
         # Filters include archived sites so historical orders can still be filtered;
         # only the entry form (build_form_choices) hides archived sites.
+        from ..models import User
+
         return {
             "contractors": self.lookups.list_contractors(),
             "sites": self.lookups.list_sites(include_archived=True),
             "from_sites": self.lookups.list_sites(business_only=True, include_archived=True),
             "materials": self.lookups.list_materials(),
             "vehicle_owners": self.lookups.list_vehicle_owners(),
+            "users": self.session.query(User).order_by(User.username.asc()).all(),
         }
 
     def build_form_choices(self, contractor_id=None, site_id=None):
@@ -151,8 +154,8 @@ class OrderService:
             remarks=_clean_text(form.remarks.data),
         )
 
-    def create_order(self, order_input: OrderInput):
-        order = Order(order_date=utc_now())
+    def create_order(self, order_input: OrderInput, created_by_id=None):
+        order = Order(order_date=utc_now(), created_at=utc_now(), created_by_id=created_by_id)
         try:
             self._write_order(order, order_input)
             self.orders.add(order)
@@ -485,6 +488,8 @@ class OrderService:
             f"From Site: {filter_state.get('from_site_name')}" if filter_state.get("from_site_name") else None,
             f"Material: {filter_state.get('material_name')}" if filter_state.get("material_name") else None,
             f"Vehicle Owner: {filter_state.get('vehicle_owner_name')}" if filter_state.get("vehicle_owner_name") else None,
+            f"Entered By: {filter_state.get('entered_by_name')}" if filter_state.get("entered_by_name") else None,
+            f"Entry Date: {filter_state.get('entry_date')}" if filter_state.get("entry_date") else None,
             f"Billing: {filter_state.get('billing_status')}" if filter_state.get("billing_status") else None,
             f"From: {filter_state.get('date_from')}" if filter_state.get("date_from") else None,
             f"To: {filter_state.get('date_to')}" if filter_state.get("date_to") else None,
