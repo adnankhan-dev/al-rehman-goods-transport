@@ -205,7 +205,57 @@
         }
 
         .trip-group {
-            margin-bottom: 20px;
+            margin-bottom: 14px;
+        }
+
+        .site-block {
+            border: 1px solid #cbd9ec;
+            border-radius: 12px;
+            padding: 12px 14px;
+            margin-bottom: 22px;
+            background: #fcfdff;
+        }
+        .site-block-head {
+            font-size: 1.08rem;
+            font-weight: 800;
+            color: var(--brand);
+            margin-bottom: 8px;
+        }
+        .site-block-count {
+            font-weight: 600;
+            color: var(--muted);
+            font-size: 0.85rem;
+        }
+        .from-block {
+            border-left: 3px solid var(--soft);
+            padding-left: 12px;
+            margin: 10px 0;
+        }
+        .from-block-head {
+            font-weight: 700;
+            color: #1d4ed8;
+            margin-bottom: 6px;
+            font-size: 0.95rem;
+        }
+        .from-subtotal-line {
+            text-align: right;
+            font-size: 0.84rem;
+            font-weight: 700;
+            color: #334155;
+            background: #eef2f8;
+            border-radius: 6px;
+            padding: 5px 10px;
+            margin-top: 4px;
+        }
+        .to-subtotal-line {
+            text-align: right;
+            font-size: 0.92rem;
+            font-weight: 800;
+            color: var(--brand);
+            background: #dbe7f5;
+            border-radius: 6px;
+            padding: 7px 10px;
+            margin-top: 8px;
         }
 
         .trip-group-label {
@@ -471,89 +521,105 @@
             <section class="statement-section">
                 <h3>Linked Trips</h3>
 
-                {% if orders_grouped %}
-                {% for group in orders_grouped %}
-                <div class="trip-group">
-                    <div class="trip-group-label">
-                        <strong>{{ group.material }}</strong>
-                        <span class="trip-group-count">{{ group.trip_count }} trip{% if group.trip_count != 1 %}s{% endif %}</span>
+                {% if orders_by_site %}
+                {% for to in orders_by_site %}
+                <div class="site-block">
+                    <div class="site-block-head">To Site: {{ to.to_site }}
+                        <span class="site-block-count">({{ to.subtotal.trip_count|int }} trip{% if to.subtotal.trip_count|int != 1 %}s{% endif %})</span>
                     </div>
+                    {% for fg in to.from_groups %}
+                    <div class="from-block">
+                        <div class="from-block-head">From Site: {{ fg.from_site }}</div>
+                        {% for group in fg.material_groups %}
+                        <div class="trip-group">
+                            <div class="trip-group-label">
+                                <strong>{{ group.material }}</strong>
+                                <span class="trip-group-count">{{ group.trip_count|int }} trip{% if group.trip_count|int != 1 %}s{% endif %}</span>
+                            </div>
 
-                    {% if bill.entity_type == 'vehicle_owner' %}
-                    <table class="statement-table">
-                        <thead>
-                            <tr>
-                                <th>Date</th>
-                                <th>Vehicle</th>
-                                <th>Quantity</th>
-                                <th class="align-right">Gross Amt</th>
-                                <th class="align-right">Diesel</th>
-                                <th class="align-right">Advance</th>
-                                <th class="align-right">Net Payable</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {% for order in group.orders %}
-                            <tr>
-                                <td>{{ (order.completion_date or order.order_date).strftime('%Y-%m-%d') }}</td>
-                                <td>{{ order.vehicle.vehicle_number }}</td>
-                                <td>{{ "%.2f"|format(order.delivered_quantity or order.quantity or 0) }} {{ order.unit|upper }}</td>
-                                <td class="align-right">Rs. {{ "%.2f"|format(order.total_vehicle_amount()) }}</td>
-                                <td class="align-right">- Rs. {{ "%.2f"|format(order.total_diesel_amount()) }}</td>
-                                <td class="align-right">- Rs. {{ "%.2f"|format(order.total_advance_amount()) }}</td>
-                                <td class="align-right"><strong>Rs. {{ "%.2f"|format(order.remaining_vehicle_payment()) }}</strong></td>
-                            </tr>
-                            {% endfor %}
-                            <tr class="subtotal-row">
-                                <td colspan="2"><strong>{{ group.material }} Subtotal</strong></td>
-                                <td><strong>{{ "%.2f"|format(group.total_quantity) }} {{ group.unit }}</strong></td>
-                                <td class="align-right"><strong>Rs. {{ "%.2f"|format(group.total_vehicle_amount) }}</strong></td>
-                                <td class="align-right"><strong>- Rs. {{ "%.2f"|format(group.total_diesel_amount) }}</strong></td>
-                                <td class="align-right"><strong>- Rs. {{ "%.2f"|format(group.total_advance_amount) }}</strong></td>
-                                <td class="align-right"><strong>Rs. {{ "%.2f"|format(group.total_net_payable) }}</strong></td>
-                            </tr>
-                        </tbody>
-                    </table>
-                    {% else %}
-                    <table class="statement-table">
-                        <thead>
-                            <tr>
-                                <th>Date</th>
-                                <th>Vehicle</th>
-                                <th>From Site</th>
-                                <th>To Site</th>
-                                <th>Receipt</th>
-                                <th>Quantity</th>
-                                <th class="align-right">Amount</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {% for order in group.orders %}
-                            <tr>
-                                <td>{{ (order.completion_date or order.order_date).strftime('%Y-%m-%d') }}</td>
-                                <td>{{ order.vehicle.vehicle_number }}</td>
-                                <td>{{ order.from_site.name if order.from_site else "-" }}</td>
-                                <td>{{ order.site.name }}</td>
-                                <td>{{ order.receipt_number or "-" }}</td>
-                                <td>{{ "%.2f"|format(order.delivered_quantity or order.quantity or 0) }} {{ order.unit|upper }}</td>
-                                <td class="align-right">Rs. {{ "%.2f"|format(order.billable_amount) }}</td>
-                            </tr>
-                            {% endfor %}
-                            <tr class="subtotal-row">
-                                <td colspan="5"><strong>{{ group.material }} Subtotal</strong></td>
-                                <td><strong>{{ "%.2f"|format(group.total_quantity) }} {{ group.unit }}</strong></td>
-                                <td class="align-right"><strong>Rs. {{ "%.2f"|format(group.total_amount) }}</strong></td>
-                            </tr>
-                            {% if group.contractor_rate %}
-                            <tr class="rate-calc-row">
-                                <td colspan="7" class="align-right" style="font-size:0.82rem;color:#475569;padding:4px 12px 8px;border-bottom:1px solid var(--soft);">
-                                    @ Rs. {{ "%.2f"|format(group.contractor_rate) }}/{{ group.unit }} &times; {{ "%.2f"|format(group.total_quantity) }} {{ group.unit }} = <strong>Rs. {{ "%.2f"|format(group.total_amount) }}</strong>
-                                </td>
-                            </tr>
+                            {% if bill.entity_type == 'vehicle_owner' %}
+                            <table class="statement-table">
+                                <thead>
+                                    <tr>
+                                        <th>Date</th>
+                                        <th>Vehicle</th>
+                                        <th>Quantity</th>
+                                        <th class="align-right">Gross Amt</th>
+                                        <th class="align-right">Diesel</th>
+                                        <th class="align-right">Advance</th>
+                                        <th class="align-right">Net Payable</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for order in group.orders %}
+                                    <tr>
+                                        <td>{{ (order.completion_date or order.order_date).strftime('%Y-%m-%d') }}</td>
+                                        <td>{{ order.vehicle.vehicle_number }}</td>
+                                        <td>{{ "%.2f"|format(order.delivered_quantity or order.quantity or 0) }} {{ order.unit|upper }}</td>
+                                        <td class="align-right">Rs. {{ "%.2f"|format(order.total_vehicle_amount()) }}</td>
+                                        <td class="align-right">- Rs. {{ "%.2f"|format(order.total_diesel_amount()) }}</td>
+                                        <td class="align-right">- Rs. {{ "%.2f"|format(order.total_advance_amount()) }}</td>
+                                        <td class="align-right"><strong>Rs. {{ "%.2f"|format(order.remaining_vehicle_payment()) }}</strong></td>
+                                    </tr>
+                                    {% endfor %}
+                                    <tr class="subtotal-row">
+                                        <td colspan="2"><strong>{{ group.material }} Subtotal</strong></td>
+                                        <td><strong>{{ "%.2f"|format(group.total_quantity) }} {{ group.unit }}</strong></td>
+                                        <td class="align-right"><strong>Rs. {{ "%.2f"|format(group.total_vehicle_amount) }}</strong></td>
+                                        <td class="align-right"><strong>- Rs. {{ "%.2f"|format(group.total_diesel_amount) }}</strong></td>
+                                        <td class="align-right"><strong>- Rs. {{ "%.2f"|format(group.total_advance_amount) }}</strong></td>
+                                        <td class="align-right"><strong>Rs. {{ "%.2f"|format(group.total_net_payable) }}</strong></td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                            {% else %}
+                            <table class="statement-table">
+                                <thead>
+                                    <tr>
+                                        <th>Date</th>
+                                        <th>Vehicle</th>
+                                        <th>Receipt</th>
+                                        <th>Quantity</th>
+                                        <th class="align-right">Amount</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for order in group.orders %}
+                                    <tr>
+                                        <td>{{ (order.completion_date or order.order_date).strftime('%Y-%m-%d') }}</td>
+                                        <td>{{ order.vehicle.vehicle_number }}</td>
+                                        <td>{{ order.receipt_number or "-" }}</td>
+                                        <td>{{ "%.2f"|format(order.delivered_quantity or order.quantity or 0) }} {{ order.unit|upper }}</td>
+                                        <td class="align-right">Rs. {{ "%.2f"|format(order.billable_amount) }}</td>
+                                    </tr>
+                                    {% endfor %}
+                                    <tr class="subtotal-row">
+                                        <td colspan="3"><strong>{{ group.material }} Subtotal</strong></td>
+                                        <td><strong>{{ "%.2f"|format(group.total_quantity) }} {{ group.unit }}</strong></td>
+                                        <td class="align-right"><strong>Rs. {{ "%.2f"|format(group.total_amount) }}</strong></td>
+                                    </tr>
+                                    {% if group.contractor_rate %}
+                                    <tr class="rate-calc-row">
+                                        <td colspan="5" class="align-right" style="font-size:0.82rem;color:#475569;padding:4px 12px 8px;border-bottom:1px solid var(--soft);">
+                                            @ Rs. {{ "%.2f"|format(group.contractor_rate) }}/{{ group.unit }} &times; {{ "%.2f"|format(group.total_quantity) }} {{ group.unit }} = <strong>Rs. {{ "%.2f"|format(group.total_amount) }}</strong>
+                                        </td>
+                                    </tr>
+                                    {% endif %}
+                                </tbody>
+                            </table>
                             {% endif %}
-                        </tbody>
-                    </table>
-                    {% endif %}
+                        </div>
+                        {% endfor %}
+                        <div class="from-subtotal-line">
+                            From {{ fg.from_site }} Subtotal: {{ "%.2f"|format(fg.subtotal.total_quantity) }} qty
+                            {% if bill.entity_type == 'vehicle_owner' %}&middot; Net Payable Rs. {{ "%.2f"|format(fg.subtotal.total_net_payable) }}{% else %}&middot; Amount Rs. {{ "%.2f"|format(fg.subtotal.total_amount) }}{% endif %}
+                        </div>
+                    </div>
+                    {% endfor %}
+                    <div class="to-subtotal-line">
+                        To {{ to.to_site }} Subtotal: {{ "%.2f"|format(to.subtotal.total_quantity) }} qty
+                        {% if bill.entity_type == 'vehicle_owner' %}&middot; Net Payable Rs. {{ "%.2f"|format(to.subtotal.total_net_payable) }}{% else %}&middot; Amount Rs. {{ "%.2f"|format(to.subtotal.total_amount) }}{% endif %}
+                    </div>
                 </div>
                 {% endfor %}
                 {% else %}
@@ -570,11 +636,13 @@
                 {% endif %}
 
                 <div class="material-summary-section">
-                    <h4 class="material-summary-heading">Material Summary</h4>
+                    <h4 class="material-summary-heading">Summary by Site &amp; Material</h4>
                     {% if bill.entity_type == 'vehicle_owner' %}
                     <table class="statement-table">
                         <thead>
                             <tr>
+                                <th>To Site</th>
+                                <th>From Site</th>
                                 <th>Material</th>
                                 <th>Trips</th>
                                 <th>Total Qty</th>
@@ -585,19 +653,21 @@
                             </tr>
                         </thead>
                         <tbody>
-                            {% for group in orders_grouped %}
+                            {% for to in orders_by_site %}{% for fg in to.from_groups %}{% for group in fg.material_groups %}
                             <tr>
+                                <td>{{ to.to_site }}</td>
+                                <td>{{ fg.from_site }}</td>
                                 <td>{{ group.material }}</td>
-                                <td>{{ group.trip_count }}</td>
+                                <td>{{ group.trip_count|int }}</td>
                                 <td>{{ "%.2f"|format(group.total_quantity) }} {{ group.unit }}</td>
                                 <td class="align-right">Rs. {{ "%.2f"|format(group.total_vehicle_amount) }}</td>
                                 <td class="align-right">- Rs. {{ "%.2f"|format(group.total_diesel_amount) }}</td>
                                 <td class="align-right">- Rs. {{ "%.2f"|format(group.total_advance_amount) }}</td>
                                 <td class="align-right">Rs. {{ "%.2f"|format(group.total_net_payable) }}</td>
                             </tr>
-                            {% endfor %}
+                            {% endfor %}{% endfor %}{% endfor %}
                             <tr class="grand-total-row">
-                                <td><strong>Grand Total</strong></td>
+                                <td colspan="3"><strong>Grand Total</strong></td>
                                 <td><strong>{{ linked_trip_count }}</strong></td>
                                 <td>—</td>
                                 <td>—</td>
@@ -611,6 +681,8 @@
                     <table class="statement-table">
                         <thead>
                             <tr>
+                                <th>To Site</th>
+                                <th>From Site</th>
                                 <th>Material</th>
                                 <th>Trips</th>
                                 <th>Rate/Unit</th>
@@ -619,20 +691,20 @@
                             </tr>
                         </thead>
                         <tbody>
-                            {% for item in material_summary %}
+                            {% for to in orders_by_site %}{% for fg in to.from_groups %}{% for group in fg.material_groups %}
                             <tr>
-                                <td>{{ item.material }}</td>
-                                <td>{{ item.trip_count }}</td>
-                                <td>{% if item.contractor_rate %}Rs. {{ "%.2f"|format(item.contractor_rate) }}/{{ item.unit }}{% else %}—{% endif %}</td>
-                                <td>{{ "%.2f"|format(item.total_quantity) }} {{ item.unit }}</td>
-                                <td class="align-right">Rs. {{ "%.2f"|format(item.total_amount) }}</td>
+                                <td>{{ to.to_site }}</td>
+                                <td>{{ fg.from_site }}</td>
+                                <td>{{ group.material }}</td>
+                                <td>{{ group.trip_count|int }}</td>
+                                <td>{% if group.contractor_rate %}Rs. {{ "%.2f"|format(group.contractor_rate) }}/{{ group.unit }}{% else %}—{% endif %}</td>
+                                <td>{{ "%.2f"|format(group.total_quantity) }} {{ group.unit }}</td>
+                                <td class="align-right">Rs. {{ "%.2f"|format(group.total_amount) }}</td>
                             </tr>
-                            {% endfor %}
+                            {% endfor %}{% endfor %}{% endfor %}
                             <tr class="grand-total-row">
-                                <td><strong>Grand Total</strong></td>
+                                <td colspan="5"><strong>Grand Total</strong></td>
                                 <td><strong>{{ linked_trip_count }}</strong></td>
-                                <td>—</td>
-                                <td>—</td>
                                 <td class="align-right"><strong>Rs. {{ "%.2f"|format(bill.total_amount) }}</strong></td>
                             </tr>
                         </tbody>

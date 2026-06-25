@@ -284,6 +284,7 @@ class OrderService:
         payment summaries per contractor, per vehicle owner, and per plant. When
         include_profit is set, a net profit summary (revenue minus vehicle and
         plant costs) is appended."""
+        from .billing import group_orders_by_site_and_material
 
         def money(value):
             return f"Rs. {float(value or 0):,.2f}"
@@ -302,31 +303,13 @@ class OrderService:
         diesel_from = parse_date(filter_state.get("date_from"))
         diesel_to = parse_date(filter_state.get("date_to"))
 
-        # ---- group orders by material + contractor rate (mirrors the bill) ----
-        groups = {}
-        for order in orders:
-            material = order.material_name or "Unknown"
-            unit = (order.unit or "cft").upper()
-            contractor_rate = round(order.contractor_rate, 4) if order.contractor_rate else None
-            key = (material, unit, contractor_rate)
-            group = groups.setdefault(key, {
-                "material": material, "unit": unit, "contractor_rate": contractor_rate,
-                "orders": [], "qty": 0.0, "contractor_amount": 0.0, "vehicle_amount": 0.0,
-            })
-            group["orders"].append(order)
-            group["qty"] += float(order.delivered_quantity or order.quantity or 0)
-            group["contractor_amount"] += float(order.billable_amount)
-            group["vehicle_amount"] += float(order.total_vehicle_amount())
-        group_list = sorted(
-            groups.values(),
-            key=lambda g: (g["material"], g["contractor_rate"] if g["contractor_rate"] is not None else float("inf")),
-        )
+        # ---- nested grouping: To site -> From site -> material (mirrors the bill) ----
+        site_tree = group_orders_by_site_and_material(orders)
 
-        groups_html = ""
-        for group in group_list:
-            unit = group["unit"]
+        def render_material_group(mg):
+            unit = mg["unit"]
             rows = ""
-            for order in group["orders"]:
+            for order in mg["orders"]:
                 qty = float(order.delivered_quantity or order.quantity or 0)
                 owner = order.vehicle.owner_display_name if order.vehicle else "-"
                 vehicle_no = order.vehicle.vehicle_number if order.vehicle else "-"
@@ -338,7 +321,6 @@ class OrderService:
                     f"<br><span class='rate'>@ {rate_str(order.vehicle_rate, unit)}</span></td>"
                     f"<td>{escape(order.contractor.name if order.contractor else '-')}"
                     f"<br><span class='rate'>@ {rate_str(order.contractor_rate, unit)}</span></td>"
-                    f"<td>{escape(order.from_site.name if order.from_site else '-')} &rarr; {escape(order.site.name if order.site else '-')}</td>"
                     f"<td>{escape(order.receipt_number or '-')}</td>"
                     f"<td class='num'>{qty:.2f} {unit}</td>"
                     f"<td class='num'>{money(order.billable_amount)}</td>"
@@ -346,32 +328,61 @@ class OrderService:
                     "</tr>"
                 )
             breakdown = ""
-            if group["contractor_rate"]:
+            if mg["contractor_rate"]:
                 breakdown = (
-                    "<tr class='breakdown'><td colspan='8'>"
-                    f"@ Rs. {group['contractor_rate']:,.2f}/{unit} &times; {group['qty']:.2f} {unit} "
-                    f"= {money(group['contractor_amount'])} (contractor)"
+                    "<tr class='breakdown'><td colspan='7'>"
+                    f"@ Rs. {mg['contractor_rate']:,.2f}/{unit} &times; {mg['total_quantity']:.2f} {unit} "
+                    f"= {money(mg['total_amount'])} (contractor)"
                     "</td></tr>"
                 )
-            groups_html += f"""
+            trips = int(mg["trip_count"])
+            return f"""
                 <div class="group">
-                    <div class="group-head"><strong>{escape(group['material'])}</strong>
-                        <span class="chip">{len(group['orders'])} trip{'s' if len(group['orders']) != 1 else ''}</span></div>
+                    <div class="group-head"><strong>{escape(mg['material'])}</strong>
+                        <span class="chip">{trips} trip{'s' if trips != 1 else ''}</span></div>
                     <table>
                         <thead><tr>
                             <th>Date</th><th>Vehicle / Owner</th><th>Contractor</th>
-                            <th>From &rarr; To</th><th>Receipt</th>
-                            <th class="num">Delivered</th><th class="num">Contractor Amt</th><th class="num">Vehicle Amt</th>
+                            <th>Receipt</th><th class="num">Delivered</th>
+                            <th class="num">Contractor Amt</th><th class="num">Vehicle Amt</th>
                         </tr></thead>
                         <tbody>
                             {rows}
-                            <tr class="subtotal"><td colspan="5"><strong>{escape(group['material'])} Subtotal</strong></td>
-                                <td class="num"><strong>{group['qty']:.2f} {unit}</strong></td>
-                                <td class="num"><strong>{money(group['contractor_amount'])}</strong></td>
-                                <td class="num"><strong>{money(group['vehicle_amount'])}</strong></td></tr>
+                            <tr class="subtotal"><td colspan="4"><strong>{escape(mg['material'])} Subtotal</strong></td>
+                                <td class="num"><strong>{mg['total_quantity']:.2f} {unit}</strong></td>
+                                <td class="num"><strong>{money(mg['total_amount'])}</strong></td>
+                                <td class="num"><strong>{money(mg['total_vehicle_amount'])}</strong></td></tr>
                             {breakdown}
                         </tbody>
                     </table>
+                </div>
+            """
+
+        def subtotal_line(label, totals, css):
+            return (
+                f"<div class='{css}'>{escape(label)} &mdash; "
+                f"{totals['total_quantity']:.2f} qty &middot; Contractor {money(totals['total_amount'])} "
+                f"&middot; Vehicle {money(totals['total_vehicle_amount'])}</div>"
+            )
+
+        groups_html = ""
+        for to_group in site_tree:
+            from_html = ""
+            for from_group in to_group["from_groups"]:
+                materials_html = "".join(render_material_group(mg) for mg in from_group["material_groups"])
+                from_html += f"""
+                    <div class="from-group">
+                        <div class="from-head">From: {escape(from_group['from_site'])}</div>
+                        {materials_html}
+                        {subtotal_line('From ' + from_group['from_site'] + ' Subtotal', from_group['subtotal'], 'from-subtotal')}
+                    </div>
+                """
+            groups_html += f"""
+                <div class="site-group">
+                    <div class="site-head">To: {escape(to_group['to_site'])}
+                        <span class="chip">{int(to_group['subtotal']['trip_count'])} trips</span></div>
+                    {from_html}
+                    {subtotal_line('To ' + to_group['to_site'] + ' Subtotal', to_group['subtotal'], 'to-subtotal')}
                 </div>
             """
 
@@ -510,9 +521,15 @@ class OrderService:
                     td.num, th.num {{ text-align: right; white-space: nowrap; }}
                     .sub {{ color: #64748b; font-size: 0.82em; }}
                     .rate {{ color: #0b6b3a; font-size: 0.8em; font-weight: 600; }}
-                    .group {{ margin-bottom: 22px; }}
-                    .group-head {{ display: flex; align-items: center; gap: 10px; font-size: 1.02rem; margin-top: 10px; }}
+                    .group {{ margin-bottom: 14px; }}
+                    .group-head {{ display: flex; align-items: center; gap: 10px; font-size: 0.95rem; margin-top: 8px; }}
                     .chip {{ background: #e2e8f0; border-radius: 999px; padding: 2px 10px; font-size: 0.74rem; color: #334155; }}
+                    .site-group {{ margin-bottom: 26px; border: 1px solid #cbd9ec; border-radius: 12px; padding: 12px 14px; background: #fcfdff; }}
+                    .site-head {{ font-size: 1.12rem; font-weight: 800; color: #0b2742; display: flex; align-items: center; gap: 10px; }}
+                    .from-group {{ margin: 12px 0 12px 6px; padding-left: 12px; border-left: 3px solid #dbe4f0; }}
+                    .from-head {{ font-size: 0.98rem; font-weight: 700; color: #1d4ed8; margin-bottom: 4px; }}
+                    .from-subtotal {{ text-align: right; font-size: 0.84rem; font-weight: 600; color: #334155; background: #eef2f8; border-radius: 8px; padding: 5px 10px; margin-top: 4px; }}
+                    .to-subtotal {{ text-align: right; font-size: 0.9rem; font-weight: 800; color: #0b2742; background: #dbe7f5; border-radius: 8px; padding: 7px 10px; margin-top: 6px; }}
                     tr.subtotal td {{ background: #f1f5f9; }}
                     tr.breakdown td {{ background: #fff; color: #475569; text-align: right; font-size: 0.8rem; border-top: none; }}
                     .summary {{ margin-top: 28px; }}
@@ -560,7 +577,7 @@ class OrderService:
                     </div>
                     <div class="filters"><strong>Active Filters:</strong> {' | '.join(active_filters) if active_filters else 'None'}</div>
 
-                    <h2 class="section">Trips by Material</h2>
+                    <h2 class="section">Trips by Site</h2>
                     {groups_html}
 
                     <div class="summary">

@@ -31,12 +31,25 @@ def _parse_date(value):
         return None
 
 
+def _parse_int_list(source, *keys):
+    """Collect a list of unique ints from one or more query keys (checkbox groups)."""
+    values = []
+    for key in keys:
+        raw = source.getlist(key) if hasattr(source, "getlist") else [source.get(key)]
+        for item in raw:
+            parsed = _parse_int(item)
+            if parsed is not None and parsed not in values:
+                values.append(parsed)
+    return values
+
+
 def _order_filter_state(source):
     return {
         "contractor_id": _parse_int(source.get("contractor_id")),
-        "site_id": _parse_int(source.get("site_id")),
-        "from_site_id": _parse_int(source.get("from_site_id")),
-        "material_id": _parse_int(source.get("material_id")),
+        # Multi-select checkbox groups (also accept the legacy singular keys).
+        "site_ids": _parse_int_list(source, "site_ids", "site_id"),
+        "from_site_ids": _parse_int_list(source, "from_site_ids", "from_site_id"),
+        "material_ids": _parse_int_list(source, "material_ids", "material_id"),
         "vehicle_owner_id": _parse_int(source.get("vehicle_owner_id")),
         "billing_status": (source.get("billing_status") or "").strip(),
         "date_from": _parse_date(source.get("date_from")),
@@ -45,18 +58,23 @@ def _order_filter_state(source):
     }
 
 
+def _names_for_ids(options_list, ids):
+    by_id = {item.id: item.name for item in options_list}
+    return [by_id[i] for i in ids if i in by_id]
+
+
 def _describe_order_filters(filter_state, options):
     contractor = next((item for item in options["contractors"] if item.id == filter_state["contractor_id"]), None)
-    site = next((item for item in options["sites"] if item.id == filter_state["site_id"]), None)
-    from_site = next((item for item in options["from_sites"] if item.id == filter_state["from_site_id"]), None)
-    material = next((item for item in options["materials"] if item.id == filter_state["material_id"]), None)
     owner = next((item for item in options["vehicle_owners"] if item.id == filter_state["vehicle_owner_id"]), None)
+    site_names = _names_for_ids(options["sites"], filter_state["site_ids"])
+    from_site_names = _names_for_ids(options["from_sites"], filter_state["from_site_ids"])
+    material_names = _names_for_ids(options["materials"], filter_state["material_ids"])
     return {
         **filter_state,
         "contractor_name": contractor.name if contractor else None,
-        "site_name": site.name if site else None,
-        "from_site_name": from_site.name if from_site else None,
-        "material_name": material.name if material else None,
+        "site_name": ", ".join(site_names) if site_names else None,
+        "from_site_name": ", ".join(from_site_names) if from_site_names else None,
+        "material_name": ", ".join(material_names) if material_names else None,
         "vehicle_owner_name": owner.name if owner else None,
         "date_from": filter_state["date_from"].strftime("%Y-%m-%d") if filter_state["date_from"] else None,
         "date_to": filter_state["date_to"].strftime("%Y-%m-%d") if filter_state["date_to"] else None,
@@ -89,7 +107,7 @@ async def orders(request: Request, current_user=Depends(require_permission("orde
     filter_options = service.order_filter_options()
     filters_active = any(
         filter_state.get(key) for key in (
-            "contractor_id", "site_id", "from_site_id", "material_id",
+            "contractor_id", "site_ids", "from_site_ids", "material_ids",
             "vehicle_owner_id", "billing_status", "date_from", "date_to", "search",
         )
     )
@@ -122,11 +140,11 @@ def _pnl_filter_label(filter_state, options):
     if desc.get("contractor_name"):
         parts.append(f"Contractor: {desc['contractor_name']}")
     if desc.get("from_site_name"):
-        parts.append(f"From Site: {desc['from_site_name']}")
+        parts.append(f"From Sites: {desc['from_site_name']}")
     if desc.get("site_name"):
-        parts.append(f"To Site: {desc['site_name']}")
+        parts.append(f"To Sites: {desc['site_name']}")
     if desc.get("material_name"):
-        parts.append(f"Material: {desc['material_name']}")
+        parts.append(f"Materials: {desc['material_name']}")
     if desc.get("vehicle_owner_name"):
         parts.append(f"Vehicle Owner: {desc['vehicle_owner_name']}")
     if filter_state.get("billing_status"):

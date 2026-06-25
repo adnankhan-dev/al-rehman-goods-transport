@@ -18,31 +18,43 @@
                 </select>
             </div>
             <div class="form-field">
-                <label class="form-label" for="site_id">To Site</label>
-                <select class="form-select" id="site_id" name="site_id">
-                    <option value="">All destination sites</option>
+                <label class="form-label">To Site <span class="checkbox-filter-hint">(select one or more)</span></label>
+                <div class="checkbox-filter">
                     {% for site in filter_options.sites %}
-                    <option value="{{ site.id }}" {% if filter_state.site_id == site.id %}selected{% endif %}>{{ site.name }}</option>
+                    <label class="checkbox-filter-item">
+                        <input type="checkbox" name="site_ids" value="{{ site.id }}" {% if site.id in filter_state.site_ids %}checked{% endif %}>
+                        <span>{{ site.name }}</span>
+                    </label>
+                    {% else %}
+                    <span class="checkbox-filter-empty">No sites</span>
                     {% endfor %}
-                </select>
+                </div>
             </div>
             <div class="form-field">
-                <label class="form-label" for="from_site_id">From Site</label>
-                <select class="form-select" id="from_site_id" name="from_site_id">
-                    <option value="">All business sites</option>
+                <label class="form-label">From Site <span class="checkbox-filter-hint">(select one or more)</span></label>
+                <div class="checkbox-filter">
                     {% for site in filter_options.from_sites %}
-                    <option value="{{ site.id }}" {% if filter_state.from_site_id == site.id %}selected{% endif %}>{{ site.name }}</option>
+                    <label class="checkbox-filter-item">
+                        <input type="checkbox" name="from_site_ids" value="{{ site.id }}" {% if site.id in filter_state.from_site_ids %}checked{% endif %}>
+                        <span>{{ site.name }}</span>
+                    </label>
+                    {% else %}
+                    <span class="checkbox-filter-empty">No sites</span>
                     {% endfor %}
-                </select>
+                </div>
             </div>
             <div class="form-field">
-                <label class="form-label" for="material_id">Material</label>
-                <select class="form-select" id="material_id" name="material_id">
-                    <option value="">All materials</option>
+                <label class="form-label">Material <span class="checkbox-filter-hint">(select one or more)</span></label>
+                <div class="checkbox-filter">
                     {% for material in filter_options.materials %}
-                    <option value="{{ material.id }}" {% if filter_state.material_id == material.id %}selected{% endif %}>{{ material.name }}</option>
+                    <label class="checkbox-filter-item">
+                        <input type="checkbox" name="material_ids" value="{{ material.id }}" {% if material.id in filter_state.material_ids %}checked{% endif %}>
+                        <span>{{ material.name }}</span>
+                    </label>
+                    {% else %}
+                    <span class="checkbox-filter-empty">No materials</span>
                     {% endfor %}
-                </select>
+                </div>
             </div>
             <div class="form-field">
                 <label class="form-label" for="vehicle_owner_id">Vehicle Owner</label>
@@ -81,9 +93,9 @@
             <a href="{{ url_for('orders.orders') }}" class="btn btn-ui-neutral">Reset</a>
             <a href="{{ url_for('orders.print_orders',
                 contractor_id=filter_state.contractor_id or '',
-                site_id=filter_state.site_id or '',
-                from_site_id=filter_state.from_site_id or '',
-                material_id=filter_state.material_id or '',
+                site_ids=filter_state.site_ids,
+                from_site_ids=filter_state.from_site_ids,
+                material_ids=filter_state.material_ids,
                 vehicle_owner_id=filter_state.vehicle_owner_id or '',
                 billing_status=filter_state.billing_status,
                 date_from=filter_state.date_from.strftime('%Y-%m-%d') if filter_state.date_from else '',

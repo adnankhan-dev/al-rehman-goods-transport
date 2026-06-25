@@ -81,6 +81,8 @@ class BillingService:
             )
         linked_orders = self._linked_orders_for_bill(bill, orders, diesel_activity_rows, loading_activity_rows, vehicle_owner_activity_rows)
         orders_grouped = self._group_orders_by_material(linked_orders)
+        # Nested To site -> From site -> material grouping for the printed/viewed bill.
+        orders_by_site = group_orders_by_site_and_material(linked_orders)
         material_summary = [
             {
                 "material": g["material"],
@@ -100,6 +102,7 @@ class BillingService:
             "bill": bill,
             "orders": linked_orders,
             "orders_grouped": orders_grouped,
+            "orders_by_site": orders_by_site,
             "material_summary": material_summary,
             "linked_trip_count": len(linked_orders),
             "total_quantity": sum((order.delivered_quantity or order.quantity or 0) for order in linked_orders),
@@ -751,3 +754,86 @@ def refresh_bill_total(bill):
         return None
     bill.total_amount = sum(order.billable_amount for order in bill.orders) if bill.orders else bill.total_amount
     return bill
+
+
+# --- Hierarchical grouping: To site -> From site -> (material, contractor rate) ---
+# Shared by the bill snapshot and the orders print statement so both lay trips
+# out the same way.
+
+_GROUP_TOTAL_KEYS = (
+    "trip_count", "total_quantity", "total_amount", "total_vehicle_amount",
+    "total_diesel_amount", "total_advance_amount", "total_net_payable",
+)
+
+
+def _new_material_group(material, unit, contractor_rate):
+    group = {"material": material, "unit": unit, "contractor_rate": contractor_rate, "orders": []}
+    group.update({key: 0.0 for key in _GROUP_TOTAL_KEYS})
+    return group
+
+
+def _accumulate_material_group(group, order):
+    group["orders"].append(order)
+    group["trip_count"] += 1
+    group["total_quantity"] += float(order.delivered_quantity or order.quantity or 0)
+    group["total_amount"] += float(order.billable_amount)
+    group["total_vehicle_amount"] += float(order.total_vehicle_amount())
+    group["total_diesel_amount"] += float(order.total_diesel_amount())
+    group["total_advance_amount"] += float(order.total_advance_amount())
+    group["total_net_payable"] += float(order.remaining_vehicle_payment())
+
+
+def _empty_totals():
+    return {key: 0.0 for key in _GROUP_TOTAL_KEYS}
+
+
+def _add_totals(acc, group):
+    for key in _GROUP_TOTAL_KEYS:
+        acc[key] += group[key]
+
+
+def _sorted_material_groups(material_groups):
+    return sorted(
+        material_groups.values(),
+        key=lambda g: (g["material"], g["contractor_rate"] if g["contractor_rate"] is not None else float("inf")),
+    )
+
+
+def group_orders_by_site_and_material(orders):
+    """Nest orders by To site, then From site, then material + contractor rate.
+
+    Returns a list of to-site groups, each:
+        {to_site, from_groups: [{from_site, material_groups: [...], subtotal}], subtotal}
+    where every material group is the same shape _group_orders_by_material yields,
+    and subtotals aggregate the totals at the from-site and to-site levels."""
+    to_groups = {}
+    for order in orders:
+        to_name = order.site.name if order.site else "—"
+        to_key = order.site_id if order.site_id is not None else f"name:{to_name}"
+        from_name = order.from_site.name if order.from_site else "—"
+        from_key = order.from_site_id if order.from_site_id is not None else f"name:{from_name}"
+        material = order.material_name or "Unknown"
+        unit = (order.unit or "cft").upper()
+        contractor_rate = round(order.contractor_rate, 4) if order.contractor_rate else None
+        material_key = (material, unit, contractor_rate)
+
+        to_group = to_groups.setdefault(to_key, {"to_site": to_name, "from_groups": {}})
+        from_group = to_group["from_groups"].setdefault(from_key, {"from_site": from_name, "material_groups": {}})
+        material_group = from_group["material_groups"].setdefault(material_key, _new_material_group(material, unit, contractor_rate))
+        _accumulate_material_group(material_group, order)
+
+    result = []
+    for to_group in to_groups.values():
+        from_list = []
+        to_total = _empty_totals()
+        for from_group in to_group["from_groups"].values():
+            material_list = _sorted_material_groups(from_group["material_groups"])
+            from_total = _empty_totals()
+            for material_group in material_list:
+                _add_totals(from_total, material_group)
+                _add_totals(to_total, material_group)
+            from_list.append({"from_site": from_group["from_site"], "material_groups": material_list, "subtotal": from_total})
+        from_list.sort(key=lambda item: item["from_site"])
+        result.append({"to_site": to_group["to_site"], "from_groups": from_list, "subtotal": to_total})
+    result.sort(key=lambda item: item["to_site"])
+    return result

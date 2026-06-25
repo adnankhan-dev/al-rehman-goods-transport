@@ -74,12 +74,16 @@ class OrderRepository:
 
         if filters.get("contractor_id"):
             query = query.filter(Order.contractor_id == filters["contractor_id"])
-        if filters.get("site_id"):
-            query = query.filter(Order.site_id == filters["site_id"])
-        if filters.get("from_site_id"):
-            query = query.filter(Order.from_site_id == filters["from_site_id"])
-        if filters.get("material_id"):
-            query = query.filter(Order.material_id == filters["material_id"])
+        # Multi-select filters (lists). Fall back to the legacy singular keys.
+        site_ids = filters.get("site_ids") or ([filters["site_id"]] if filters.get("site_id") else [])
+        if site_ids:
+            query = query.filter(Order.site_id.in_(site_ids))
+        from_site_ids = filters.get("from_site_ids") or ([filters["from_site_id"]] if filters.get("from_site_id") else [])
+        if from_site_ids:
+            query = query.filter(Order.from_site_id.in_(from_site_ids))
+        material_ids = filters.get("material_ids") or ([filters["material_id"]] if filters.get("material_id") else [])
+        if material_ids:
+            query = query.filter(Order.material_id.in_(material_ids))
         if filters.get("vehicle_owner_id"):
             query = query.filter(
                 Order.vehicle_id.in_(
