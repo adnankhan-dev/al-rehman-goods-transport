@@ -6,7 +6,13 @@
 {% block content %}
 {% call form_shell("Orders", None, "Orders", (url_for('orders.create_order') if current_user.can('orders.create') else None), "Add New Order", "btn btn-ui-primary") %}
 <section class="content-stack">
-    <form method="GET" class="detail-panel mb-4">
+    <details class="filter-disclosure detail-panel mb-4"{% if filters_active %} open{% endif %}>
+        <summary class="filter-disclosure-summary">
+            <span class="filter-disclosure-title"><i class="bi bi-funnel-fill"></i> Filters</span>
+            {% if filters_active %}<span class="filter-active-pill">Applied</span>{% endif %}
+            <span class="filter-disclosure-hint">tap to show / hide</span>
+        </summary>
+    <form method="GET" class="filter-disclosure-body">
         <div class="filter-grid filter-grid-four">
             <div class="form-field">
                 <label class="form-label" for="contractor_id">Contractor</label>
@@ -107,6 +113,7 @@
             </a>
         </div>
     </form>
+    </details>
 
     <div class="collection-overview">
         {{ metric_tile("Total Orders", summary.all_orders_count, "All orders in the system", "primary", "bi bi-truck-fill") }}

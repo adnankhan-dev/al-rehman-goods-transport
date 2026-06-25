@@ -39,6 +39,33 @@
         </div>
     </div>
 
+    <div class="detail-panel">
+        <h3>Manual Entry Form</h3>
+        <p class="form-note">Print a blank monthly form (Al Rehman Goods Transport letterhead) for a contractor — one dated section per day with 20 rows to record trips by hand.</p>
+        <form method="GET" action="{{ url_for('settings.manual_entry_form') }}" target="_blank" rel="noopener" class="form-stack mt-2">
+            <div class="form-grid-two">
+                <div class="form-field">
+                    <label class="form-label" for="me_contractor_id">Contractor</label>
+                    <select class="form-select" id="me_contractor_id" name="contractor_id">
+                        <option value="">All Contractors</option>
+                        {% for contractor in contractors %}
+                        <option value="{{ contractor.id }}">{{ contractor.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="form-field">
+                    <label class="form-label" for="me_month">Month</label>
+                    <input class="form-control" type="month" id="me_month" name="month" value="{{ current_month }}" required>
+                </div>
+            </div>
+            <div class="form-actions">
+                <button type="submit" class="btn btn-ui-primary">
+                    <i class="bi bi-printer"></i> Print Manual Entry Form
+                </button>
+            </div>
+        </form>
+    </div>
+
     {% if backup_supported %}
     <div class="detail-panel">
         <h3>Backup &amp; Restore</h3>

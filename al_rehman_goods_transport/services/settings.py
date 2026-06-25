@@ -49,6 +49,101 @@ class SettingsService:
             "diesel_rate_display": f"{rate:.2f}" if rate is not None else "Not set",
         }
 
+    def build_manual_entry_form_html(self, contractor_name, year, month, rows_per_day=20):
+        """Printable blank monthly form for manual (handwritten) trip entries.
+
+        One dated section per day of the chosen month, each with `rows_per_day`
+        empty rows ready to fill in by hand and enter into the system later."""
+        import calendar
+        from datetime import date
+        from html import escape
+        from io import StringIO
+
+        columns = [
+            "#", "Vehicle No.", "From", "To", "Delivered Qty", "Vehicle Rate",
+            "Contractor Rate", "Plant", "Plant Receipt", "Loading Qty",
+        ]
+        header_cells = "".join(f"<th>{escape(c)}</th>" for c in columns)
+        days_in_month = calendar.monthrange(year, month)[1]
+        month_label = date(year, month, 1).strftime("%B %Y")
+
+        empty_row_template = (
+            "<tr>" + "".join(
+                (f"<td class='rownum'>{{n}}</td>" if i == 0 else "<td></td>")
+                for i in range(len(columns))
+            ) + "</tr>"
+        )
+
+        day_blocks = StringIO()
+        for day in range(1, days_in_month + 1):
+            current = date(year, month, day)
+            rows = "".join(empty_row_template.format(n=n) for n in range(1, rows_per_day + 1))
+            day_blocks.write(
+                f"""
+                <div class="day-block">
+                    <div class="day-head">{current.strftime('%A, %d %b %Y')}</div>
+                    <table class="entry-table">
+                        <thead><tr>{header_cells}</tr></thead>
+                        <tbody>{rows}</tbody>
+                    </table>
+                </div>
+                """
+            )
+
+        return f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>Manual Entry Form — {escape(contractor_name)} — {escape(month_label)}</title>
+    <style>
+        body {{ font-family: 'Segoe UI', Arial, sans-serif; margin: 0; padding: 22px; color: #0f172a; }}
+        .toolbar {{ display: flex; justify-content: flex-end; margin-bottom: 12px; }}
+        .button {{ border: none; border-radius: 999px; background: #0f172a; color: #fff; padding: 9px 16px; cursor: pointer; font: inherit; }}
+        .letterhead {{ display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; border-bottom: 2px solid #0b2742; padding-bottom: 12px; margin-bottom: 12px; }}
+        .letterhead-name {{ font-size: 1.5rem; font-weight: 800; color: #0b2742; }}
+        .letterhead-line {{ color: #475569; font-size: 0.82rem; line-height: 1.5; }}
+        .meta {{ display: flex; gap: 28px; font-size: 0.95rem; margin-bottom: 14px; }}
+        .meta strong {{ color: #0b2742; }}
+        .day-block {{ margin-bottom: 16px; }}
+        .day-head {{ font-weight: 800; color: #0b2742; background: #e8f0fb; border: 1px solid #cbd9ec; border-bottom: none; padding: 6px 10px; border-radius: 8px 8px 0 0; font-size: 0.92rem; }}
+        table.entry-table {{ width: 100%; border-collapse: collapse; }}
+        .entry-table th, .entry-table td {{ border: 1px solid #b9c7dc; padding: 0; text-align: left; font-size: 0.8rem; }}
+        .entry-table th {{ background: #f1f6fc; padding: 5px 6px; text-align: center; }}
+        .entry-table td {{ height: 26px; }}
+        .entry-table td.rownum {{ text-align: center; color: #94a3b8; width: 26px; font-size: 0.72rem; }}
+        @media print {{
+            body {{ padding: 0; }}
+            .toolbar {{ display: none; }}
+            tr {{ break-inside: avoid; }}
+            .day-head {{ break-after: avoid; }}
+            .day-block {{ break-inside: avoid; }}
+            thead {{ display: table-header-group; }}
+        }}
+    </style>
+</head>
+<body>
+    <div class="toolbar"><button type="button" class="button" onclick="window.print()">Print / Save PDF</button></div>
+    <header class="letterhead">
+        <div>
+            <div class="letterhead-name">Al Rehman Goods Transport</div>
+            <div class="letterhead-line">Bahtr Mor Wah Cantt</div>
+            <div class="letterhead-line">Contact No. Ahsan Niazi 0307-2342827</div>
+            <div class="letterhead-line">Inam Khan - 0301-5749086</div>
+        </div>
+        <div style="text-align:right;">
+            <div style="text-transform:uppercase;letter-spacing:0.14em;color:#d97706;font-size:0.74rem;font-weight:700;">Manual Entry Form</div>
+            <div class="letterhead-line">Printed: {datetime.now().strftime('%d %b %Y')}</div>
+        </div>
+    </header>
+    <div class="meta">
+        <div><strong>Contractor:</strong> {escape(contractor_name)}</div>
+        <div><strong>Month:</strong> {escape(month_label)}</div>
+    </div>
+    {day_blocks.getvalue()}
+</body>
+</html>
+"""
+
     def backup_supported(self):
         return self._database_path() is not None
 

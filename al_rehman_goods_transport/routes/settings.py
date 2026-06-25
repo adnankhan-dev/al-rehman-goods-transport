@@ -1,11 +1,14 @@
-from fastapi import APIRouter, Depends, Request
-from fastapi.responses import RedirectResponse, Response
+from datetime import datetime
+
+from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi.responses import HTMLResponse, RedirectResponse, Response
 
 from ..core.auth import require_any_permission, require_permission
 from ..core.permissions import PERMISSION_GROUPS, ROLE_DEFINITIONS, role_permissions
 from ..core.flash import flash
 from ..core.templating import render_template
 from ..forms import SettingsForm
+from ..repositories import LookupRepository
 from ..services import NotFoundError, ReconciliationService, SettingsService, UserManagementService, ValidationError
 from ..services.audit import list_audit_entries, record_audit
 from ..services.backups import automatic_backup_status, run_automatic_backup
@@ -88,8 +91,28 @@ async def settings_dashboard(request: Request, current_user=Depends(require_any_
         backup_supported=service.backup_supported(),
         database_filename=service.database_filename(),
         auto_backup=automatic_backup_status(),
+        contractors=LookupRepository().list_contractors(),
+        current_month=datetime.now().strftime("%Y-%m"),
         **service.diesel_rate_context(),
     )
+
+
+@router.get("/settings/manual-entry-form", name="settings.manual_entry_form")
+async def manual_entry_form(request: Request, _current_user=Depends(require_any_permission("orders.view", "settings.view"))):
+    contractor_id = request.query_params.get("contractor_id")
+    month_value = (request.query_params.get("month") or "").strip()  # expected "YYYY-MM"
+    try:
+        year, month = (int(part) for part in month_value.split("-", 1))
+        datetime(year, month, 1)
+    except (ValueError, TypeError):
+        raise HTTPException(status_code=400, detail="Select a valid month (YYYY-MM).")
+
+    lookups = LookupRepository()
+    contractor = next((c for c in lookups.list_contractors() if str(c.id) == str(contractor_id)), None)
+    contractor_name = contractor.name if contractor else "All Contractors"
+
+    html = SettingsService().build_manual_entry_form_html(contractor_name, year, month)
+    return HTMLResponse(content=html)
 
 
 @router.post("/settings/backup/run-now", name="settings.run_backup_now")
