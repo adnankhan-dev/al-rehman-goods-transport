@@ -1,9 +1,11 @@
 from datetime import date as date_type
 
+from sqlalchemy import func
+
 from ..extensions import db
 from ..models import DieselEntry, Order, PetrolPump, Vehicle, VehicleOwner
 from ..repositories import LookupRepository
-from .exceptions import NotFoundError
+from .exceptions import NotFoundError, ValidationError
 
 
 def _safe(value):
@@ -34,7 +36,22 @@ class DieselService:
             raise NotFoundError("Diesel entry not found.")
         return entry
 
+    def _assert_unique_receipt(self, receipt_number, exclude_id=None):
+        """Reject a receipt number already used by another diesel entry
+        (case-insensitive). Blank receipt numbers are allowed and not checked."""
+        normalized = (receipt_number or "").strip()
+        if not normalized:
+            return
+        query = self.session.query(DieselEntry.id).filter(
+            func.lower(DieselEntry.receipt_number) == normalized.lower()
+        )
+        if exclude_id is not None:
+            query = query.filter(DieselEntry.id != exclude_id)
+        if self.session.query(query.exists()).scalar():
+            raise ValidationError(f"Receipt number '{normalized}' is already used by another diesel entry.")
+
     def create_entry(self, data):
+        self._assert_unique_receipt(data.get("receipt_number"))
         entry = DieselEntry(
             vehicle_id=data["vehicle_id"],
             petrol_pump_id=data.get("petrol_pump_id") or None,
@@ -62,6 +79,7 @@ class DieselService:
 
     def update_entry(self, entry_id, data):
         entry = self.get_entry(entry_id)
+        self._assert_unique_receipt(data.get("receipt_number"), exclude_id=entry_id)
 
         old_pump_id = entry.petrol_pump_id if entry.balance_applied else None
         old_pump_amount = _safe(entry.amount) if entry.balance_applied else 0.0
