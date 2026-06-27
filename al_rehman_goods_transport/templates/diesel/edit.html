@@ -79,13 +79,7 @@
         }
     }
 
-    litresInput.addEventListener('input', function () {
-        const rate = effectiveRate();
-        const litres = parseFloat(this.value);
-        if (rate && !isNaN(litres) && litres > 0) {
-            amountInput.value = (litres * rate).toFixed(2);
-        }
-    });
+    // Litres is a reference derived from the amount; it never changes the amount.
     amountInput.addEventListener('input', recalcFromAmount);
     if (pumpInput) pumpInput.addEventListener('change', recalcFromAmount);
     if (dateInput) dateInput.addEventListener('change', recalcFromAmount);

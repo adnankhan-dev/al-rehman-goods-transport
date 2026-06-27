@@ -22,7 +22,7 @@
     <section class="form-section-panel">
         <div class="form-section-heading">
             <h3>2. Fuel Details</h3>
-            <p class="form-section-copy">Enter the amount paid and litres filled. Petrol pump is required. Receipt number is optional but recommended for records.{% if diesel_rate %} Entering litres or amount will auto-calculate the other field at <strong>Rs. {{ "%.2f"|format(diesel_rate) }}/L</strong>.{% endif %}</p>
+            <p class="form-section-copy">Enter the amount paid (the price you dealt on). Petrol pump is required. Receipt number is optional but recommended. Litres is just a reference figure derived from the amount &mdash; it never changes the amount, and changing the rate later never changes amounts already saved.</p>
         </div>
         <div class="form-grid-two">
             {{ render_field(form.amount, placeholder="e.g. 5000.00", help_text="Total amount paid for diesel.") }}
@@ -85,6 +85,9 @@
         return globalRate || null;
     }
 
+    // We deal on the amount (price). Litres is only a reference derived from the
+    // amount — it is never used to change the amount. Editing litres does nothing
+    // to the price.
     function recalcFromAmount() {
         const rate = effectiveRate();
         const amount = parseFloat(amountInput.value);
@@ -93,15 +96,8 @@
         }
     }
 
-    litresInput.addEventListener('input', function () {
-        const rate = effectiveRate();
-        const litres = parseFloat(this.value);
-        if (rate && !isNaN(litres) && litres > 0) {
-            amountInput.value = (litres * rate).toFixed(2);
-        }
-    });
     amountInput.addEventListener('input', recalcFromAmount);
-    // Recompute when the pump or date changes (the applicable rate may differ).
+    // Recompute the reference litres when the pump or date changes (rate may differ).
     if (pumpInput) pumpInput.addEventListener('change', recalcFromAmount);
     if (dateInput) dateInput.addEventListener('change', recalcFromAmount);
 })();
