@@ -7,7 +7,7 @@ from .finance_summary import balance_summary
 from .transactions import TransactionService
 
 # Transaction types that bring money INTO the company
-_INFLOW_TX_TYPES = {"contractor_receipt", "amount_received", "initial_balance"}
+_INFLOW_TX_TYPES = {"contractor_receipt", "vehicle_owner_receipt", "amount_received", "initial_balance"}
 # Transaction types that take money OUT of the company
 _OUTFLOW_TX_TYPES = {
     "vehicle_owner_payment", "plant_payment", "petrol_pump_payment",

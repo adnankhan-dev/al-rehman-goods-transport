@@ -29,3 +29,7 @@ al_rehman_goods_transport/tests/_test_app.db
 .DS_Store
 Thumbs.db
 .claude/
+
+# Local DB backups (contain sensitive data) - never commit
+alrehman_supabase_backup_*.json
+alrehman_*backup*.json

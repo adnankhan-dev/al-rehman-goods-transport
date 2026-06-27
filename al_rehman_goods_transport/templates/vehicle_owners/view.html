@@ -129,6 +129,18 @@
         </div>
     </div>
     <div class="detail-panel">
+        <h3><i class="bi bi-calculator"></i> Settlement Summary</h3>
+        <div class="detail-list">
+            {{ detail_value("Net Payable from Trips", "Rs. " ~ ("%.0f"|format(owner_summary.net_payable))) }}
+            {{ detail_value("Less: Fuel-Log Diesel", "− Rs. " ~ ("%.0f"|format(owner_summary.standalone_diesel))) }}
+            {{ detail_value("Less: Payments Made", "− Rs. " ~ ("%.0f"|format(owner_summary.payments))) }}
+            {{ detail_value("Outstanding Payable", "Rs. " ~ ("%.0f"|format(owner_summary.outstanding))) }}
+        </div>
+        {% if standalone_diesel_rows %}
+        <p class="form-note mt-2">Fuel-Log diesel deductions ({{ standalone_diesel_rows|length }}): standalone fuel entries for this owner's vehicles are deducted above.</p>
+        {% endif %}
+    </div>
+    <div class="detail-panel">
         <h3><i class="bi bi-arrow-left-right"></i> Related Transactions</h3>
         <div class="table-responsive">
             <table class="table table-striped detail-table">

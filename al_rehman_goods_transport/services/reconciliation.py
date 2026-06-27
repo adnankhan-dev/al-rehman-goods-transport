@@ -19,7 +19,7 @@ from .order_finance import contractor_receivable, remaining_vehicle_payment
 
 TOLERANCE = 0.01
 
-_COMPANY_INFLOW_TYPES = ("initial_balance", "contractor_receipt")
+_COMPANY_INFLOW_TYPES = ("initial_balance", "contractor_receipt", "vehicle_owner_receipt")
 _COMPANY_OUTFLOW_TYPES = (
     "vehicle_payment",
     "vehicle_owner_payment",
@@ -93,6 +93,8 @@ class ReconciliationService:
                 pump_expected[tx.petrol_pump_id or tx.entity_id] -= amount
             elif tx.type == "vehicle_owner_payment":
                 owner_expected[tx.vehicle_owner_id or tx.entity_id] -= amount
+            elif tx.type == "vehicle_owner_receipt":
+                owner_expected[tx.vehicle_owner_id or tx.entity_id] += amount
             elif tx.type == "vehicle_payment":
                 vehicle = vehicles.get(tx.vehicle_id or tx.entity_id)
                 if vehicle and vehicle.owner_id:

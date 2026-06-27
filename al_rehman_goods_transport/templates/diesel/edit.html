@@ -48,24 +48,47 @@
 {% block page_scripts %}
 <script>
 (function () {
-    const rate = {{ diesel_rate or 'null' }};
-    if (!rate) return;
+    const globalRate = {{ diesel_rate or 'null' }};
+    const pumpPrices = {{ pump_prices | tojson }};
     const litresInput = document.getElementById('litres');
     const amountInput = document.getElementById('amount');
+    const pumpInput = document.getElementById('petrol_pump_id');
+    const dateInput = document.getElementById('date');
     if (!litresInput || !amountInput) return;
 
+    function effectiveRate() {
+        const pumpId = pumpInput && pumpInput.value;
+        const dateStr = dateInput && dateInput.value;
+        if (pumpId && dateStr && pumpPrices[pumpId]) {
+            let best = null;
+            for (const p of pumpPrices[pumpId]) {
+                if (dateStr >= p.from && (!p.to || dateStr <= p.to)) {
+                    if (!best || p.from > best.from) best = p;
+                }
+            }
+            if (best) return best.price;
+        }
+        return globalRate || null;
+    }
+
+    function recalcFromAmount() {
+        const rate = effectiveRate();
+        const amount = parseFloat(amountInput.value);
+        if (rate && !isNaN(amount) && amount > 0) {
+            litresInput.value = (amount / rate).toFixed(4);
+        }
+    }
+
     litresInput.addEventListener('input', function () {
+        const rate = effectiveRate();
         const litres = parseFloat(this.value);
-        if (!isNaN(litres) && litres > 0) {
+        if (rate && !isNaN(litres) && litres > 0) {
             amountInput.value = (litres * rate).toFixed(2);
         }
     });
-    amountInput.addEventListener('input', function () {
-        const amount = parseFloat(this.value);
-        if (!isNaN(amount) && amount > 0 && rate > 0) {
-            litresInput.value = (amount / rate).toFixed(4);
-        }
-    });
+    amountInput.addEventListener('input', recalcFromAmount);
+    if (pumpInput) pumpInput.addEventListener('change', recalcFromAmount);
+    if (dateInput) dateInput.addEventListener('change', recalcFromAmount);
 })();
 </script>
 {% endblock %}

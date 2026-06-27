@@ -47,7 +47,7 @@
         function toggleFields() {
             const type = typeSelect.value;
             vehicleField.style.display = (type === 'vehicle_payment') ? 'block' : 'none';
-            vehicleOwnerField.style.display = (type === 'vehicle_owner_payment') ? 'block' : 'none';
+            vehicleOwnerField.style.display = (type === 'vehicle_owner_payment' || type === 'vehicle_owner_receipt') ? 'block' : 'none';
             contractorField.style.display = (type === 'contractor_receipt') ? 'block' : 'none';
             plantField.style.display = (type === 'plant_payment') ? 'block' : 'none';
             petrolPumpField.style.display = (type === 'petrol_pump_payment') ? 'block' : 'none';

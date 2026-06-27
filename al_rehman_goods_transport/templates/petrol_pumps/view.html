@@ -36,6 +36,62 @@
         </div>
     </div>
     <div class="detail-panel">
+        <h3><i class="bi bi-cash-coin"></i> Fuel Prices (per litre)</h3>
+        <p class="form-note">Set this pump's diesel price for a date range. The price effective on a fuel entry's date is used to auto-calculate litres from the amount in the Fuel Log.</p>
+        {% if current_user.can('petrol_pumps.edit') %}
+        <form method="POST" action="{{ url_for('petrol_pumps.add_price', id=petrol_pump.id) }}" class="filter-grid filter-grid-four" style="align-items:flex-end;margin-bottom:1rem;">
+            <div class="form-field">
+                <label class="form-label" for="price">Price / Litre (Rs.)</label>
+                <input class="form-control" type="number" step="0.01" min="0" id="price" name="price" required>
+            </div>
+            <div class="form-field">
+                <label class="form-label" for="effective_from">Effective From</label>
+                <input class="form-control" type="date" id="effective_from" name="effective_from" required>
+            </div>
+            <div class="form-field">
+                <label class="form-label" for="effective_to">Effective To <span class="checkbox-filter-hint">(blank = ongoing)</span></label>
+                <input class="form-control" type="date" id="effective_to" name="effective_to">
+            </div>
+            <div class="form-field">
+                <button type="submit" class="btn btn-ui-primary"><i class="bi bi-plus-lg"></i> Add Price</button>
+            </div>
+        </form>
+        {% endif %}
+        <div class="table-responsive">
+            <table class="table align-middle detail-table">
+                <thead>
+                    <tr>
+                        <th>Price / Litre</th>
+                        <th>Effective From</th>
+                        <th>Effective To</th>
+                        <th>Status</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for p in prices %}
+                    <tr>
+                        <td><strong>Rs. {{ "%.2f"|format(p.price) }}</strong></td>
+                        <td>{{ p.effective_from.strftime('%Y-%m-%d') }}</td>
+                        <td>{{ p.effective_to.strftime('%Y-%m-%d') if p.effective_to else "Ongoing" }}</td>
+                        <td>{% if p.is_currently_active %}<span class="status-badge status-badge-completed">Active</span>{% else %}<span class="status-badge status-badge-pending">Inactive</span>{% endif %}</td>
+                        <td>
+                            {% if current_user.can('petrol_pumps.edit') %}
+                            <form method="POST" action="{{ url_for('petrol_pumps.delete_price', id=petrol_pump.id, price_id=p.id) }}" class="d-inline">
+                                <button type="submit" class="btn btn-sm btn-ui-danger" onclick="return confirm('Remove this price?')" title="Remove"><i class="bi bi-trash"></i></button>
+                            </form>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr><td colspan="5" class="text-center text-muted py-3">No fuel prices set. The global diesel rate (Settings) will be used.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="detail-panel">
         <h3><i class="bi bi-droplet-fill"></i> Recent Diesel Entries</h3>
         <div class="table-responsive">
             <table class="table align-middle detail-table">

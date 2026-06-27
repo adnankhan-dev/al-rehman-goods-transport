@@ -13,6 +13,7 @@ from .order_diesel_entry import OrderDieselEntry
 from .order_loading import OrderLoading
 from .plant import Plant
 from .petrol_pump import PetrolPump
+from .petrol_pump_price import PetrolPumpPrice
 from .site import Site
 from .transaction import Transaction
 from .user import User
@@ -37,6 +38,7 @@ __all__ = [
     "Transaction",
     "Material",
     "PetrolPump",
+    "PetrolPumpPrice",
     "DieselEntry",
     "FinancialEntity",
     "FinancialEntityTransaction",

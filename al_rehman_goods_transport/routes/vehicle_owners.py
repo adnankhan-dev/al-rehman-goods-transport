@@ -8,7 +8,7 @@ from ..core.flash import flash
 from ..core.templating import render_template
 from ..extensions import db
 from ..forms import VehicleOwnerForm
-from ..models import VehicleOwner
+from ..models import DieselEntry, VehicleOwner
 
 
 router = APIRouter()
@@ -21,15 +21,49 @@ def _owner_orders_and_summary(owner):
         reverse=True,
     )
     completed = [o for o in related_orders if (o.status or "").lower() == "completed"]
+
+    gross = sum(o.total_vehicle_amount() for o in completed)
+    order_diesel = sum(o.total_diesel_amount() for o in completed)
+    advance = sum(o.total_advance_amount() for o in completed)
+    net_payable = sum(o.remaining_vehicle_payment() for o in completed)
+
+    # Standalone Fuel-Log diesel for this owner's vehicles (separate from the
+    # order-attached diesel above) — also a deduction from what we owe the owner.
+    vehicle_ids = [vehicle.id for vehicle in owner.vehicles]
+    standalone_diesel_rows = []
+    if vehicle_ids:
+        standalone_diesel_rows = (
+            db.session.query(DieselEntry)
+            .filter(DieselEntry.vehicle_id.in_(vehicle_ids))
+            .order_by(DieselEntry.date.desc(), DieselEntry.id.desc())
+            .all()
+        )
+    standalone_diesel = sum(float(entry.amount or 0) for entry in standalone_diesel_rows)
+
+    # Payments already made to the owner (transaction mode).
+    payments = sorted(
+        [t for t in owner.transactions if t.type == "vehicle_owner_payment"],
+        key=lambda t: (t.date, t.id),
+        reverse=True,
+    )
+    payments_total = sum(float(t.amount or 0) for t in payments)
+
+    net_after_diesel = net_payable - standalone_diesel
+    outstanding = net_after_diesel - payments_total
+
     summary = {
         "trips": len(completed),
         "total_delivered": sum((o.delivered_quantity or o.quantity or 0) for o in completed),
-        "gross": sum(o.total_vehicle_amount() for o in completed),
-        "diesel": sum(o.total_diesel_amount() for o in completed),
-        "advance": sum(o.total_advance_amount() for o in completed),
-        "net_payable": sum(o.remaining_vehicle_payment() for o in completed),
+        "gross": gross,
+        "diesel": order_diesel,
+        "standalone_diesel": standalone_diesel,
+        "advance": advance,
+        "net_payable": net_payable,
+        "net_after_diesel": net_after_diesel,
+        "payments": payments_total,
+        "outstanding": outstanding,
     }
-    return related_orders, summary
+    return related_orders, summary, standalone_diesel_rows, payments
 
 
 @router.get("/vehicle-owners", name="vehicle_owners.index")
@@ -60,7 +94,7 @@ async def view_vehicle_owner(id: int, request: Request, _current_user=Depends(re
     owner = db.session.get(VehicleOwner, id)
     if owner is None:
         raise HTTPException(status_code=404, detail="Vehicle owner not found")
-    related_orders, owner_summary = _owner_orders_and_summary(owner)
+    related_orders, owner_summary, standalone_diesel_rows, payments = _owner_orders_and_summary(owner)
     related_transactions = sorted(owner.transactions, key=lambda transaction: (transaction.date, transaction.id), reverse=True)
     return render_template(
         request,
@@ -68,6 +102,8 @@ async def view_vehicle_owner(id: int, request: Request, _current_user=Depends(re
         owner=owner,
         related_orders=related_orders,
         owner_summary=owner_summary,
+        standalone_diesel_rows=standalone_diesel_rows,
+        payments=payments,
         related_transactions=related_transactions,
     )
 
@@ -77,7 +113,7 @@ async def print_vehicle_owner(id: int, request: Request, _current_user=Depends(r
     owner = db.session.get(VehicleOwner, id)
     if owner is None:
         raise HTTPException(status_code=404, detail="Vehicle owner not found")
-    related_orders, owner_summary = _owner_orders_and_summary(owner)
+    related_orders, owner_summary, standalone_diesel_rows, payments = _owner_orders_and_summary(owner)
     return render_template(
         request,
         "vehicle_owners/print.html",
@@ -85,6 +121,8 @@ async def print_vehicle_owner(id: int, request: Request, _current_user=Depends(r
         owner=owner,
         related_orders=related_orders,
         owner_summary=owner_summary,
+        standalone_diesel_rows=standalone_diesel_rows,
+        payments=payments,
         now=datetime.now(),
     )
 

@@ -84,6 +84,7 @@ class SiteForm(BaseForm):
 class TransactionForm(BaseForm):
     type = SelectField('Transaction Type', choices=[
         ('vehicle_owner_payment', 'Payment to Vehicle Owner'),
+        ('vehicle_owner_receipt', 'Receipt from Vehicle Owner'),
         ('contractor_receipt', 'Receipt from Contractor'),
         ('plant_payment', 'Payment to Plant'),
         ('petrol_pump_payment', 'Payment to Petrol Pump'),

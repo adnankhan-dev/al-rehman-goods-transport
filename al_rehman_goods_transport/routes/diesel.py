@@ -10,6 +10,7 @@ from ..forms import DieselEntryForm
 from ..models import PetrolPump, Vehicle, VehicleOwner
 from ..services import DieselService, NotFoundError
 from ..services.audit import record_audit
+from ..services.petrol_pumps import PetrolPumpService
 from ..services.settings import SettingsService
 from ..utils.pagination import paginate_list, parse_page
 
@@ -109,7 +110,7 @@ async def diesel_create(request: Request, current_user=Depends(require_permissio
             except Exception as exc:
                 flash(request, str(exc), "danger")
 
-    return render_template(request, "diesel/create.html", form=form, diesel_rate=diesel_rate)
+    return render_template(request, "diesel/create.html", form=form, diesel_rate=diesel_rate, pump_prices=PetrolPumpService().prices_map())
 
 
 @router.get("/diesel/{id}", name="diesel.view")
@@ -148,7 +149,7 @@ async def diesel_edit(id: int, request: Request, current_user=Depends(require_pe
             except Exception as exc:
                 flash(request, str(exc), "danger")
 
-    return render_template(request, "diesel/edit.html", form=form, entry=entry, diesel_rate=diesel_rate)
+    return render_template(request, "diesel/edit.html", form=form, entry=entry, diesel_rate=diesel_rate, pump_prices=PetrolPumpService().prices_map())
 
 
 @router.post("/diesel/{id}/delete", name="diesel.delete")

@@ -59,6 +59,45 @@ async def edit_petrol_pump(id: int, request: Request, _current_user=Depends(requ
     return render_template(request, "petrol_pumps/edit.html", form=form, petrol_pump=petrol_pump)
 
 
+@router.post("/petrol-pumps/{id}/prices/add", name="petrol_pumps.add_price")
+async def add_petrol_pump_price(id: int, request: Request, _current_user=Depends(require_permission("petrol_pumps.edit"))):
+    from datetime import datetime as _dt
+
+    def _date(value):
+        try:
+            return _dt.strptime((value or "").strip(), "%Y-%m-%d").date()
+        except (ValueError, TypeError):
+            return None
+
+    form_data = await request.form()
+    service = PetrolPumpService()
+    try:
+        service.add_price(
+            id,
+            form_data.get("price"),
+            _date(form_data.get("effective_from")),
+            _date(form_data.get("effective_to")),
+            form_data.get("notes"),
+        )
+        flash(request, "Fuel price saved.", "success")
+    except NotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValidationError as exc:
+        flash(request, str(exc), "warning")
+    return RedirectResponse(url=str(request.url_for("petrol_pumps.view_petrol_pump", id=id)), status_code=303)
+
+
+@router.post("/petrol-pumps/{id}/prices/{price_id}/delete", name="petrol_pumps.delete_price")
+async def delete_petrol_pump_price(id: int, price_id: int, request: Request, _current_user=Depends(require_permission("petrol_pumps.edit"))):
+    service = PetrolPumpService()
+    try:
+        service.delete_price(id, price_id)
+        flash(request, "Fuel price removed.", "success")
+    except NotFoundError as exc:
+        flash(request, str(exc), "warning")
+    return RedirectResponse(url=str(request.url_for("petrol_pumps.view_petrol_pump", id=id)), status_code=303)
+
+
 @router.post("/petrol-pumps/{id}/delete", name="petrol_pumps.delete_petrol_pump")
 async def delete_petrol_pump(id: int, request: Request, _current_user=Depends(require_permission("petrol_pumps.delete"))):
     service = PetrolPumpService()

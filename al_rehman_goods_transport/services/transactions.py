@@ -175,6 +175,7 @@ class TransactionService:
         required_entity_fields = {
             "vehicle_payment": transaction_input.vehicle_id,
             "vehicle_owner_payment": transaction_input.vehicle_owner_id,
+            "vehicle_owner_receipt": transaction_input.vehicle_owner_id,
             "contractor_receipt": transaction_input.contractor_id,
             "plant_payment": transaction_input.plant_id,
             "petrol_pump_payment": transaction_input.petrol_pump_id,
@@ -212,6 +213,14 @@ class TransactionService:
             company.balance = _safe_amount(company.balance) - amount
             self._update_entity_balance("vehicle_owner", transaction.vehicle_owner_id or transaction.entity_id, -amount)
             self._distribute_owner_payment(transaction.vehicle_owner_id or transaction.entity_id, amount)
+            return
+
+        if transaction.type == "vehicle_owner_receipt":
+            # Owner pays us cash (e.g. for fuel taken from our pump). Money in,
+            # and the owner's balance moves up (their negative balance reduces).
+            company.balance = _safe_amount(company.balance) + amount
+            self._update_entity_balance("vehicle_owner", transaction.vehicle_owner_id or transaction.entity_id, amount)
+            self._distribute_owner_receipt(transaction.vehicle_owner_id or transaction.entity_id, amount)
             return
 
         if transaction.type == "plant_payment":
@@ -285,6 +294,32 @@ class TransactionService:
                 reduction = round(amount * (_safe_amount(vehicle.balance) / total_balance), 2)
                 remaining_amount -= reduction
             vehicle.balance = _safe_amount(vehicle.balance) - reduction
+
+    def _distribute_owner_receipt(self, owner_id, amount):
+        """Owner paid us: credit it back to the vehicles that owe us (negative
+        balances), proportionally, moving them toward zero."""
+        if not owner_id:
+            return
+
+        from ..models import VehicleOwner
+
+        owner = self.session.get(VehicleOwner, owner_id)
+        if owner is None or not owner.vehicles:
+            return
+
+        negative_vehicles = [vehicle for vehicle in owner.vehicles if _safe_amount(vehicle.balance) < 0]
+        total_owed = sum(-_safe_amount(vehicle.balance) for vehicle in negative_vehicles)
+        if total_owed <= 0:
+            return
+
+        remaining_amount = amount
+        for index, vehicle in enumerate(negative_vehicles):
+            if index == len(negative_vehicles) - 1:
+                addition = remaining_amount
+            else:
+                addition = round(amount * (-_safe_amount(vehicle.balance) / total_owed), 2)
+                remaining_amount -= addition
+            vehicle.balance = _safe_amount(vehicle.balance) + addition
 
 
 def apply_transaction_effect(company, transaction):

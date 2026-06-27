@@ -71,8 +71,8 @@
             <section class="meta">
                 <div class="meta-card"><span>Trips</span><strong>{{ owner_summary.trips }}</strong></div>
                 <div class="meta-card"><span>Gross Amount</span><strong>Rs. {{ "{:,.0f}".format(owner_summary.gross) }}</strong></div>
-                <div class="meta-card"><span>Deductions (Diesel + Advance)</span><strong>Rs. {{ "{:,.0f}".format(owner_summary.diesel + owner_summary.advance) }}</strong></div>
-                <div class="meta-card"><span>Net Payable</span><strong>Rs. {{ "{:,.0f}".format(owner_summary.net_payable) }}</strong></div>
+                <div class="meta-card"><span>Deductions (Diesel + Advance)</span><strong>Rs. {{ "{:,.0f}".format(owner_summary.diesel + owner_summary.standalone_diesel + owner_summary.advance) }}</strong></div>
+                <div class="meta-card"><span>Outstanding</span><strong>Rs. {{ "{:,.0f}".format(owner_summary.outstanding) }}</strong></div>
             </section>
 
             <table>
@@ -129,8 +129,60 @@
                 {% endif %}
             </table>
 
+            {% if standalone_diesel_rows %}
+            <h3 style="margin:22px 0 8px;color:var(--brand);font-size:1rem;">Fuel-Log Diesel Deductions</h3>
+            <table>
+                <thead>
+                    <tr><th>Date</th><th>Vehicle</th><th>Pump</th><th>Receipt</th><th class="num">Litres</th><th class="num">Amount</th></tr>
+                </thead>
+                <tbody>
+                    {% for entry in standalone_diesel_rows %}
+                    <tr>
+                        <td>{{ entry.date.strftime('%d-%m-%Y') }}</td>
+                        <td>{{ entry.vehicle.vehicle_number if entry.vehicle else '-' }}</td>
+                        <td>{{ entry.petrol_pump.name if entry.petrol_pump else '-' }}</td>
+                        <td>{{ entry.receipt_number or '-' }}</td>
+                        <td class="num">{{ "%.2f"|format(entry.litres) if entry.litres else '—' }}</td>
+                        <td class="num">− {{ "{:,.0f}".format(entry.amount or 0) }}</td>
+                    </tr>
+                    {% endfor %}
+                    <tr class="subtotal"><td colspan="5">Total Fuel-Log Diesel</td><td class="num">− {{ "{:,.0f}".format(owner_summary.standalone_diesel) }}</td></tr>
+                </tbody>
+            </table>
+            {% endif %}
+
+            {% if payments %}
+            <h3 style="margin:22px 0 8px;color:var(--brand);font-size:1rem;">Payments Made to Owner</h3>
+            <table>
+                <thead>
+                    <tr><th>Date</th><th>Method</th><th>Reference</th><th class="num">Amount</th></tr>
+                </thead>
+                <tbody>
+                    {% for t in payments %}
+                    <tr>
+                        <td>{{ t.date.strftime('%d-%m-%Y') }}</td>
+                        <td>{{ (t.payment_method or '-')|title }}</td>
+                        <td>{{ t.reference or '-' }}</td>
+                        <td class="num">− {{ "{:,.0f}".format(t.amount or 0) }}</td>
+                    </tr>
+                    {% endfor %}
+                    <tr class="subtotal"><td colspan="3">Total Paid</td><td class="num">− {{ "{:,.0f}".format(owner_summary.payments) }}</td></tr>
+                </tbody>
+            </table>
+            {% endif %}
+
+            <h3 style="margin:22px 0 8px;color:var(--brand);font-size:1rem;">Settlement</h3>
+            <table>
+                <tbody>
+                    <tr><td>Net payable from trips (gross − order diesel − advance)</td><td class="num">Rs. {{ "{:,.0f}".format(owner_summary.net_payable) }}</td></tr>
+                    <tr><td>Less: Fuel-Log diesel</td><td class="num">− Rs. {{ "{:,.0f}".format(owner_summary.standalone_diesel) }}</td></tr>
+                    <tr><td>Less: payments already made</td><td class="num">− Rs. {{ "{:,.0f}".format(owner_summary.payments) }}</td></tr>
+                    <tr class="grand"><td>Outstanding payable to {{ owner.name }}</td><td class="num">Rs. {{ "{:,.0f}".format(owner_summary.outstanding) }}</td></tr>
+                </tbody>
+            </table>
+
             <footer class="footer">
-                This statement reflects completed trips for the owner's vehicles. Net payable = gross vehicle amount − diesel − advances already given.
+                This statement reflects completed trips for the owner's vehicles. Outstanding = gross vehicle amount − order diesel − advances − Fuel-Log diesel − payments already made.
             </footer>
         </div>
     </div>

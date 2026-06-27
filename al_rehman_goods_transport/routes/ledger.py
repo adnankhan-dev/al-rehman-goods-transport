@@ -61,7 +61,7 @@ def _transaction_input_from_form(form):
     if form.type.data == "vehicle_payment":
         entity_type = "vehicle"
         entity_id = form.vehicle_id.data if form.vehicle_id.data != 0 else None
-    elif form.type.data == "vehicle_owner_payment":
+    elif form.type.data in ("vehicle_owner_payment", "vehicle_owner_receipt"):
         entity_type = "vehicle_owner"
         entity_id = form.vehicle_owner_id.data if form.vehicle_owner_id.data != 0 else None
     elif form.type.data == "contractor_receipt":

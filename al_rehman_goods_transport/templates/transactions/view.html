@@ -7,6 +7,7 @@
 {% set transaction_type_label %}
     {% if transaction.type == 'vehicle_payment' %}Payment to Vehicle
     {% elif transaction.type == 'vehicle_owner_payment' %}Payment to Vehicle Owner
+    {% elif transaction.type == 'vehicle_owner_receipt' %}Receipt from Vehicle Owner
     {% elif transaction.type == 'contractor_receipt' %}Receipt from Contractor
     {% elif transaction.type == 'plant_payment' %}Payment to Plant
     {% elif transaction.type == 'petrol_pump_payment' %}Payment to Petrol Pump
