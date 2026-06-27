@@ -86,6 +86,37 @@ class PetrolPumpService:
             "balance_summary": balance_summary("petrol_pump", petrol_pump.balance),
         }
 
+    def statement(self, petrol_pump_id):
+        """Printable statement: diesel taken from the pump, payments made to it,
+        and the net payable (what we still owe the pump)."""
+        pump = self.get_petrol_pump(petrol_pump_id)
+        order_diesel_rows = self.billing.petrol_pump_activity_rows(pump.id)
+        standalone_rows = (
+            DieselEntry.query
+            .filter(DieselEntry.petrol_pump_id == pump.id)
+            .order_by(DieselEntry.date.desc(), DieselEntry.id.desc())
+            .all()
+        )
+        transactions = self.transactions.transactions_for_entity("petrol_pump", pump.id)
+        payments = [t for t in transactions if t.type == "petrol_pump_payment"]
+
+        order_diesel_total = sum(float(getattr(r, "amount", 0) or 0) for r in order_diesel_rows)
+        standalone_total = sum(float(r.amount or 0) for r in standalone_rows)
+        total_diesel = order_diesel_total + standalone_total
+        payments_total = sum(float(t.amount or 0) for t in payments)
+        net_payable = total_diesel - payments_total
+
+        return {
+            "petrol_pump": pump,
+            "order_diesel_rows": order_diesel_rows,
+            "standalone_rows": standalone_rows,
+            "payments": payments,
+            "total_diesel": total_diesel,
+            "payments_total": payments_total,
+            "net_payable": net_payable,
+            "balance_summary": balance_summary("petrol_pump", pump.balance),
+        }
+
     # --- Per-pump diesel prices (date-range) ---
 
     def list_prices(self, petrol_pump_id):

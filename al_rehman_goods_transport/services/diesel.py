@@ -17,7 +17,13 @@ class DieselService:
         self.session = session or db.session
 
     def list_entries(self, vehicle_id=None, pump_id=None, owner_id=None, date_from=None, date_to=None):
-        q = DieselEntry.query.order_by(DieselEntry.date.desc(), DieselEntry.id.desc())
+        # Sorted by receipt number (blanks last), then date.
+        q = DieselEntry.query.order_by(
+            DieselEntry.receipt_number.is_(None),
+            DieselEntry.receipt_number.asc(),
+            DieselEntry.date.desc(),
+            DieselEntry.id.desc(),
+        )
         if vehicle_id:
             q = q.filter(DieselEntry.vehicle_id == vehicle_id)
         if pump_id:

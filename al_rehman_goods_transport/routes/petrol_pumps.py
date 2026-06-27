@@ -39,6 +39,17 @@ async def view_petrol_pump(id: int, request: Request, _current_user=Depends(requ
     return render_template(request, "petrol_pumps/view.html", **context)
 
 
+@router.get("/petrol-pumps/{id}/print", name="petrol_pumps.print_statement")
+async def print_petrol_pump(id: int, request: Request, _current_user=Depends(require_permission("petrol_pumps.view"))):
+    from datetime import datetime
+
+    try:
+        context = PetrolPumpService().statement(id)
+    except NotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return render_template(request, "petrol_pumps/print.html", show_nav=False, now=datetime.now(), **context)
+
+
 @router.api_route("/petrol-pumps/{id}/edit", methods=["GET", "POST"], name="petrol_pumps.edit_petrol_pump")
 async def edit_petrol_pump(id: int, request: Request, _current_user=Depends(require_permission("petrol_pumps.edit"))):
     service = PetrolPumpService()

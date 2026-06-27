@@ -110,9 +110,19 @@
                     {% endfor %}
                 </tbody>
                 <tfoot>
-                    <tr class="bill-grand-total-row">
-                        <td colspan="5"><strong>Total</strong></td>
+                    <tr class="material-subtotal-row">
+                        <td colspan="5"><strong>Total Diesel</strong></td>
                         <td><strong>Rs. {{ "%.2f"|format(standalone_diesel_rows | sum(attribute='amount')) }}</strong></td>
+                        <td></td>
+                    </tr>
+                    <tr>
+                        <td colspan="5" class="text-end">Less: Payments Made</td>
+                        <td>− Rs. {{ "%.2f"|format(bill.settled_amount or 0) }}</td>
+                        <td></td>
+                    </tr>
+                    <tr class="bill-grand-total-row">
+                        <td colspan="5"><strong>Net Payable</strong></td>
+                        <td><strong>Rs. {{ "%.2f"|format(bill.outstanding_amount) }}</strong></td>
                         <td></td>
                     </tr>
                 </tfoot>
