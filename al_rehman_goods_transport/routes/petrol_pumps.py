@@ -21,7 +21,7 @@ async def create_petrol_pump(request: Request, _current_user=Depends(require_per
     form = PetrolPumpForm(await request.form() if request.method == "POST" else None)
     if request.method == "POST" and form.validate():
         try:
-            PetrolPumpService().create_petrol_pump(form.name.data)
+            PetrolPumpService().create_petrol_pump(form.name.data, opening_balance=form.opening_balance.data)
             flash(request, "Petrol pump created successfully!", "success")
             return RedirectResponse(url=str(request.url_for("petrol_pumps.index")), status_code=303)
         except (ConflictError, ValidationError) as exc:
@@ -43,8 +43,16 @@ async def view_petrol_pump(id: int, request: Request, _current_user=Depends(requ
 async def print_petrol_pump(id: int, request: Request, _current_user=Depends(require_permission("petrol_pumps.view"))):
     from datetime import datetime
 
+    def _date(value):
+        try:
+            return datetime.strptime((value or "").strip(), "%Y-%m-%d").date()
+        except (ValueError, TypeError):
+            return None
+
+    date_from = _date(request.query_params.get("date_from"))
+    date_to = _date(request.query_params.get("date_to"))
     try:
-        context = PetrolPumpService().statement(id)
+        context = PetrolPumpService().statement(id, date_from=date_from, date_to=date_to)
     except NotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     return render_template(request, "petrol_pumps/print.html", show_nav=False, now=datetime.now(), **context)

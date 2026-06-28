@@ -44,6 +44,7 @@ def _transaction_input_from_form(form):
     return TransactionInput(
         type=form.type.data,
         amount=form.amount.data,
+        date=form.date.data,
         description=form.description.data,
         payment_method=form.payment_method.data,
         reference=form.reference.data,

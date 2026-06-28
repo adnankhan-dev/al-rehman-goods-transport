@@ -321,6 +321,7 @@
         <input type="hidden" name="mode" value="transaction">
         <div class="form-grid-two">
             {{ render_field(transaction_form.type) }}
+            {{ render_field(transaction_form.date) }}
             {{ render_field(transaction_form.amount) }}
             {{ render_field(transaction_form.payment_method) }}
             {{ render_field(transaction_form.reference, placeholder="Reference") }}

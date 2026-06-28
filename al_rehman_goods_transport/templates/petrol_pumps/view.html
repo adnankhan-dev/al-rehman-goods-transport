@@ -28,11 +28,29 @@
             {% endif %}
         </div>
     </div>
+    <div class="detail-panel">
+        <h3><i class="bi bi-printer"></i> Print Statement</h3>
+        <p class="form-note">Leave dates blank for a full all-time statement, or set a month range for a monthly statement (Previous Balance carries forward everything before the start date).</p>
+        <form method="GET" action="{{ url_for('petrol_pumps.print_statement', id=petrol_pump.id) }}" target="_blank" rel="noopener" class="filter-grid filter-grid-four" style="align-items:flex-end;">
+            <div class="form-field">
+                <label class="form-label" for="st_from">From</label>
+                <input class="form-control" type="date" id="st_from" name="date_from">
+            </div>
+            <div class="form-field">
+                <label class="form-label" for="st_to">To</label>
+                <input class="form-control" type="date" id="st_to" name="date_to">
+            </div>
+            <div class="form-field">
+                <button type="submit" class="btn btn-ui-midnight"><i class="bi bi-printer"></i> Print Statement</button>
+            </div>
+        </form>
+    </div>
     <div class="detail-grid">
         <div class="detail-panel">
             <h3><i class="bi bi-fuel-pump-fill"></i> Pump Information</h3>
             <div class="detail-list">
                 {{ detail_value("Name", petrol_pump.name) }}
+                {{ detail_value("Previous (Opening) Balance", "Rs. " ~ ("%.2f"|format(petrol_pump.opening_balance or 0))) }}
                 {{ detail_value("Balance Position", balance_summary.label ~ " - Rs. " ~ ("%.2f"|format(balance_summary.amount))) }}
                 {{ detail_value("Diesel Entries", petrol_pump.diesel_entries|length) }}
             </div>

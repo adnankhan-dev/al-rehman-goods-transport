@@ -22,14 +22,19 @@ class PetrolPumpService:
             raise NotFoundError("Petrol pump not found.")
         return petrol_pump
 
-    def create_petrol_pump(self, name):
+    def create_petrol_pump(self, name, opening_balance=None):
         normalized_name = (name or "").strip()
         if not normalized_name:
             raise ValidationError("Petrol pump name is required.")
         if self.petrol_pumps.get_by_name(normalized_name):
             raise ConflictError("Petrol pump name already exists.")
 
-        petrol_pump = PetrolPump(name=normalized_name)
+        try:
+            opening = float(opening_balance or 0)
+        except (TypeError, ValueError):
+            raise ValidationError("Opening balance must be a number.")
+        # A new pump starts with its balance equal to the opening balance owed.
+        petrol_pump = PetrolPump(name=normalized_name, opening_balance=opening, balance=opening)
         try:
             self.petrol_pumps.add(petrol_pump)
             self.session.commit()
@@ -98,26 +103,62 @@ class PetrolPumpService:
             "balance_summary": balance_summary("petrol_pump", petrol_pump.balance),
         }
 
-    def statement(self, petrol_pump_id):
+    def statement(self, petrol_pump_id, date_from=None, date_to=None):
         """Printable statement: diesel taken from the pump, payments made to it,
-        and the net payable (what we still owe the pump)."""
+        and the net payable. When a date range is given it behaves as a running
+        statement: 'Previous Balance' carries the opening balance plus all
+        activity before the period, and the body shows only the period."""
         pump = self.get_petrol_pump(petrol_pump_id)
-        order_diesel_rows = self.billing.petrol_pump_activity_rows(pump.id)
-        standalone_rows = (
+        order_diesel_all = self.billing.petrol_pump_activity_rows(pump.id)
+        standalone_all = (
             DieselEntry.query
             .filter(DieselEntry.petrol_pump_id == pump.id)
             .order_by(DieselEntry.date.desc(), DieselEntry.id.desc())
             .all()
         )
-        transactions = self.transactions.transactions_for_entity("petrol_pump", pump.id)
-        payments = [t for t in transactions if t.type == "petrol_pump_payment"]
+        payments_all = [
+            t for t in self.transactions.transactions_for_entity("petrol_pump", pump.id)
+            if t.type == "petrol_pump_payment"
+        ]
 
-        order_diesel_total = sum(float(getattr(r, "amount", 0) or 0) for r in order_diesel_rows)
-        standalone_total = sum(float(r.amount or 0) for r in standalone_rows)
-        total_diesel = order_diesel_total + standalone_total
+        def _as_date(value):
+            return value.date() if hasattr(value, "date") else value
+
+        def order_date(row):
+            order = getattr(row, "order", None)
+            raw = (order.completion_date or order.order_date) if order else None
+            return _as_date(raw) if raw else None
+
+        def in_period(day):
+            if day is None:
+                return date_from is None and date_to is None
+            if date_from and day < date_from:
+                return False
+            if date_to and day > date_to:
+                return False
+            return True
+
+        def before_period(day):
+            return date_from is not None and day is not None and day < date_from
+
+        standalone_rows = [r for r in standalone_all if in_period(_as_date(r.date))]
+        order_diesel_rows = [r for r in order_diesel_all if in_period(order_date(r))]
+        payments = [t for t in payments_all if in_period(_as_date(t.date))]
+
+        period_diesel = (
+            sum(float(r.amount or 0) for r in standalone_rows)
+            + sum(float(getattr(r, "amount", 0) or 0) for r in order_diesel_rows)
+        )
         payments_total = sum(float(t.amount or 0) for t in payments)
-        opening_balance = float(pump.opening_balance or 0)
-        net_payable = opening_balance + total_diesel - payments_total
+
+        prior_diesel = (
+            sum(float(r.amount or 0) for r in standalone_all if before_period(_as_date(r.date)))
+            + sum(float(getattr(r, "amount", 0) or 0) for r in order_diesel_all if before_period(order_date(r)))
+        )
+        prior_payments = sum(float(t.amount or 0) for t in payments_all if before_period(_as_date(t.date)))
+        opening_balance = float(pump.opening_balance or 0) + prior_diesel - prior_payments
+
+        net_payable = opening_balance + period_diesel - payments_total
 
         return {
             "petrol_pump": pump,
@@ -125,9 +166,13 @@ class PetrolPumpService:
             "standalone_rows": standalone_rows,
             "payments": payments,
             "opening_balance": opening_balance,
-            "total_diesel": total_diesel,
+            "total_diesel": period_diesel,
             "payments_total": payments_total,
             "net_payable": net_payable,
+            "period": {
+                "date_from": date_from.strftime("%Y-%m-%d") if date_from else None,
+                "date_to": date_to.strftime("%Y-%m-%d") if date_to else None,
+            },
             "balance_summary": balance_summary("petrol_pump", pump.balance),
         }
 

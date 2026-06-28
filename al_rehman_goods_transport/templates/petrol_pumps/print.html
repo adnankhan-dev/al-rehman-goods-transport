@@ -54,6 +54,9 @@
                 </div>
                 <div style="text-align:right;">
                     <div class="company-line"><strong style="font-size:1.05rem;color:var(--ink);">{{ petrol_pump.name }}</strong></div>
+                    {% if period and (period.date_from or period.date_to) %}
+                    <div class="company-line">Period: {{ period.date_from or 'start' }} to {{ period.date_to or 'date' }}</div>
+                    {% endif %}
                     <div class="company-line">Printed: {{ now.strftime('%d %b %Y') }}</div>
                 </div>
             </header>

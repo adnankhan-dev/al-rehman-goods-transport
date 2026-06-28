@@ -92,6 +92,7 @@ class TransactionForm(BaseForm):
         ('other_expense', 'Other Expense'),  # Add this line
         ('initial_balance', 'Initial Balance')
     ], validators=[DataRequired()])
+    date = DateField('Transaction Date', format='%Y-%m-%d', validators=[Optional()], render_kw={"type": "date"})
     amount = FloatField('Amount', validators=[DataRequired()])
     description = TextAreaField('Description', validators=[Optional()])
     payment_method = SelectField('Payment Method', choices=[

@@ -77,6 +77,7 @@ def _transaction_input_from_form(form):
     return TransactionInput(
         type=form.type.data,
         amount=form.amount.data,
+        date=form.date.data,
         description=form.description.data,
         payment_method=form.payment_method.data,
         reference=form.reference.data,
@@ -133,6 +134,8 @@ async def create_entry(request: Request, current_user=Depends(require_permission
 
     transaction_form = TransactionForm(form_data if mode == "transaction" else None)
     _populate_transaction_choices(transaction_form, context)
+    if request.method == "GET" and not transaction_form.date.data:
+        transaction_form.date.data = datetime.now().date()
 
     if request.method == "POST":
         if mode == "transaction" and transaction_form.validate():

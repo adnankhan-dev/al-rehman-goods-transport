@@ -9,6 +9,7 @@
     {{ form.hidden_tag() }}
     <div class="form-grid-two">
         {{ render_field(form.type) }}
+        {{ render_field(form.date) }}
         {{ render_field(form.amount) }}
         {{ render_field(form.payment_method) }}
         {{ render_field(form.reference, placeholder="Reference") }}

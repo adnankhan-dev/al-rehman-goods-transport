@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from datetime import datetime, time
 
 from ..extensions import db
 from ..models import Transaction, Vehicle
@@ -30,6 +31,7 @@ class TransactionInput:
     contractor_id: int | None = None
     plant_id: int | None = None
     petrol_pump_id: int | None = None
+    date: object | None = None
     is_system_generated: bool = False
     apply_financial_effect: bool = True
 
@@ -150,7 +152,7 @@ class TransactionService:
         return self.transactions.list_for_entity(entity_type, entity_id)
 
     def _transaction_kwargs(self, transaction_input: TransactionInput):
-        return {
+        kwargs = {
             "type": transaction_input.type,
             "amount": _safe_amount(transaction_input.amount),
             "description": transaction_input.description,
@@ -166,6 +168,15 @@ class TransactionService:
             "petrol_pump_id": transaction_input.petrol_pump_id,
             "is_system_generated": transaction_input.is_system_generated,
         }
+        # Only set date when supplied (else the model default `now` applies on
+        # create, and the existing date is kept on update). A plain date is
+        # promoted to a datetime so it stores correctly on Postgres.
+        if transaction_input.date is not None:
+            value = transaction_input.date
+            if not isinstance(value, datetime):
+                value = datetime.combine(value, time.min)
+            kwargs["date"] = value
+        return kwargs
 
     def _validate_transaction_input(self, transaction_input: TransactionInput):
         amount = _safe_amount(transaction_input.amount)
