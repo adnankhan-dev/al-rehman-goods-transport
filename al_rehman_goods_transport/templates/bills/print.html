@@ -500,9 +500,10 @@
                     <h4 class="material-summary-heading">Summary</h4>
                     <table class="statement-table">
                         <tbody>
-                            <tr><td>Total Diesel ({{ standalone_diesel_rows|length }} entries)</td><td class="align-right">Rs. {{ "%.2f"|format(bill.total_amount) }}</td></tr>
-                            <tr><td>Less: Payments Made</td><td class="align-right">− Rs. {{ "%.2f"|format(bill.settled_amount or 0) }}</td></tr>
-                            <tr class="grand-total-row"><td><strong>Net Payable</strong></td><td class="align-right"><strong>Rs. {{ "%.2f"|format(bill.outstanding_amount) }}</strong></td></tr>
+                            <tr><td>Previous Balance</td><td class="align-right">Rs. {{ "%.2f"|format(pump_opening_balance) }}</td></tr>
+                            <tr><td>Add: Diesel this bill ({{ standalone_diesel_rows|length }} entries)</td><td class="align-right">+ Rs. {{ "%.2f"|format(bill.total_amount) }}</td></tr>
+                            <tr><td>Less: Payments Made</td><td class="align-right">− Rs. {{ "%.2f"|format(pump_period_payments) }}</td></tr>
+                            <tr class="grand-total-row"><td><strong>Net Payable</strong></td><td class="align-right"><strong>Rs. {{ "%.2f"|format(pump_net_payable) }}</strong></td></tr>
                         </tbody>
                     </table>
                 </div>

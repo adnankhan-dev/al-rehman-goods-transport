@@ -97,6 +97,31 @@ class BillingService:
 
         trips_gross = sum(o.remaining_vehicle_payment() for o in vehicle_owner_activity_rows)
         diesel_deduction_total = sum(float(d.amount or 0) for d in vehicle_owner_diesel_rows)
+        related_transactions = self.related_transactions(bill)
+
+        # Petrol pump bill: previous balance + this bill's diesel - payments made
+        # within the bill period = net payable.
+        pump_opening_balance = 0.0
+        pump_period_payments = 0.0
+        pump_net_payable = 0.0
+        if bill.entity_type == "petrol_pump":
+            pump_opening_balance = float(getattr(bill.petrol_pump, "opening_balance", 0) or 0) if bill.petrol_pump else 0.0
+
+            def _as_date(value):
+                return value.date() if hasattr(value, "date") else value
+
+            start = _as_date(bill.start_date) if bill.start_date else None
+            end = _as_date(bill.end_date) if bill.end_date else None
+            for txn in related_transactions:
+                if txn.type != "petrol_pump_payment":
+                    continue
+                txn_date = _as_date(txn.date) if txn.date else None
+                if start and txn_date and txn_date < start:
+                    continue
+                if end and txn_date and txn_date > end:
+                    continue
+                pump_period_payments += float(txn.amount or 0)
+            pump_net_payable = pump_opening_balance + float(bill.total_amount or 0) - pump_period_payments
 
         return {
             "bill": bill,
@@ -106,7 +131,10 @@ class BillingService:
             "material_summary": material_summary,
             "linked_trip_count": len(linked_orders),
             "total_quantity": sum((order.delivered_quantity or order.quantity or 0) for order in linked_orders),
-            "related_transactions": self.related_transactions(bill),
+            "related_transactions": related_transactions,
+            "pump_opening_balance": pump_opening_balance,
+            "pump_period_payments": pump_period_payments,
+            "pump_net_payable": pump_net_payable,
             "diesel_activity_rows": diesel_activity_rows,
             "standalone_diesel_rows": standalone_diesel_rows,
             "loading_activity_rows": loading_activity_rows,

@@ -63,7 +63,19 @@ def init_db():
     Base.metadata.create_all(bind=engine)
     _upgrade_schema()
     _add_order_entry_audit_columns()
+    _add_petrol_pump_opening_balance()
     _run_one_time_backfills()
+
+
+def _add_petrol_pump_opening_balance():
+    """Add PetrolPump.opening_balance to existing databases (SQLite + Postgres)."""
+    inspector = inspect(engine)
+    if "petrol_pump" not in inspector.get_table_names():
+        return
+    columns = {column["name"] for column in inspector.get_columns("petrol_pump")}
+    if "opening_balance" not in columns:
+        with engine.begin() as connection:
+            connection.execute(text("ALTER TABLE petrol_pump ADD COLUMN opening_balance FLOAT DEFAULT 0"))
 
 
 def _add_order_entry_audit_columns():

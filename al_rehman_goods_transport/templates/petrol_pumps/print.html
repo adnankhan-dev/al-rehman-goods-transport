@@ -59,10 +59,10 @@
             </header>
 
             <section class="meta">
+                <div class="meta-card"><span>Previous Balance</span><strong>Rs. {{ "{:,.0f}".format(opening_balance) }}</strong></div>
                 <div class="meta-card"><span>Total Diesel</span><strong>Rs. {{ "{:,.0f}".format(total_diesel) }}</strong></div>
                 <div class="meta-card"><span>Payments Made</span><strong>Rs. {{ "{:,.0f}".format(payments_total) }}</strong></div>
                 <div class="meta-card"><span>Net Payable</span><strong>Rs. {{ "{:,.0f}".format(net_payable) }}</strong></div>
-                <div class="meta-card"><span>Entries</span><strong>{{ standalone_rows|length + order_diesel_rows|length }}</strong></div>
             </section>
 
             <h3 class="section">Diesel Entries</h3>
@@ -123,7 +123,8 @@
             <h3 class="section">Settlement</h3>
             <table>
                 <tbody>
-                    <tr><td>Total diesel taken</td><td class="num">Rs. {{ "{:,.0f}".format(total_diesel) }}</td></tr>
+                    <tr><td>Previous balance</td><td class="num">Rs. {{ "{:,.0f}".format(opening_balance) }}</td></tr>
+                    <tr><td>Add: diesel taken</td><td class="num">+ Rs. {{ "{:,.0f}".format(total_diesel) }}</td></tr>
                     <tr><td>Less: payments made</td><td class="num">− Rs. {{ "{:,.0f}".format(payments_total) }}</td></tr>
                     <tr class="grand"><td>Net payable to {{ petrol_pump.name }}</td><td class="num">Rs. {{ "{:,.0f}".format(net_payable) }}</td></tr>
                 </tbody>

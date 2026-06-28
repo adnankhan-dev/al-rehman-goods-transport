@@ -71,6 +71,7 @@ class MaterialForm(BaseForm):
     submit = SubmitField('Save Material')
 class PetrolPumpForm(BaseForm):
     name = StringField('Petrol Pump Name', validators=[DataRequired()])
+    opening_balance = FloatField('Opening / Previous Balance (Rs.)', validators=[Optional()])
     submit = SubmitField('Save Petrol Pump')
 class SiteForm(BaseForm):
     name = StringField('Name', validators=[DataRequired()])

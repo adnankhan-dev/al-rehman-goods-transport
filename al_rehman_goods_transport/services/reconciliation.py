@@ -123,7 +123,8 @@ class ReconciliationService:
         for plant in self.session.query(Plant).order_by(Plant.name.asc()).all():
             rows.append(self._row("plant", plant.id, plant.name, plant.balance, plant_expected.get(plant.id, 0.0)))
         for pump in self.session.query(PetrolPump).order_by(PetrolPump.name.asc()).all():
-            rows.append(self._row("petrol_pump", pump.id, pump.name, pump.balance, pump_expected.get(pump.id, 0.0)))
+            expected = pump_expected.get(pump.id, 0.0) + float(pump.opening_balance or 0)
+            rows.append(self._row("petrol_pump", pump.id, pump.name, pump.balance, expected))
         for entity in self.session.query(FinancialEntity).order_by(FinancialEntity.name.asc()).all():
             expected = sum(_safe(tx.balance_delta) for tx in entity.transactions)
             rows.append(self._row("financial_entity", entity.id, entity.name, entity.balance, expected))

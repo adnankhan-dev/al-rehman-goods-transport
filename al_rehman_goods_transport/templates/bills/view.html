@@ -110,19 +110,24 @@
                     {% endfor %}
                 </tbody>
                 <tfoot>
+                    <tr>
+                        <td colspan="5" class="text-end">Previous Balance</td>
+                        <td>Rs. {{ "%.2f"|format(pump_opening_balance) }}</td>
+                        <td></td>
+                    </tr>
                     <tr class="material-subtotal-row">
-                        <td colspan="5"><strong>Total Diesel</strong></td>
-                        <td><strong>Rs. {{ "%.2f"|format(standalone_diesel_rows | sum(attribute='amount')) }}</strong></td>
+                        <td colspan="5"><strong>Add: Diesel this bill</strong></td>
+                        <td><strong>+ Rs. {{ "%.2f"|format(standalone_diesel_rows | sum(attribute='amount')) }}</strong></td>
                         <td></td>
                     </tr>
                     <tr>
-                        <td colspan="5" class="text-end">Less: Payments Made</td>
-                        <td>− Rs. {{ "%.2f"|format(bill.settled_amount or 0) }}</td>
+                        <td colspan="5" class="text-end">Less: Payments Made (this period)</td>
+                        <td>− Rs. {{ "%.2f"|format(pump_period_payments) }}</td>
                         <td></td>
                     </tr>
                     <tr class="bill-grand-total-row">
                         <td colspan="5"><strong>Net Payable</strong></td>
-                        <td><strong>Rs. {{ "%.2f"|format(bill.outstanding_amount) }}</strong></td>
+                        <td><strong>Rs. {{ "%.2f"|format(pump_net_payable) }}</strong></td>
                         <td></td>
                     </tr>
                 </tfoot>

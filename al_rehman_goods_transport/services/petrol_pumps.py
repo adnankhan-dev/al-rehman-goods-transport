@@ -38,7 +38,7 @@ class PetrolPumpService:
             raise
         return petrol_pump
 
-    def update_petrol_pump(self, petrol_pump_id, name):
+    def update_petrol_pump(self, petrol_pump_id, name, opening_balance=None):
         petrol_pump = self.get_petrol_pump(petrol_pump_id)
         normalized_name = (name or "").strip()
         if not normalized_name:
@@ -49,6 +49,18 @@ class PetrolPumpService:
             raise ConflictError("Petrol pump name already exists.")
 
         petrol_pump.name = normalized_name
+
+        if opening_balance is not None:
+            try:
+                new_opening = float(opening_balance or 0)
+            except (TypeError, ValueError):
+                raise ValidationError("Opening balance must be a number.")
+            # Fold the change in opening balance into the pump's running balance so
+            # the current balance stays = opening + diesel - payments.
+            delta = new_opening - float(petrol_pump.opening_balance or 0)
+            petrol_pump.opening_balance = new_opening
+            petrol_pump.balance = float(petrol_pump.balance or 0) + delta
+
         try:
             self.session.commit()
         except Exception:
@@ -104,13 +116,15 @@ class PetrolPumpService:
         standalone_total = sum(float(r.amount or 0) for r in standalone_rows)
         total_diesel = order_diesel_total + standalone_total
         payments_total = sum(float(t.amount or 0) for t in payments)
-        net_payable = total_diesel - payments_total
+        opening_balance = float(pump.opening_balance or 0)
+        net_payable = opening_balance + total_diesel - payments_total
 
         return {
             "petrol_pump": pump,
             "order_diesel_rows": order_diesel_rows,
             "standalone_rows": standalone_rows,
             "payments": payments,
+            "opening_balance": opening_balance,
             "total_diesel": total_diesel,
             "payments_total": payments_total,
             "net_payable": net_payable,
