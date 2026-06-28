@@ -46,6 +46,12 @@ class DieselService:
             )
         return q.all()
 
+    def last_entry_date(self):
+        """Date of the most recently added diesel entry (for prefilling the form),
+        falling back to today when there are no entries yet."""
+        entry = DieselEntry.query.order_by(DieselEntry.id.desc()).first()
+        return entry.date if entry and entry.date else date_type.today()
+
     def get_entry(self, entry_id):
         entry = DieselEntry.query.get(entry_id)
         if entry is None:

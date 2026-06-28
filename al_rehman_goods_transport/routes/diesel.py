@@ -126,6 +126,9 @@ async def diesel_create(request: Request, current_user=Depends(require_permissio
     _populate_choices(form, service, vehicle_id=get_vehicle_id)
     if get_vehicle_id:
         form.vehicle_id.data = get_vehicle_id
+    if request.method == "GET":
+        # Default to the last entered date — many entries share the same date.
+        form.date.data = service.last_entry_date()
 
     if request.method == "POST":
         form_data = await request.form()
