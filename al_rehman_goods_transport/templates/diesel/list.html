@@ -50,14 +50,27 @@
                 <label class="form-label" for="date_to">To Date</label>
                 <input class="form-control" type="date" id="date_to" name="date_to" value="{{ filter_state.date_to.strftime('%Y-%m-%d') if filter_state.date_to else '' }}">
             </div>
+            <div class="form-field">
+                <label class="form-label" for="search">Search</label>
+                <input class="form-control" type="text" id="search" name="search" value="{{ filter_state.search }}" placeholder="Vehicle, pump, receipt, notes">
+            </div>
         </div>
         <div class="detail-actions mt-3">
             <button type="submit" class="btn btn-ui-primary">Apply Filters</button>
             <a href="{{ url_for('diesel.index') }}" class="btn btn-ui-neutral">Reset</a>
+            <a href="{{ url_for('diesel.print_statement',
+                owner_id=filter_state.owner_id or '',
+                vehicle_id=filter_state.vehicle_id or '',
+                pump_id=filter_state.pump_id or '',
+                date_from=filter_state.date_from.strftime('%Y-%m-%d') if filter_state.date_from else '',
+                date_to=filter_state.date_to.strftime('%Y-%m-%d') if filter_state.date_to else '',
+                search=filter_state.search
+            ) }}" class="btn btn-ui-midnight" target="_blank" rel="noopener">
+                <i class="bi bi-printer"></i> Print Statement
+            </a>
         </div>
     </form>
 
-    {{ table_tools("dieselTable", "Search by vehicle, pump, receipt…") }}
     <div class="table-panel table-panel-list">
         <div class="table-panel-header">
             <div>

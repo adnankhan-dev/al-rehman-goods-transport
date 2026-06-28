@@ -16,7 +16,7 @@ class DieselService:
     def __init__(self, session=None):
         self.session = session or db.session
 
-    def list_entries(self, vehicle_id=None, pump_id=None, owner_id=None, date_from=None, date_to=None):
+    def list_entries(self, vehicle_id=None, pump_id=None, owner_id=None, date_from=None, date_to=None, search=None):
         # Sorted by receipt number (blanks last), then date.
         q = DieselEntry.query.order_by(
             DieselEntry.receipt_number.is_(None),
@@ -34,6 +34,16 @@ class DieselService:
             q = q.filter(DieselEntry.date >= date_from)
         if date_to:
             q = q.filter(DieselEntry.date <= date_to)
+        if search:
+            term = f"%{search.strip()}%"
+            vehicle_ids = self.session.query(Vehicle.id).filter(Vehicle.vehicle_number.ilike(term))
+            pump_ids = self.session.query(PetrolPump.id).filter(PetrolPump.name.ilike(term))
+            q = q.filter(
+                DieselEntry.receipt_number.ilike(term)
+                | DieselEntry.notes.ilike(term)
+                | DieselEntry.vehicle_id.in_(vehicle_ids)
+                | DieselEntry.petrol_pump_id.in_(pump_ids)
+            )
         return q.all()
 
     def get_entry(self, entry_id):

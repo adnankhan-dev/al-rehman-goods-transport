@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fuel Log Statement</title>
+    <style>
+        :root { --ink:#0f172a; --muted:#475569; --soft:#e2e8f0; --panel:#f8fafc; --brand:#0b2742; --accent:#d97706; }
+        * { box-sizing: border-box; }
+        body { margin:0; background:#eef2f7; color:var(--ink); font-family:"Segoe UI",Arial,sans-serif; padding:28px; }
+        .shell { max-width:1040px; margin:0 auto; background:#fff; border-radius:18px; box-shadow:0 24px 60px rgba(15,23,42,0.14); overflow:hidden; }
+        .actions { display:flex; justify-content:flex-end; gap:12px; padding:18px 24px 0; }
+        .btn { border:1px solid var(--soft); border-radius:999px; background:var(--brand); color:#fff; padding:10px 16px; font:inherit; cursor:pointer; }
+        .body { padding:24px 32px 32px; }
+        .letterhead { display:flex; justify-content:space-between; align-items:flex-start; gap:16px; border-bottom:2px solid var(--soft); padding-bottom:16px; margin-bottom:18px; }
+        .company-name { font-size:1.5rem; font-weight:800; color:var(--brand); }
+        .company-line { color:var(--muted); font-size:0.82rem; line-height:1.6; }
+        .kicker { text-transform:uppercase; letter-spacing:0.14em; color:var(--accent); font-size:0.74rem; font-weight:700; }
+        .filters { color:var(--muted); font-size:0.82rem; margin-bottom:12px; }
+        .meta { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:12px; margin:14px 0; }
+        .meta-card { border:1px solid var(--soft); border-radius:14px; background:var(--panel); padding:12px 14px; }
+        .meta-card span { display:block; color:var(--muted); font-size:0.78rem; margin-bottom:4px; }
+        .meta-card strong { font-size:1.05rem; }
+        table { width:100%; border-collapse:collapse; border:1px solid var(--soft); }
+        th, td { border-bottom:1px solid var(--soft); padding:6px 8px; text-align:left; font-size:0.8rem; }
+        th { background:#f1f5f9; color:var(--brand); }
+        td.num, th.num { text-align:right; }
+        .grand td { background:var(--brand); color:#fff; font-weight:700; }
+        .footer { margin-top:24px; padding-top:16px; border-top:1px solid var(--soft); color:var(--muted); font-size:0.85rem; }
+        @media print {
+            @page { size:A4 landscape; margin:10mm; }
+            body { padding:0; background:#fff; }
+            .shell { box-shadow:none; border-radius:0; max-width:none; }
+            .actions { display:none; }
+            .body { padding:0; }
+            thead { display:table-header-group; }
+            tr { break-inside:avoid; }
+        }
+    </style>
+</head>
+<body>
+    <div class="shell">
+        <div class="actions">
+            <button type="button" class="btn" onclick="window.print()">Print / Save PDF</button>
+        </div>
+        <div class="body">
+            <header class="letterhead">
+                <div>
+                    <div class="kicker">Fuel Log Statement</div>
+                    <div class="company-name">Al Rehman Goods Transport</div>
+                    <div class="company-line">Bahtr Mor Wah Cantt</div>
+                    <div class="company-line">Contact No. Ahsan Niazi 0307-2342827</div>
+                    <div class="company-line">Inam Khan - 0301-5749086</div>
+                </div>
+                <div style="text-align:right;">
+                    <div class="company-line">Printed: {{ now.strftime('%d %b %Y') }}</div>
+                    <div class="company-line">Entries: {{ entries|length }}</div>
+                </div>
+            </header>
+
+            {% set active = [] %}
+            {% if filters.owner %}{% set _ = active.append('Owner: ' ~ filters.owner) %}{% endif %}
+            {% if filters.vehicle %}{% set _ = active.append('Vehicle: ' ~ filters.vehicle) %}{% endif %}
+            {% if filters.pump %}{% set _ = active.append('Pump: ' ~ filters.pump) %}{% endif %}
+            {% if filters.date_from %}{% set _ = active.append('From: ' ~ filters.date_from) %}{% endif %}
+            {% if filters.date_to %}{% set _ = active.append('To: ' ~ filters.date_to) %}{% endif %}
+            {% if filters.search %}{% set _ = active.append('Search: ' ~ filters.search) %}{% endif %}
+            <div class="filters"><strong>Filters:</strong> {{ active|join(' | ') if active else 'None' }}</div>
+
+            <section class="meta">
+                <div class="meta-card"><span>Total Entries</span><strong>{{ entries|length }}</strong></div>
+                <div class="meta-card"><span>Total Amount</span><strong>Rs. {{ "{:,.0f}".format(total_amount) }}</strong></div>
+                <div class="meta-card"><span>Total Litres</span><strong>{{ "%.2f"|format(total_litres) }} L</strong></div>
+            </section>
+
+            <table>
+                <thead>
+                    <tr>
+                        <th>Date</th><th>Vehicle</th><th>Owner</th><th>Petrol Pump</th><th>Receipt</th>
+                        <th class="num">Litres</th><th class="num">Amount</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for entry in entries %}
+                    <tr>
+                        <td>{{ entry.date.strftime('%d-%m-%Y') }}</td>
+                        <td>{{ entry.vehicle.vehicle_number if entry.vehicle else '-' }}</td>
+                        <td>{{ entry.vehicle.owner_display_name if entry.vehicle else '-' }}</td>
+                        <td>{{ entry.petrol_pump.name if entry.petrol_pump else '-' }}</td>
+                        <td>{{ entry.receipt_number or '-' }}</td>
+                        <td class="num">{{ "%.2f"|format(entry.litres) if entry.litres else '—' }}</td>
+                        <td class="num">{{ "{:,.0f}".format(entry.amount or 0) }}</td>
+                    </tr>
+                    {% else %}
+                    <tr><td colspan="7" style="text-align:center;">No diesel entries match these filters.</td></tr>
+                    {% endfor %}
+                    <tr class="grand">
+                        <td colspan="5">Grand Total</td>
+                        <td class="num">{{ "%.2f"|format(total_litres) }} L</td>
+                        <td class="num">Rs. {{ "{:,.0f}".format(total_amount) }}</td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <footer class="footer">
+                Fuel log statement for the selected filters. Amounts are the recorded purchase amounts.
+            </footer>
+        </div>
+    </div>
+</body>
+</html>

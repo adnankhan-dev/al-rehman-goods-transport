@@ -61,7 +61,8 @@ async def diesel_index(request: Request, _=Depends(require_permission("diesel.vi
     owner_id = _parse_int(request.query_params.get("owner_id"))
     date_from = _parse_date(request.query_params.get("date_from"))
     date_to = _parse_date(request.query_params.get("date_to"))
-    entries = service.list_entries(vehicle_id=vehicle_id, pump_id=pump_id, owner_id=owner_id, date_from=date_from, date_to=date_to)
+    search = (request.query_params.get("search") or "").strip()
+    entries = service.list_entries(vehicle_id=vehicle_id, pump_id=pump_id, owner_id=owner_id, date_from=date_from, date_to=date_to, search=search or None)
     stats = service.summary_stats(entries)
     pagination = paginate_list(entries, parse_page(request.query_params.get("page")))
     vehicles = Vehicle.query.order_by(Vehicle.vehicle_number).all()
@@ -81,9 +82,39 @@ async def diesel_index(request: Request, _=Depends(require_permission("diesel.vi
             "owner_id": owner_id,
             "date_from": date_from,
             "date_to": date_to,
+            "search": search,
         },
         **stats,
     )
+
+
+@router.get("/diesel/print", name="diesel.print_statement")
+async def diesel_print(request: Request, _=Depends(require_permission("diesel.view"))):
+    from datetime import datetime as _dt
+
+    service = DieselService()
+    vehicle_id = _parse_int(request.query_params.get("vehicle_id"))
+    pump_id = _parse_int(request.query_params.get("pump_id"))
+    owner_id = _parse_int(request.query_params.get("owner_id"))
+    date_from = _parse_date(request.query_params.get("date_from"))
+    date_to = _parse_date(request.query_params.get("date_to"))
+    search = (request.query_params.get("search") or "").strip()
+    entries = service.list_entries(vehicle_id=vehicle_id, pump_id=pump_id, owner_id=owner_id, date_from=date_from, date_to=date_to, search=search or None)
+    stats = service.summary_stats(entries)
+
+    def _name(model, _id):
+        obj = model.query.get(_id) if _id else None
+        return obj.name if obj else None
+
+    filters = {
+        "owner": _name(VehicleOwner, owner_id),
+        "vehicle": (Vehicle.query.get(vehicle_id).vehicle_number if vehicle_id else None),
+        "pump": _name(PetrolPump, pump_id),
+        "date_from": date_from.strftime("%Y-%m-%d") if date_from else None,
+        "date_to": date_to.strftime("%Y-%m-%d") if date_to else None,
+        "search": search or None,
+    }
+    return render_template(request, "diesel/print.html", show_nav=False, entries=entries, filters=filters, now=_dt.now(), **stats)
 
 
 @router.api_route("/diesel/create", methods=["GET", "POST"], name="diesel.create")

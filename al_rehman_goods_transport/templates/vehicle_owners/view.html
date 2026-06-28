@@ -141,6 +141,39 @@
         {% endif %}
     </div>
     <div class="detail-panel">
+        <h3><i class="bi bi-file-earmark-text-fill"></i> Recent Bills</h3>
+        <div class="table-responsive">
+            <table class="table table-striped detail-table">
+                <thead>
+                    <tr>
+                        <th>Bill #</th>
+                        <th>Date</th>
+                        <th class="text-end">Total</th>
+                        <th class="text-end">Settled</th>
+                        <th class="text-end">Outstanding</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for bill in owner.bills | sort(attribute='bill_date', reverse=true) %}
+                    <tr>
+                        <td><a href="{{ url_for('bills.view_bill', id=bill.id) }}" class="detail-inline-link">{{ bill.bill_number }}</a></td>
+                        <td>{{ bill.bill_date.strftime('%Y-%m-%d') }}</td>
+                        <td class="text-end">Rs. {{ "%.0f"|format(bill.total_amount) }}</td>
+                        <td class="text-end">Rs. {{ "%.0f"|format(bill.settled_amount or 0) }}</td>
+                        <td class="text-end">Rs. {{ "%.0f"|format(bill.outstanding_amount) }}</td>
+                        <td class="text-end">
+                            <a href="{{ url_for('bills.view_bill', id=bill.id) }}" class="btn btn-sm btn-ui-ghost" title="View bill"><i class="bi bi-eye"></i></a>
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr><td colspan="6" class="text-center table-muted">No bills generated for this vehicle owner yet.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    <div class="detail-panel">
         <h3><i class="bi bi-arrow-left-right"></i> Related Transactions</h3>
         <div class="table-responsive">
             <table class="table table-striped detail-table">
