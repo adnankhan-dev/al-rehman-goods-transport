@@ -89,7 +89,6 @@
                         <th class="text-end">Rate</th>
                         <th class="text-end">Gross Amt</th>
                         <th class="text-end">Diesel</th>
-                        <th class="text-end">Advance</th>
                         <th class="text-end">Net Payable</th>
                     </tr>
                 </thead>
@@ -105,11 +104,10 @@
                         <td class="text-end">{{ "%.2f"|format(order.vehicle_rate or 0) }}</td>
                         <td class="text-end">Rs. {{ "%.0f"|format(order.total_vehicle_amount()) }}</td>
                         <td class="text-end">{% if order.total_diesel_amount() %}− Rs. {{ "%.0f"|format(order.total_diesel_amount()) }}{% else %}—{% endif %}</td>
-                        <td class="text-end">{% if order.total_advance_amount() %}− Rs. {{ "%.0f"|format(order.total_advance_amount()) }}{% else %}—{% endif %}</td>
                         <td class="text-end table-amount">Rs. {{ "%.0f"|format(order.remaining_vehicle_payment()) }}</td>
                     </tr>
                     {% else %}
-                    <tr><td colspan="11" class="text-center">No related orders found for this vehicle owner.</td></tr>
+                    <tr><td colspan="10" class="text-center">No related orders found for this vehicle owner.</td></tr>
                     {% endfor %}
                 </tbody>
                 {% if related_orders %}
@@ -120,7 +118,6 @@
                         <td></td>
                         <td class="text-end"><strong>Rs. {{ "%.0f"|format(owner_summary.gross) }}</strong></td>
                         <td class="text-end"><strong>− Rs. {{ "%.0f"|format(owner_summary.diesel) }}</strong></td>
-                        <td class="text-end"><strong>− Rs. {{ "%.0f"|format(owner_summary.advance) }}</strong></td>
                         <td class="text-end"><strong>Rs. {{ "%.0f"|format(owner_summary.net_payable) }}</strong></td>
                     </tr>
                 </tfoot>
@@ -133,7 +130,8 @@
         <div class="detail-list">
             {{ detail_value("Net Payable from Trips", "Rs. " ~ ("%.0f"|format(owner_summary.net_payable))) }}
             {{ detail_value("Less: Fuel-Log Diesel", "− Rs. " ~ ("%.0f"|format(owner_summary.standalone_diesel))) }}
-            {{ detail_value("Less: Payments Made", "− Rs. " ~ ("%.0f"|format(owner_summary.payments))) }}
+            {{ detail_value("Less: Payments to Owner", "− Rs. " ~ ("%.0f"|format(owner_summary.payments))) }}
+            {{ detail_value("Less: Advances to Vehicles (ledger)", "− Rs. " ~ ("%.0f"|format(owner_summary.advances))) }}
             {{ detail_value("Outstanding Payable", "Rs. " ~ ("%.0f"|format(owner_summary.outstanding))) }}
         </div>
         {% if standalone_diesel_rows %}

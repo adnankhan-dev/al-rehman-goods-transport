@@ -8,7 +8,7 @@ from ..core.flash import flash
 from ..core.templating import render_template
 from ..extensions import db
 from ..forms import VehicleOwnerForm
-from ..models import DieselEntry, VehicleOwner
+from ..models import DieselEntry, Transaction, VehicleOwner
 
 
 router = APIRouter()
@@ -48,8 +48,21 @@ def _owner_orders_and_summary(owner):
     )
     payments_total = sum(float(t.amount or 0) for t in payments)
 
+    # Advances/payments to the owner's vehicles posted in the ledger
+    # (Payment / Advance to Vehicle) — also money already paid toward what we owe.
+    advances = []
+    if vehicle_ids:
+        advances = sorted(
+            db.session.query(Transaction)
+            .filter(Transaction.type == "vehicle_payment", Transaction.vehicle_id.in_(vehicle_ids))
+            .all(),
+            key=lambda t: (t.date, t.id),
+            reverse=True,
+        )
+    advances_total = sum(float(t.amount or 0) for t in advances)
+
     net_after_diesel = net_payable - standalone_diesel
-    outstanding = net_after_diesel - payments_total
+    outstanding = net_after_diesel - payments_total - advances_total
 
     summary = {
         "trips": len(completed),
@@ -61,9 +74,10 @@ def _owner_orders_and_summary(owner):
         "net_payable": net_payable,
         "net_after_diesel": net_after_diesel,
         "payments": payments_total,
+        "advances": advances_total,
         "outstanding": outstanding,
     }
-    return related_orders, summary, standalone_diesel_rows, payments
+    return related_orders, summary, standalone_diesel_rows, payments, advances
 
 
 @router.get("/vehicle-owners", name="vehicle_owners.index")
@@ -94,7 +108,7 @@ async def view_vehicle_owner(id: int, request: Request, _current_user=Depends(re
     owner = db.session.get(VehicleOwner, id)
     if owner is None:
         raise HTTPException(status_code=404, detail="Vehicle owner not found")
-    related_orders, owner_summary, standalone_diesel_rows, payments = _owner_orders_and_summary(owner)
+    related_orders, owner_summary, standalone_diesel_rows, payments, advances = _owner_orders_and_summary(owner)
     related_transactions = sorted(owner.transactions, key=lambda transaction: (transaction.date, transaction.id), reverse=True)
     return render_template(
         request,
@@ -103,6 +117,7 @@ async def view_vehicle_owner(id: int, request: Request, _current_user=Depends(re
         related_orders=related_orders,
         owner_summary=owner_summary,
         standalone_diesel_rows=standalone_diesel_rows,
+        advances=advances,
         payments=payments,
         related_transactions=related_transactions,
     )
@@ -113,7 +128,7 @@ async def print_vehicle_owner(id: int, request: Request, _current_user=Depends(r
     owner = db.session.get(VehicleOwner, id)
     if owner is None:
         raise HTTPException(status_code=404, detail="Vehicle owner not found")
-    related_orders, owner_summary, standalone_diesel_rows, payments = _owner_orders_and_summary(owner)
+    related_orders, owner_summary, standalone_diesel_rows, payments, advances = _owner_orders_and_summary(owner)
     return render_template(
         request,
         "vehicle_owners/print.html",
@@ -123,6 +138,7 @@ async def print_vehicle_owner(id: int, request: Request, _current_user=Depends(r
         owner_summary=owner_summary,
         standalone_diesel_rows=standalone_diesel_rows,
         payments=payments,
+        advances=advances,
         now=datetime.now(),
     )
 

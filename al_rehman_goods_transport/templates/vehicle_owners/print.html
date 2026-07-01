@@ -71,7 +71,7 @@
             <section class="meta">
                 <div class="meta-card"><span>Trips</span><strong>{{ owner_summary.trips }}</strong></div>
                 <div class="meta-card"><span>Gross Amount</span><strong>Rs. {{ "{:,.0f}".format(owner_summary.gross) }}</strong></div>
-                <div class="meta-card"><span>Deductions (Diesel + Advance)</span><strong>Rs. {{ "{:,.0f}".format(owner_summary.diesel + owner_summary.standalone_diesel + owner_summary.advance) }}</strong></div>
+                <div class="meta-card"><span>Diesel Deductions</span><strong>Rs. {{ "{:,.0f}".format(owner_summary.diesel + owner_summary.standalone_diesel) }}</strong></div>
                 <div class="meta-card"><span>Outstanding</span><strong>Rs. {{ "{:,.0f}".format(owner_summary.outstanding) }}</strong></div>
             </section>
 
@@ -87,7 +87,6 @@
                         <th class="num">Rate</th>
                         <th class="num">Gross Amt</th>
                         <th class="num">Diesel</th>
-                        <th class="num">Advance</th>
                         <th class="num">Net Payable</th>
                     </tr>
                 </thead>
@@ -103,11 +102,10 @@
                         <td class="num">{{ "%.2f"|format(order.vehicle_rate or 0) }}</td>
                         <td class="num">{{ "{:,.0f}".format(order.total_vehicle_amount()) }}</td>
                         <td class="num">{% if order.total_diesel_amount() %}-{{ "{:,.0f}".format(order.total_diesel_amount()) }}{% else %}—{% endif %}</td>
-                        <td class="num">{% if order.total_advance_amount() %}-{{ "{:,.0f}".format(order.total_advance_amount()) }}{% else %}—{% endif %}</td>
                         <td class="num">{{ "{:,.0f}".format(order.remaining_vehicle_payment()) }}</td>
                     </tr>
                     {% else %}
-                    <tr><td colspan="11" style="text-align:center;">No trips recorded for this owner.</td></tr>
+                    <tr><td colspan="10" style="text-align:center;">No trips recorded for this owner.</td></tr>
                     {% endfor %}
                 </tbody>
                 {% if related_orders %}
@@ -118,12 +116,7 @@
                         <td></td>
                         <td class="num">{{ "{:,.0f}".format(owner_summary.gross) }}</td>
                         <td class="num">-{{ "{:,.0f}".format(owner_summary.diesel) }}</td>
-                        <td class="num">-{{ "{:,.0f}".format(owner_summary.advance) }}</td>
                         <td class="num">{{ "{:,.0f}".format(owner_summary.net_payable) }}</td>
-                    </tr>
-                    <tr class="grand">
-                        <td colspan="10">Net Payable to {{ owner.name }}</td>
-                        <td class="num">Rs. {{ "{:,.0f}".format(owner_summary.net_payable) }}</td>
                     </tr>
                 </tfoot>
                 {% endif %}
@@ -151,22 +144,32 @@
             </table>
             {% endif %}
 
-            {% if payments %}
-            <h3 style="margin:22px 0 8px;color:var(--brand);font-size:1rem;">Payments Made to Owner</h3>
+            {% if payments or advances %}
+            <h3 style="margin:22px 0 8px;color:var(--brand);font-size:1rem;">Payments &amp; Advances Made</h3>
             <table>
                 <thead>
-                    <tr><th>Date</th><th>Method</th><th>Reference</th><th class="num">Amount</th></tr>
+                    <tr><th>Date</th><th>Type</th><th>Method</th><th>Reference</th><th class="num">Amount</th></tr>
                 </thead>
                 <tbody>
                     {% for t in payments %}
                     <tr>
                         <td>{{ t.date.strftime('%d-%m-%Y') }}</td>
+                        <td>Payment to Owner</td>
                         <td>{{ (t.payment_method or '-')|title }}</td>
                         <td>{{ t.reference or '-' }}</td>
                         <td class="num">− {{ "{:,.0f}".format(t.amount or 0) }}</td>
                     </tr>
                     {% endfor %}
-                    <tr class="subtotal"><td colspan="3">Total Paid</td><td class="num">− {{ "{:,.0f}".format(owner_summary.payments) }}</td></tr>
+                    {% for t in advances %}
+                    <tr>
+                        <td>{{ t.date.strftime('%d-%m-%Y') }}</td>
+                        <td>Advance to Vehicle</td>
+                        <td>{{ (t.payment_method or '-')|title }}</td>
+                        <td>{{ t.reference or '-' }}</td>
+                        <td class="num">− {{ "{:,.0f}".format(t.amount or 0) }}</td>
+                    </tr>
+                    {% endfor %}
+                    <tr class="subtotal"><td colspan="4">Total Paid &amp; Advanced</td><td class="num">− {{ "{:,.0f}".format(owner_summary.payments + owner_summary.advances) }}</td></tr>
                 </tbody>
             </table>
             {% endif %}
@@ -174,9 +177,10 @@
             <h3 style="margin:22px 0 8px;color:var(--brand);font-size:1rem;">Settlement</h3>
             <table>
                 <tbody>
-                    <tr><td>Net payable from trips (gross − order diesel − advance)</td><td class="num">Rs. {{ "{:,.0f}".format(owner_summary.net_payable) }}</td></tr>
+                    <tr><td>Net payable from trips (gross − order diesel)</td><td class="num">Rs. {{ "{:,.0f}".format(owner_summary.net_payable) }}</td></tr>
                     <tr><td>Less: Fuel-Log diesel</td><td class="num">− Rs. {{ "{:,.0f}".format(owner_summary.standalone_diesel) }}</td></tr>
-                    <tr><td>Less: payments already made</td><td class="num">− Rs. {{ "{:,.0f}".format(owner_summary.payments) }}</td></tr>
+                    <tr><td>Less: payments made to owner</td><td class="num">− Rs. {{ "{:,.0f}".format(owner_summary.payments) }}</td></tr>
+                    <tr><td>Less: advances to vehicles (ledger)</td><td class="num">− Rs. {{ "{:,.0f}".format(owner_summary.advances) }}</td></tr>
                     <tr class="grand"><td>Outstanding payable to {{ owner.name }}</td><td class="num">Rs. {{ "{:,.0f}".format(owner_summary.outstanding) }}</td></tr>
                 </tbody>
             </table>

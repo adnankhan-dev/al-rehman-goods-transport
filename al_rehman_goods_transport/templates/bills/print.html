@@ -540,7 +540,6 @@
                                         <th>Quantity</th>
                                         <th class="align-right">Gross Amt</th>
                                         <th class="align-right">Diesel</th>
-                                        <th class="align-right">Advance</th>
                                         <th class="align-right">Net Payable</th>
                                     </tr>
                                 </thead>
@@ -552,7 +551,6 @@
                                         <td>{{ "%.2f"|format(order.delivered_quantity or order.quantity or 0) }} {{ order.unit|upper }}</td>
                                         <td class="align-right">Rs. {{ "%.2f"|format(order.total_vehicle_amount()) }}</td>
                                         <td class="align-right">- Rs. {{ "%.2f"|format(order.total_diesel_amount()) }}</td>
-                                        <td class="align-right">- Rs. {{ "%.2f"|format(order.total_advance_amount()) }}</td>
                                         <td class="align-right"><strong>Rs. {{ "%.2f"|format(order.remaining_vehicle_payment()) }}</strong></td>
                                     </tr>
                                     {% endfor %}
@@ -561,7 +559,6 @@
                                         <td><strong>{{ "%.2f"|format(group.total_quantity) }} {{ group.unit }}</strong></td>
                                         <td class="align-right"><strong>Rs. {{ "%.2f"|format(group.total_vehicle_amount) }}</strong></td>
                                         <td class="align-right"><strong>- Rs. {{ "%.2f"|format(group.total_diesel_amount) }}</strong></td>
-                                        <td class="align-right"><strong>- Rs. {{ "%.2f"|format(group.total_advance_amount) }}</strong></td>
                                         <td class="align-right"><strong>Rs. {{ "%.2f"|format(group.total_net_payable) }}</strong></td>
                                     </tr>
                                 </tbody>
@@ -642,7 +639,6 @@
                                 <th>Total Qty</th>
                                 <th class="align-right">Gross Amt</th>
                                 <th class="align-right">Diesel</th>
-                                <th class="align-right">Advance</th>
                                 <th class="align-right">Net Payable</th>
                             </tr>
                         </thead>
@@ -656,14 +652,12 @@
                                 <td>{{ "%.2f"|format(group.total_quantity) }} {{ group.unit }}</td>
                                 <td class="align-right">Rs. {{ "%.2f"|format(group.total_vehicle_amount) }}</td>
                                 <td class="align-right">- Rs. {{ "%.2f"|format(group.total_diesel_amount) }}</td>
-                                <td class="align-right">- Rs. {{ "%.2f"|format(group.total_advance_amount) }}</td>
                                 <td class="align-right">Rs. {{ "%.2f"|format(group.total_net_payable) }}</td>
                             </tr>
                             {% endfor %}{% endfor %}{% endfor %}
                             <tr class="grand-total-row">
                                 <td colspan="3"><strong>Grand Total</strong></td>
                                 <td><strong>{{ linked_trip_count }}</strong></td>
-                                <td>—</td>
                                 <td>—</td>
                                 <td>—</td>
                                 <td>—</td>
