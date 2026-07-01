@@ -146,3 +146,13 @@ class OrderRepository:
         if exclude_id is not None:
             query = query.filter(Order.id != exclude_id)
         return query.first()
+
+    def get_by_receipt_number(self, receipt_number, exclude_id=None):
+        normalized = (receipt_number or "").strip()
+        if not normalized:
+            return None
+
+        query = self.session.query(Order).filter(func.lower(Order.receipt_number) == normalized.lower())
+        if exclude_id is not None:
+            query = query.filter(Order.id != exclude_id)
+        return query.first()

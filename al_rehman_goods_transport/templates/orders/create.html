@@ -30,7 +30,6 @@
             {{ render_searchable_select(form.site_id, placeholder="Select contractor first, then type site name") }}
             {{ render_field(form.builty_number, placeholder="Builty number") }}
             {{ render_field(form.receipt_number, placeholder="Delivery receipt number") }}
-            {{ render_field(form.advance_amount) }}
             {{ render_field(form.delivery_receipt_image, wrapper_class="form-field order-form-field-full") }}
         </div>
     </section>
@@ -246,7 +245,6 @@
                 { label: 'Vehicle Rate', value: `${fmt(vehicleRate)} / ${unit || 'unit'}` },
                 { label: 'Order Value (Revenue)', value: fmt(deliveredNum * contractorRate) },
                 { label: 'Vehicle Amount (gross)', value: fmt(deliveredNum * vehicleRate) },
-                { label: 'Advance Amount', value: fmt(document.getElementById('advance_amount').value || '0') },
                 { label: 'Plant Amount', value: fmt(document.getElementById('plant_amount').value || '0') },
                 { label: 'Commission', value: fmt(document.getElementById('commission').value || '0') }
             ]);

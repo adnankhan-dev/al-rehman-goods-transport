@@ -196,6 +196,23 @@ class BillingRepository:
             query = query.filter(Order.material_type == material_type)
         return query.all()
 
+    def plant_loadings_all(self, plant_id, start_date=None, end_date=None, material_type=None):
+        """Every loading for a plant (regardless of plant amount), so orders that
+        selected the plant but had no plant charge still appear on the plant page."""
+        query = (
+            self.session.query(OrderLoading)
+            .join(Order, Order.id == OrderLoading.order_id)
+            .filter(OrderLoading.plant_id == plant_id)
+            .order_by(Order.completion_date.desc(), Order.order_date.desc(), OrderLoading.id.desc())
+        )
+        if start_date is not None:
+            query = query.filter(func.coalesce(Order.completion_date, Order.order_date) >= start_date)
+        if end_date is not None:
+            query = query.filter(func.coalesce(Order.completion_date, Order.order_date) <= end_date)
+        if material_type:
+            query = query.filter(Order.material_type == material_type)
+        return query.all()
+
     def vehicle_owner_activity_rows(self, vehicle_owner_id, start_date=None, end_date=None):
         query = (
             self.session.query(Order)

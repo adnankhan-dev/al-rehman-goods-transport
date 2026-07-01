@@ -34,6 +34,25 @@ async def create_plant(request: Request, _current_user=Depends(require_permissio
     return render_template(request, "plants/create.html", form=form)
 
 
+@router.get("/plants/{id}/print", name="plants.print_statement")
+async def print_plant(id: int, request: Request, _current_user=Depends(require_permission("plants.view"))):
+    from datetime import datetime
+
+    def _date(value):
+        try:
+            return datetime.strptime((value or "").strip(), "%Y-%m-%d").date()
+        except (ValueError, TypeError):
+            return None
+
+    date_from = _date(request.query_params.get("date_from"))
+    date_to = _date(request.query_params.get("date_to"))
+    try:
+        context = PlantService().statement(id, date_from=date_from, date_to=date_to)
+    except NotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return render_template(request, "plants/print.html", show_nav=False, now=datetime.now(), **context)
+
+
 @router.get("/plants/{id}", name="plants.view_plant")
 async def view_plant(id: int, request: Request, _current_user=Depends(require_permission("plants.view"))):
     try:

@@ -23,7 +23,7 @@
     <section class="form-section-panel">
         <div class="form-section-heading">
             <h3>2. Trip Information</h3>
-            <p class="form-section-copy">Adjust trip documents, delivery destination, and field-level advance and diesel values.</p>
+            <p class="form-section-copy">Adjust trip documents, delivery destination, and diesel values. Advances are recorded in the Ledger (Payment / Advance to Vehicle).</p>
         </div>
         <div class="form-grid-two order-form-grid">
             {{ render_searchable_select(form.contractor_id, placeholder="Type contractor name") }}
@@ -31,7 +31,6 @@
             {{ render_searchable_select(form.site_id, placeholder="Select contractor first, then type site name") }}
             {{ render_field(form.builty_number, placeholder="Builty number") }}
             {{ render_field(form.receipt_number, placeholder="Delivery receipt number") }}
-            {{ render_field(form.advance_amount) }}
             {{ render_field(form.delivery_receipt_image, wrapper_class="form-field order-form-field-full") }}
         </div>
     </section>

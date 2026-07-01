@@ -155,16 +155,20 @@ class OrderFinanceServiceTests(unittest.TestCase):
         )
         order = service.create_order(order_input)
 
-        transaction_count = db.session.query(Transaction).count()
         company = Company.query.first()
         owner = db.session.get(VehicleOwner, self.owner_id)
+        advance_tx_count = db.session.query(Transaction).filter(Transaction.type == "vehicle_advance").count()
 
         self.assertEqual(order.remarks, "Night dispatch")
         self.assertEqual(order.from_site_id, self.from_site_id)
         self.assertEqual(order.order_date.date().isoformat(), "2026-04-11")
-        self.assertEqual(company.balance, -250)
+        # Advances are no longer captured on the order (moved to the Ledger), so
+        # the form advance is ignored and no advance transaction is created.
+        self.assertEqual(order.advance_amount, 0)
+        self.assertEqual(advance_tx_count, 0)
+        self.assertEqual(company.balance, 0)
+        # The owner is still credited for the vehicle amount of the trip.
         self.assertGreater(owner.balance, 0)
-        self.assertGreater(transaction_count, 0)
 
     def test_order_service_allows_order_without_plant_and_keeps_loading_detail(self):
         service = OrderService()

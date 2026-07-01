@@ -61,7 +61,9 @@ class PlantService:
         plant = self.get_plant(plant_id)
         start_value = datetime.strptime(start_date, "%Y-%m-%d") if start_date else None
         end_value = datetime.strptime(end_date, "%Y-%m-%d") + timedelta(days=1) if end_date else None
-        related_loadings = self.billing.plant_activity_rows(plant_id, start_value, end_value, material_type)
+        # Show every order that used this plant, even when no plant amount was
+        # entered (previously such orders were hidden by a plant_amount > 0 filter).
+        related_loadings = self.billing.plant_loadings_all(plant_id, start_value, end_value, material_type)
         available_materials = sorted({loading.order.material_type for loading in related_loadings if loading.order and loading.order.material_type} or {order.material_type for order in plant.orders if order.material_type})
         return {
             "plant": plant,
@@ -72,5 +74,61 @@ class PlantService:
             "selected_end_date": end_date or "",
             "total_loaded_amount": sum(loading.plant_amount or 0 for loading in related_loadings),
             "transactions": self.transactions.transactions_for_entity("plant", plant.id),
+            "balance_summary": balance_summary("plant", plant.balance),
+        }
+
+    def statement(self, plant_id, date_from=None, date_to=None):
+        """Printable plant statement (mirrors the pump statement): loadings we
+        owe the plant for, payments made, and net payable. With a date range it
+        is a running statement (Previous Balance carries prior activity)."""
+        plant = self.get_plant(plant_id)
+        loadings_all = self.billing.plant_activity_rows(plant_id)
+        payments_all = [
+            t for t in self.transactions.transactions_for_entity("plant", plant.id)
+            if t.type == "plant_payment"
+        ]
+
+        def _as_date(value):
+            return value.date() if hasattr(value, "date") else value
+
+        def load_date(loading):
+            order = loading.order
+            raw = (order.completion_date or order.order_date) if order else None
+            return _as_date(raw) if raw else None
+
+        def in_period(day):
+            if day is None:
+                return date_from is None and date_to is None
+            if date_from and day < date_from:
+                return False
+            if date_to and day > date_to:
+                return False
+            return True
+
+        def before_period(day):
+            return date_from is not None and day is not None and day < date_from
+
+        loadings = [l for l in loadings_all if in_period(load_date(l))]
+        payments = [t for t in payments_all if in_period(_as_date(t.date))]
+        total_charges = sum(float(l.plant_amount or 0) for l in loadings)
+        payments_total = sum(float(t.amount or 0) for t in payments)
+
+        prior_charges = sum(float(l.plant_amount or 0) for l in loadings_all if before_period(load_date(l)))
+        prior_payments = sum(float(t.amount or 0) for t in payments_all if before_period(_as_date(t.date)))
+        opening_balance = prior_charges - prior_payments
+        net_payable = opening_balance + total_charges - payments_total
+
+        return {
+            "plant": plant,
+            "loadings": loadings,
+            "payments": payments,
+            "opening_balance": opening_balance,
+            "total_charges": total_charges,
+            "payments_total": payments_total,
+            "net_payable": net_payable,
+            "period": {
+                "date_from": date_from.strftime("%Y-%m-%d") if date_from else None,
+                "date_to": date_to.strftime("%Y-%m-%d") if date_to else None,
+            },
             "balance_summary": balance_summary("plant", plant.balance),
         }

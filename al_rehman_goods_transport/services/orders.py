@@ -140,7 +140,7 @@ class OrderService:
             material_id=form.material_id.data,
             load_quantity=_safe_float(form.load_quantity.data),
             unit="cft",  # placeholder; the real unit is taken from the selected material in _write_order
-            advance_amount=_safe_float(form.advance_amount.data),
+            advance_amount=0.0,  # advances are now recorded in the ledger (Payment/Advance to Vehicle)
             builty_number=_clean_text(form.builty_number.data),
             receipt_number=_clean_text(form.receipt_number.data),
             delivered_quantity=_safe_float(form.delivered_quantity.data),
@@ -252,6 +252,10 @@ class OrderService:
         duplicate_order = self.orders.get_by_builty_number(order_input.builty_number, exclude_id=exclude_order_id)
         if duplicate_order is not None:
             raise ConflictError("Builty number already exists.")
+
+        duplicate_receipt = self.orders.get_by_receipt_number(order_input.receipt_number, exclude_id=exclude_order_id)
+        if duplicate_receipt is not None:
+            raise ConflictError("Delivery receipt number already exists.")
 
         destination_site = self.lookups.get_site(order_input.site_id)
         if destination_site is None:

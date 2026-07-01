@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Plant Statement — {{ plant.name }}</title>
+    <style>
+        :root { --ink:#0f172a; --muted:#475569; --soft:#e2e8f0; --panel:#f8fafc; --brand:#0b2742; --accent:#d97706; }
+        * { box-sizing: border-box; }
+        body { margin:0; background:#eef2f7; color:var(--ink); font-family:"Segoe UI",Arial,sans-serif; padding:28px; }
+        .shell { max-width:1040px; margin:0 auto; background:#fff; border-radius:18px; box-shadow:0 24px 60px rgba(15,23,42,0.14); overflow:hidden; }
+        .actions { display:flex; justify-content:flex-end; gap:12px; padding:18px 24px 0; }
+        .btn { border:1px solid var(--soft); border-radius:999px; background:var(--brand); color:#fff; padding:10px 16px; font:inherit; cursor:pointer; }
+        .body { padding:24px 32px 32px; }
+        .letterhead { display:flex; justify-content:space-between; align-items:flex-start; gap:16px; border-bottom:2px solid var(--soft); padding-bottom:16px; margin-bottom:18px; }
+        .company-name { font-size:1.5rem; font-weight:800; color:var(--brand); }
+        .company-line { color:var(--muted); font-size:0.82rem; line-height:1.6; }
+        .kicker { text-transform:uppercase; letter-spacing:0.14em; color:var(--accent); font-size:0.74rem; font-weight:700; }
+        .meta { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:12px; margin:14px 0; }
+        .meta-card { border:1px solid var(--soft); border-radius:14px; background:var(--panel); padding:12px 14px; }
+        .meta-card span { display:block; color:var(--muted); font-size:0.78rem; margin-bottom:4px; }
+        .meta-card strong { font-size:1.05rem; }
+        h3.section { font-size:1rem; color:var(--brand); margin:22px 0 8px; }
+        table { width:100%; border-collapse:collapse; border:1px solid var(--soft); }
+        th, td { border-bottom:1px solid var(--soft); padding:6px 8px; text-align:left; font-size:0.8rem; }
+        th { background:#f1f5f9; color:var(--brand); }
+        td.num, th.num { text-align:right; }
+        .subtotal td { background:#f1f5f9; font-weight:700; }
+        .grand td { background:var(--brand); color:#fff; font-weight:700; }
+        .footer { margin-top:24px; padding-top:16px; border-top:1px solid var(--soft); color:var(--muted); font-size:0.85rem; }
+        @media print {
+            @page { size:A4; margin:12mm 10mm; }
+            body { padding:0; background:#fff; }
+            .shell { box-shadow:none; border-radius:0; max-width:none; }
+            .actions { display:none; }
+            .body { padding:0; }
+            thead { display:table-header-group; }
+            tr { break-inside:avoid; }
+        }
+    </style>
+</head>
+<body>
+    <div class="shell">
+        <div class="actions">
+            <button type="button" class="btn" onclick="window.print()">Print / Save PDF</button>
+        </div>
+        <div class="body">
+            <header class="letterhead">
+                <div>
+                    <div class="kicker">Plant Statement</div>
+                    <div class="company-name">Al Rehman Goods Transport</div>
+                    <div class="company-line">Bahtr Mor Wah Cantt</div>
+                    <div class="company-line">Contact No. Ahsan Niazi 0307-2342827</div>
+                    <div class="company-line">Inam Khan - 0301-5749086</div>
+                </div>
+                <div style="text-align:right;">
+                    <div class="company-line"><strong style="font-size:1.05rem;color:var(--ink);">{{ plant.name }}</strong></div>
+                    {% if period and (period.date_from or period.date_to) %}
+                    <div class="company-line">Period: {{ period.date_from or 'start' }} to {{ period.date_to or 'date' }}</div>
+                    {% endif %}
+                    <div class="company-line">Printed: {{ now.strftime('%d %b %Y') }}</div>
+                </div>
+            </header>
+
+            <section class="meta">
+                <div class="meta-card"><span>Previous Balance</span><strong>Rs. {{ "{:,.0f}".format(opening_balance) }}</strong></div>
+                <div class="meta-card"><span>Plant Charges</span><strong>Rs. {{ "{:,.0f}".format(total_charges) }}</strong></div>
+                <div class="meta-card"><span>Payments Made</span><strong>Rs. {{ "{:,.0f}".format(payments_total) }}</strong></div>
+                <div class="meta-card"><span>Net Payable</span><strong>Rs. {{ "{:,.0f}".format(net_payable) }}</strong></div>
+            </section>
+
+            <h3 class="section">Loadings</h3>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Date</th><th>Order</th><th>Vehicle</th><th>Material</th><th class="num">Load Qty</th><th class="num">Plant Amount</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for l in loadings %}
+                    <tr>
+                        <td>{{ (l.order.completion_date or l.order.order_date).strftime('%d-%m-%Y') if l.order else '-' }}</td>
+                        <td>#{{ l.order_id }}</td>
+                        <td>{{ l.order.vehicle.vehicle_number if l.order and l.order.vehicle else '-' }}</td>
+                        <td>{{ l.order.material_name if l.order else '-' }}</td>
+                        <td class="num">{{ "%.2f"|format(l.load_quantity or 0) }}</td>
+                        <td class="num">{{ "{:,.0f}".format(l.plant_amount or 0) }}</td>
+                    </tr>
+                    {% else %}
+                    <tr><td colspan="6" style="text-align:center;">No loadings for this plant in the period.</td></tr>
+                    {% endfor %}
+                    <tr class="subtotal"><td colspan="5">Total Plant Charges</td><td class="num">Rs. {{ "{:,.0f}".format(total_charges) }}</td></tr>
+                </tbody>
+            </table>
+
+            {% if payments %}
+            <h3 class="section">Payments Made to Plant</h3>
+            <table>
+                <thead>
+                    <tr><th>Date</th><th>Method</th><th>Reference</th><th class="num">Amount</th></tr>
+                </thead>
+                <tbody>
+                    {% for t in payments %}
+                    <tr>
+                        <td>{{ t.date.strftime('%d-%m-%Y') }}</td>
+                        <td>{{ (t.payment_method or '-')|title }}</td>
+                        <td>{{ t.reference or '-' }}</td>
+                        <td class="num">− {{ "{:,.0f}".format(t.amount or 0) }}</td>
+                    </tr>
+                    {% endfor %}
+                    <tr class="subtotal"><td colspan="3">Total Paid</td><td class="num">− {{ "{:,.0f}".format(payments_total) }}</td></tr>
+                </tbody>
+            </table>
+            {% endif %}
+
+            <h3 class="section">Settlement</h3>
+            <table>
+                <tbody>
+                    <tr><td>Previous balance</td><td class="num">Rs. {{ "{:,.0f}".format(opening_balance) }}</td></tr>
+                    <tr><td>Add: plant charges</td><td class="num">+ Rs. {{ "{:,.0f}".format(total_charges) }}</td></tr>
+                    <tr><td>Less: payments made</td><td class="num">− Rs. {{ "{:,.0f}".format(payments_total) }}</td></tr>
+                    <tr class="grand"><td>Net payable to {{ plant.name }}</td><td class="num">Rs. {{ "{:,.0f}".format(net_payable) }}</td></tr>
+                </tbody>
+            </table>
+
+            <footer class="footer">
+                Net payable = plant charges − payments already made (carried forward across periods when a date range is used).
+            </footer>
+        </div>
+    </div>
+</body>
+</html>

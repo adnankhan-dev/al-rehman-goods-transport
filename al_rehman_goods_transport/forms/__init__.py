@@ -18,7 +18,6 @@ class OrderForm(BaseForm):
     from_site_id = SelectField('From Site', coerce=int, validators=[Optional()])
     material_id = SelectField('Material', coerce=int, validators=[DataRequired()])
     load_quantity = FloatField('Loading Quantity', validators=[DataRequired()])
-    advance_amount = FloatField('Advance Amount', default=0, validators=[Optional()])
     builty_number = StringField('Builty Number', validators=[Optional()])
     receipt_number = StringField('Delivery Receipt Number', validators=[Optional()])
     delivered_quantity = FloatField('Delivered Quantity', validators=[DataRequired()])
@@ -84,6 +83,7 @@ class SiteForm(BaseForm):
     submit = SubmitField('Save Site')
 class TransactionForm(BaseForm):
     type = SelectField('Transaction Type', choices=[
+        ('vehicle_payment', 'Payment / Advance to Vehicle'),
         ('vehicle_owner_payment', 'Payment to Vehicle Owner'),
         ('vehicle_owner_receipt', 'Receipt from Vehicle Owner'),
         ('contractor_receipt', 'Receipt from Contractor'),
