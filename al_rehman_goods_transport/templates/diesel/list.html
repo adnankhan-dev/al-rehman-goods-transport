@@ -8,9 +8,13 @@
 <section class="content-stack">
     <div class="collection-overview">
         {{ metric_tile("Total Entries", total_entries, "Diesel records on file", "primary", "bi bi-fuel-pump-fill") }}
-        {{ metric_tile("Total Amount", "Rs. " ~ ("%.2f"|format(total_amount)), "Sum of all diesel costs", "accent", "bi bi-cash-stack") }}
-        {{ metric_tile("Total Litres", ("%.2f"|format(total_litres)) ~ " L", "Combined fuel volume", "ocean", "bi bi-droplet-fill") }}
-        {{ metric_tile("This Month", ("%.2f"|format(this_month_litres)) ~ " L", "Litres consumed this calendar month", "slate", "bi bi-calendar3") }}
+        {{ metric_tile("Diesel Amount", "Rs. " ~ ("%.2f"|format(total_amount)), "Sum of diesel costs (what we owe)", "accent", "bi bi-cash-stack") }}
+        {{ metric_tile("Amount Paid to Pump" ~ ("" if filter_state.pump_id else "s"), "Rs. " ~ ("%.2f"|format(amount_paid)), "Ledger payments to " ~ (selected_pump.name if selected_pump else "petrol pumps"), "ocean", "bi bi-wallet2") }}
+        {% if selected_pump %}
+        {{ metric_tile("Net Payable — " ~ selected_pump.name, "Rs. " ~ ("%.2f"|format(selected_pump.balance)), "Diesel owed minus payments made", "slate", "bi bi-hourglass-split") }}
+        {% else %}
+        {{ metric_tile("Total Litres", ("%.2f"|format(total_litres)) ~ " L", "Combined fuel volume", "slate", "bi bi-droplet-fill") }}
+        {% endif %}
     </div>
 
     <form method="GET" action="{{ url_for('diesel.index') }}" class="detail-panel mb-4">

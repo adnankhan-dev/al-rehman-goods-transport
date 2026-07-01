@@ -68,6 +68,10 @@ async def diesel_index(request: Request, _=Depends(require_permission("diesel.vi
     vehicles = Vehicle.query.order_by(Vehicle.vehicle_number).all()
     pumps = PetrolPump.query.order_by(PetrolPump.name).all()
     vehicle_owners = VehicleOwner.query.order_by(VehicleOwner.name).all()
+
+    # Amount paid to the pump(s) from the ledger, for the current filter scope.
+    amount_paid = service.pump_payments_total(pump_id=pump_id, date_from=date_from, date_to=date_to)
+    selected_pump = next((p for p in pumps if p.id == pump_id), None) if pump_id else None
     return render_template(
         request,
         "diesel/list.html",
@@ -76,6 +80,8 @@ async def diesel_index(request: Request, _=Depends(require_permission("diesel.vi
         vehicles=vehicles,
         pumps=pumps,
         vehicle_owners=vehicle_owners,
+        amount_paid=amount_paid,
+        selected_pump=selected_pump,
         filter_state={
             "vehicle_id": vehicle_id,
             "pump_id": pump_id,
@@ -114,7 +120,8 @@ async def diesel_print(request: Request, _=Depends(require_permission("diesel.vi
         "date_to": date_to.strftime("%Y-%m-%d") if date_to else None,
         "search": search or None,
     }
-    return render_template(request, "diesel/print.html", show_nav=False, entries=entries, filters=filters, now=_dt.now(), **stats)
+    amount_paid = service.pump_payments_total(pump_id=pump_id, date_from=date_from, date_to=date_to)
+    return render_template(request, "diesel/print.html", show_nav=False, entries=entries, filters=filters, amount_paid=amount_paid, now=_dt.now(), **stats)
 
 
 @router.api_route("/diesel/create", methods=["GET", "POST"], name="diesel.create")

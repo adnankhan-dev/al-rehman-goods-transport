@@ -1,4 +1,5 @@
 from datetime import date as date_type
+from datetime import timedelta
 
 from sqlalchemy import func
 
@@ -45,6 +46,28 @@ class DieselService:
                 | DieselEntry.petrol_pump_id.in_(pump_ids)
             )
         return q.all()
+
+    def pump_payments_total(self, pump_id=None, date_from=None, date_to=None):
+        """Total amount paid to petrol pump(s) from the ledger
+        (petrol_pump_payment transactions) for the given filter scope."""
+        from ..models import Transaction
+        from sqlalchemy import and_, or_
+
+        query = self.session.query(func.coalesce(func.sum(Transaction.amount), 0.0)).filter(
+            Transaction.type == "petrol_pump_payment"
+        )
+        if pump_id:
+            query = query.filter(
+                or_(
+                    Transaction.petrol_pump_id == pump_id,
+                    and_(Transaction.entity_type == "petrol_pump", Transaction.entity_id == pump_id),
+                )
+            )
+        if date_from:
+            query = query.filter(Transaction.date >= date_from)
+        if date_to:
+            query = query.filter(Transaction.date < date_to + timedelta(days=1))
+        return float(query.scalar() or 0.0)
 
     def last_entry_date(self):
         """Date of the most recently added diesel entry (for prefilling the form),

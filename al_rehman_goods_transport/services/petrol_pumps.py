@@ -108,6 +108,10 @@ class PetrolPumpService:
         and the net payable. When a date range is given it behaves as a running
         statement: 'Previous Balance' carries the opening balance plus all
         activity before the period, and the body shows only the period."""
+        from sqlalchemy import and_, or_
+
+        from ..models import Transaction
+
         pump = self.get_petrol_pump(petrol_pump_id)
         order_diesel_all = self.billing.petrol_pump_activity_rows(pump.id)
         standalone_all = (
@@ -116,10 +120,20 @@ class PetrolPumpService:
             .order_by(DieselEntry.date.desc(), DieselEntry.id.desc())
             .all()
         )
-        payments_all = [
-            t for t in self.transactions.transactions_for_entity("petrol_pump", pump.id)
-            if t.type == "petrol_pump_payment"
-        ]
+        # Match ledger payments to this pump by the pump FK or the entity link,
+        # so a payment shows regardless of how it was recorded.
+        payments_all = (
+            self.session.query(Transaction)
+            .filter(
+                Transaction.type == "petrol_pump_payment",
+                or_(
+                    Transaction.petrol_pump_id == pump.id,
+                    and_(Transaction.entity_type == "petrol_pump", Transaction.entity_id == pump.id),
+                ),
+            )
+            .order_by(Transaction.date.desc(), Transaction.id.desc())
+            .all()
+        )
 
         def _as_date(value):
             return value.date() if hasattr(value, "date") else value

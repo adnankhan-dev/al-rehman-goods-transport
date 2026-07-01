@@ -67,9 +67,10 @@
             {% if filters.search %}{% set _ = active.append('Search: ' ~ filters.search) %}{% endif %}
             <div class="filters"><strong>Filters:</strong> {{ active|join(' | ') if active else 'None' }}</div>
 
-            <section class="meta">
-                <div class="meta-card"><span>Total Entries</span><strong>{{ entries|length }}</strong></div>
-                <div class="meta-card"><span>Total Amount</span><strong>Rs. {{ "{:,.0f}".format(total_amount) }}</strong></div>
+            <section class="meta" style="grid-template-columns:repeat(4,minmax(0,1fr));">
+                <div class="meta-card"><span>Diesel Amount</span><strong>Rs. {{ "{:,.0f}".format(total_amount) }}</strong></div>
+                <div class="meta-card"><span>Amount Paid to Pump(s)</span><strong>Rs. {{ "{:,.0f}".format(amount_paid) }}</strong></div>
+                <div class="meta-card"><span>Net (Diesel − Paid)</span><strong>Rs. {{ "{:,.0f}".format(total_amount - amount_paid) }}</strong></div>
                 <div class="meta-card"><span>Total Litres</span><strong>{{ "%.2f"|format(total_litres) }} L</strong></div>
             </section>
 
