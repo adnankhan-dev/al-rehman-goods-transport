@@ -155,8 +155,16 @@ class PetrolPumpService:
         def before_period(day):
             return date_from is not None and day is not None and day < date_from
 
-        standalone_rows = [r for r in standalone_all if in_period(_as_date(r.date))]
-        order_diesel_rows = [r for r in order_diesel_all if in_period(order_date(r))]
+        from .diesel import receipt_sort_key
+
+        standalone_rows = sorted(
+            [r for r in standalone_all if in_period(_as_date(r.date))],
+            key=lambda r: receipt_sort_key(r.receipt_number),
+        )
+        order_diesel_rows = sorted(
+            [r for r in order_diesel_all if in_period(order_date(r))],
+            key=lambda r: receipt_sort_key(getattr(r, "receipt_number", None)),
+        )
         payments = [t for t in payments_all if in_period(_as_date(t.date))]
 
         period_diesel = (

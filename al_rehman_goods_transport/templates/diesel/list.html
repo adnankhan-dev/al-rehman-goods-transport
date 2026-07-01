@@ -7,14 +7,10 @@
 {% call form_shell("Diesel Entries", "Vehicle fuel consumption log. Each entry is linked to a vehicle, with optional petrol pump and trip references.", "Orders", (url_for('diesel.create') if current_user.can('diesel.create') else None), "Add Entry", "btn btn-ui-primary") %}
 <section class="content-stack">
     <div class="collection-overview">
-        {{ metric_tile("Total Entries", total_entries, "Diesel records on file", "primary", "bi bi-fuel-pump-fill") }}
         {{ metric_tile("Diesel Amount", "Rs. " ~ ("%.2f"|format(total_amount)), "Sum of diesel costs (what we owe)", "accent", "bi bi-cash-stack") }}
         {{ metric_tile("Amount Paid to Pump" ~ ("" if filter_state.pump_id else "s"), "Rs. " ~ ("%.2f"|format(amount_paid)), "Ledger payments to " ~ (selected_pump.name if selected_pump else "petrol pumps"), "ocean", "bi bi-wallet2") }}
-        {% if selected_pump %}
-        {{ metric_tile("Net Payable — " ~ selected_pump.name, "Rs. " ~ ("%.2f"|format(selected_pump.balance)), "Diesel owed minus payments made", "slate", "bi bi-hourglass-split") }}
-        {% else %}
-        {{ metric_tile("Total Litres", ("%.2f"|format(total_litres)) ~ " L", "Combined fuel volume", "slate", "bi bi-droplet-fill") }}
-        {% endif %}
+        {{ metric_tile("Net Payable", "Rs. " ~ ("%.2f"|format(net_payable)), "Previous " ~ ("%.0f"|format(opening_balance)) ~ " + diesel − payments (matches pump statement)", "slate", "bi bi-hourglass-split") }}
+        {{ metric_tile("Total Litres", ("%.2f"|format(total_litres)) ~ " L", "Combined fuel volume", "primary", "bi bi-droplet-fill") }}
     </div>
 
     <form method="GET" action="{{ url_for('diesel.index') }}" class="detail-panel mb-4">

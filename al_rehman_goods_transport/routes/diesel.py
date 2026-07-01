@@ -72,6 +72,10 @@ async def diesel_index(request: Request, _=Depends(require_permission("diesel.vi
     # Amount paid to the pump(s) from the ledger, for the current filter scope.
     amount_paid = service.pump_payments_total(pump_id=pump_id, date_from=date_from, date_to=date_to)
     selected_pump = next((p for p in pumps if p.id == pump_id), None) if pump_id else None
+    # Previous/opening balance so Net Payable matches the pump statement:
+    # Net Payable = previous balance + diesel - payments.
+    opening_balance = float(selected_pump.opening_balance or 0) if selected_pump else sum(float(p.opening_balance or 0) for p in pumps)
+    net_payable = opening_balance + stats["total_amount"] - amount_paid
     return render_template(
         request,
         "diesel/list.html",
@@ -81,6 +85,8 @@ async def diesel_index(request: Request, _=Depends(require_permission("diesel.vi
         pumps=pumps,
         vehicle_owners=vehicle_owners,
         amount_paid=amount_paid,
+        opening_balance=opening_balance,
+        net_payable=net_payable,
         selected_pump=selected_pump,
         filter_state={
             "vehicle_id": vehicle_id,
@@ -121,7 +127,15 @@ async def diesel_print(request: Request, _=Depends(require_permission("diesel.vi
         "search": search or None,
     }
     amount_paid = service.pump_payments_total(pump_id=pump_id, date_from=date_from, date_to=date_to)
-    return render_template(request, "diesel/print.html", show_nav=False, entries=entries, filters=filters, amount_paid=amount_paid, now=_dt.now(), **stats)
+    if pump_id:
+        pump = PetrolPump.query.get(pump_id)
+        opening_balance = float(pump.opening_balance or 0) if pump else 0.0
+    else:
+        opening_balance = sum(float(p.opening_balance or 0) for p in PetrolPump.query.all())
+    net_payable = opening_balance + stats["total_amount"] - amount_paid
+    return render_template(request, "diesel/print.html", show_nav=False, entries=entries, filters=filters,
+                           amount_paid=amount_paid, opening_balance=opening_balance, net_payable=net_payable,
+                           now=_dt.now(), **stats)
 
 
 @router.api_route("/diesel/create", methods=["GET", "POST"], name="diesel.create")

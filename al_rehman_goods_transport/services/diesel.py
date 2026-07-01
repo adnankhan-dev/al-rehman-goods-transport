@@ -13,18 +13,23 @@ def _safe(value):
     return float(value or 0.0)
 
 
+def receipt_sort_key(receipt_number):
+    """Sort receipts numerically (768 before 1001); non-numeric last, blanks last."""
+    text = (receipt_number or "").strip()
+    if not text:
+        return (2, 0, "")
+    try:
+        return (0, int(text), "")
+    except ValueError:
+        return (1, 0, text.lower())
+
+
 class DieselService:
     def __init__(self, session=None):
         self.session = session or db.session
 
     def list_entries(self, vehicle_id=None, pump_id=None, owner_id=None, date_from=None, date_to=None, search=None):
-        # Sorted by receipt number (blanks last), then date.
-        q = DieselEntry.query.order_by(
-            DieselEntry.receipt_number.is_(None),
-            DieselEntry.receipt_number.asc(),
-            DieselEntry.date.desc(),
-            DieselEntry.id.desc(),
-        )
+        q = DieselEntry.query
         if vehicle_id:
             q = q.filter(DieselEntry.vehicle_id == vehicle_id)
         if pump_id:
@@ -45,7 +50,10 @@ class DieselService:
                 | DieselEntry.vehicle_id.in_(vehicle_ids)
                 | DieselEntry.petrol_pump_id.in_(pump_ids)
             )
-        return q.all()
+        # Sort by receipt number numerically (768 before 1001), blanks last.
+        entries = q.all()
+        entries.sort(key=lambda e: receipt_sort_key(e.receipt_number))
+        return entries
 
     def pump_payments_total(self, pump_id=None, date_from=None, date_to=None):
         """Total amount paid to petrol pump(s) from the ledger
