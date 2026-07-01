@@ -9,7 +9,7 @@
     <div class="collection-overview">
         {{ metric_tile("Diesel Amount", "Rs. " ~ ("%.2f"|format(total_amount)), "Sum of diesel costs (what we owe)", "accent", "bi bi-cash-stack") }}
         {{ metric_tile("Amount Paid to Pump" ~ ("" if filter_state.pump_id else "s"), "Rs. " ~ ("%.2f"|format(amount_paid)), "Ledger payments to " ~ (selected_pump.name if selected_pump else "petrol pumps"), "ocean", "bi bi-wallet2") }}
-        {{ metric_tile("Net Payable", "Rs. " ~ ("%.2f"|format(net_payable)), "Previous " ~ ("%.0f"|format(opening_balance)) ~ " + diesel − payments (matches pump statement)", "slate", "bi bi-hourglass-split") }}
+        {{ metric_tile("Net Payable", "Rs. " ~ ("%.2f"|format(net_payable)), "Outstanding amount payable to the pump" ~ ("" if filter_state.pump_id else "s"), "slate", "bi bi-hourglass-split") }}
         {{ metric_tile("Total Litres", ("%.2f"|format(total_litres)) ~ " L", "Combined fuel volume", "primary", "bi bi-droplet-fill") }}
     </div>
 
