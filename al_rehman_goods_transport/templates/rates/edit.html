@@ -19,6 +19,8 @@
             {{ render_searchable_select(form.site_id, placeholder="Type delivery site name") }}
             {{ render_searchable_select(form.material_id, placeholder="Any material — or pick a specific one", allow_empty=true,
                 help_text="Leave as 'Any Material' to apply to all materials on this route.") }}
+            {{ render_searchable_select(form.vehicle_owner_id, placeholder="Any vehicle owner — or pick a specific one", allow_empty=true,
+                help_text="Leave as 'Any Vehicle Owner' unless this rate is agreed with one specific owner.") }}
         </div>
     </section>
 

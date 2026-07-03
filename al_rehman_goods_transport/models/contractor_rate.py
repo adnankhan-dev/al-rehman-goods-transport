@@ -17,6 +17,8 @@ class ContractorRate(db.Model):
     site_id = db.Column(db.Integer, db.ForeignKey('site.id'), nullable=False)
     from_site_id = db.Column(db.Integer, db.ForeignKey('site.id'), nullable=True)
     material_id = db.Column(db.Integer, db.ForeignKey('material.id'), nullable=True)
+    # NULL = rate applies to any vehicle owner on this route.
+    vehicle_owner_id = db.Column(db.Integer, db.ForeignKey('vehicle_owner.id'), nullable=True)
     unit = db.Column(db.String(10), default='cft', nullable=False)
     rate = db.Column(db.Float, nullable=False)
     vehicle_rate = db.Column(db.Float, nullable=True)
@@ -29,6 +31,7 @@ class ContractorRate(db.Model):
     site = db.relationship('Site', foreign_keys=[site_id])
     from_site = db.relationship('Site', foreign_keys=[from_site_id])
     material = db.relationship('Material', backref=db.backref('rates', lazy='dynamic'))
+    vehicle_owner = db.relationship('VehicleOwner', backref=db.backref('rates', lazy='dynamic'))
 
     def __repr__(self):
         return f'<ContractorRate {self.id}: {self.rate}>'

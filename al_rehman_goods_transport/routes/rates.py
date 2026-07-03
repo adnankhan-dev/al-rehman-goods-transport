@@ -8,7 +8,7 @@ from ..core.flash import flash
 from ..core.templating import render_template
 from ..extensions import db
 from ..forms import ContractorRateForm
-from ..models import Contractor
+from ..models import Contractor, Vehicle
 from ..services import NotFoundError, RateService
 
 router = APIRouter()
@@ -20,6 +20,7 @@ def _populate_rate_choices(form, service: RateService):
     form.site_id.choices = choices["site_choices"]
     form.from_site_id.choices = choices["from_site_choices"]
     form.material_id.choices = choices["material_choices"]
+    form.vehicle_owner_id.choices = choices["vehicle_owner_choices"]
 
 
 def _rate_data_from_form(form):
@@ -28,6 +29,7 @@ def _rate_data_from_form(form):
         "site_id": form.site_id.data,
         "from_site_id": form.from_site_id.data if form.from_site_id.data not in (None, 0) else None,
         "material_id": form.material_id.data if form.material_id.data not in (None, 0) else None,
+        "vehicle_owner_id": form.vehicle_owner_id.data if form.vehicle_owner_id.data not in (None, 0) else None,
         "unit": form.unit.data,
         "rate": form.rate.data,
         "vehicle_rate": form.vehicle_rate.data or None,
@@ -97,6 +99,7 @@ async def edit_rate(id: int, request: Request, _=Depends(require_permission("rat
         form.site_id.data = rate.site_id
         form.from_site_id.data = rate.from_site_id or 0
         form.material_id.data = rate.material_id or 0
+        form.vehicle_owner_id.data = rate.vehicle_owner_id or 0
         form.effective_from.data = rate.effective_from
         form.effective_to.data = rate.effective_to
 
@@ -152,7 +155,15 @@ async def api_rate_lookup(request: Request, _=Depends(require_permission("orders
     site_id = _int("site_id")
     from_site_id = _int("from_site_id")
     material_id = _int("material_id")
+    vehicle_owner_id = _int("vehicle_owner_id")
     order_date_str = params.get("order_date", "")
+
+    # The order form knows the vehicle, not the owner — resolve it here.
+    if not vehicle_owner_id:
+        vehicle_id = _int("vehicle_id")
+        if vehicle_id:
+            vehicle = db.session.get(Vehicle, vehicle_id)
+            vehicle_owner_id = vehicle.owner_id if vehicle else None
 
     if not contractor_id or not site_id:
         return JSONResponse({"found": False, "rate": None})
@@ -163,7 +174,7 @@ async def api_rate_lookup(request: Request, _=Depends(require_permission("orders
         check_date = date.today()
 
     service = RateService()
-    rate = service.find_applicable_rate(contractor_id, site_id, from_site_id, material_id, check_date)
+    rate = service.find_applicable_rate(contractor_id, site_id, from_site_id, material_id, check_date, vehicle_owner_id=vehicle_owner_id)
 
     if rate:
         return JSONResponse({
@@ -177,6 +188,7 @@ async def api_rate_lookup(request: Request, _=Depends(require_permission("orders
             "notes": rate.notes or "",
             "from_site": rate.from_site.name if rate.from_site else None,
             "material": rate.material.name if rate.material else None,
+            "vehicle_owner": rate.vehicle_owner.name if rate.vehicle_owner else None,
         })
 
     return JSONResponse({"found": False, "rate": None})

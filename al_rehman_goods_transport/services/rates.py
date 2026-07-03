@@ -1,7 +1,7 @@
-from datetime import date
+from datetime import date, timedelta
 
 from ..extensions import db
-from ..models import Contractor, ContractorRate, Material, Site
+from ..models import Contractor, ContractorRate, Material, Site, VehicleOwner
 from .exceptions import NotFoundError
 
 
@@ -9,7 +9,7 @@ class RateService:
     def __init__(self, session=None):
         self.session = session or db.session
 
-    def list_rates(self, contractor_id=None, site_id=None, from_site_id=None, material_id=None):
+    def list_rates(self, contractor_id=None, site_id=None, from_site_id=None, material_id=None, vehicle_owner_id=None):
         query = ContractorRate.query
         if contractor_id:
             query = query.filter(ContractorRate.contractor_id == contractor_id)
@@ -19,6 +19,8 @@ class RateService:
             query = query.filter(ContractorRate.from_site_id == from_site_id)
         if material_id:
             query = query.filter(ContractorRate.material_id == material_id)
+        if vehicle_owner_id:
+            query = query.filter(ContractorRate.vehicle_owner_id == vehicle_owner_id)
         return query.order_by(ContractorRate.effective_from.desc()).all()
 
     def get_rate(self, rate_id):
@@ -45,21 +47,58 @@ class RateService:
         self.session.delete(rate)
         self.session.commit()
 
-    def find_applicable_rate(self, contractor_id, site_id, from_site_id=None, material_id=None, check_date=None):
+    def save_rate_from_order(self, data):
+        """
+        Save a rate captured on the add-order form.
+
+        Any existing rate with the exact same scope (contractor, to-site,
+        from-site, material, vehicle owner) that is still open on the new
+        effective_from date is end-dated to the day before, so only one saved
+        rate answers for a given route/material/owner on any date and the
+        order-form suggestion stays unambiguous.
+        """
+        new_from = data["effective_from"]
+        overlapping = (
+            ContractorRate.query
+            .filter(
+                ContractorRate.contractor_id == data["contractor_id"],
+                ContractorRate.site_id == data["site_id"],
+                ContractorRate.from_site_id == data.get("from_site_id"),
+                ContractorRate.material_id == data.get("material_id"),
+                ContractorRate.vehicle_owner_id == data.get("vehicle_owner_id"),
+                ContractorRate.effective_from < new_from,
+            )
+            .filter(
+                (ContractorRate.effective_to == None) | (ContractorRate.effective_to >= new_from)
+            )
+            .all()
+        )
+        for old_rate in overlapping:
+            old_rate.effective_to = new_from - timedelta(days=1)
+
+        rate = ContractorRate(**data)
+        self.session.add(rate)
+        self.session.commit()
+        return rate
+
+    def find_applicable_rate(self, contractor_id, site_id, from_site_id=None, material_id=None, check_date=None, vehicle_owner_id=None):
         """
         Return the best applicable rate for the given parameters on check_date.
 
-        A scoped rate (one that fixes a from_site and/or material) is only
-        excluded when the caller has selected a *conflicting* value. When the
-        from_site or material is still unselected (None), it is treated as a
-        wildcard so the rate still surfaces — this lets the order form suggest a
-        saved rate as soon as the contractor and to-site are chosen, before the
-        optional from_site/material are picked.
+        A scoped rate (one that fixes a from_site, material and/or vehicle
+        owner) is only excluded when the caller has selected a *conflicting*
+        value. When the from_site, material or vehicle owner is still
+        unselected (None), it is treated as a wildcard so the rate still
+        surfaces — this lets the order form suggest a saved rate as soon as the
+        contractor and to-site are chosen, before the optional
+        from_site/material/vehicle are picked.
 
-        Tie-breaking (best wins): an exact from_site match scores +2 and an exact
-        material match +1, so a fully matching rate always beats a partial one.
-        When two rates tie, a general (unconstrained) rate is preferred over a
-        scoped-but-unmatched rate so it stays a safe default.
+        Tie-breaking (best wins): an exact vehicle-owner match scores +4, an
+        exact from_site match +2 and an exact material match +1, so a fully
+        matching rate always beats a partial one and an owner-specific rate
+        beats a route-wide one. When two rates tie, a general (unconstrained)
+        rate is preferred over a scoped-but-unmatched rate so it stays a safe
+        default.
         """
         if check_date is None:
             check_date = date.today()
@@ -88,14 +127,18 @@ class RateService:
                 continue
             if material_id and rate.material_id and rate.material_id != material_id:
                 continue
+            if vehicle_owner_id and rate.vehicle_owner_id and rate.vehicle_owner_id != vehicle_owner_id:
+                continue
 
             match_score = 0
+            if rate.vehicle_owner_id and rate.vehicle_owner_id == vehicle_owner_id:
+                match_score += 4
             if rate.from_site_id and rate.from_site_id == from_site_id:
                 match_score += 2
             if rate.material_id and rate.material_id == material_id:
                 match_score += 1
 
-            is_general = 1 if not rate.from_site_id and not rate.material_id else 0
+            is_general = 1 if not rate.from_site_id and not rate.material_id and not rate.vehicle_owner_id else 0
             key = (match_score, is_general)
             if best_key is None or key > best_key:
                 best_key = key
@@ -108,9 +151,11 @@ class RateService:
         sites = Site.query.filter_by(is_business_site=False, is_archived=False).order_by(Site.name).all()
         from_sites = Site.query.filter_by(is_business_site=True, is_archived=False).order_by(Site.name).all()
         materials = Material.query.order_by(Material.name).all()
+        vehicle_owners = VehicleOwner.query.order_by(VehicleOwner.name).all()
         return {
             "contractor_choices": [(0, "Select Contractor")] + [(c.id, c.name) for c in contractors],
             "site_choices": [(0, "Select To Site")] + [(s.id, s.name) for s in sites],
             "from_site_choices": [(0, "From Site (Optional)")] + [(s.id, s.name) for s in from_sites],
             "material_choices": [(0, "Any Material")] + [(m.id, m.name) for m in materials],
+            "vehicle_owner_choices": [(0, "Any Vehicle Owner")] + [(o.id, o.name) for o in vehicle_owners],
         }

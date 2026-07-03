@@ -114,6 +114,7 @@ class ContractorRateForm(BaseForm):
     site_id = SelectField('To Site (Delivery)', coerce=int, validators=[DataRequired()])
     from_site_id = SelectField('From Site (Pickup)', coerce=int, validators=[Optional()])
     material_id = SelectField('Material (Optional)', coerce=int, validators=[Optional()])
+    vehicle_owner_id = SelectField('Vehicle Owner (Optional)', coerce=int, validators=[Optional()])
     unit = SelectField('Unit', choices=[('cft', 'CFT'), ('ton', 'Ton')], validators=[DataRequired()])
     rate = FloatField('Contractor Rate per Unit (Rs.)', validators=[DataRequired()])
     vehicle_rate = FloatField('Vehicle Rate per Unit (Rs., optional)', validators=[Optional()])

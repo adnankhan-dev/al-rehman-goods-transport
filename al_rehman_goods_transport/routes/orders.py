@@ -6,8 +6,10 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from ..core.auth import require_permission
 from ..core.flash import flash
 from ..core.templating import render_template
+from ..extensions import db
+from ..models import Vehicle
 from ..forms import EditOrderForm, OrderForm
-from ..services import ConflictError, NotFoundError, OrderService, ValidationError
+from ..services import ConflictError, NotFoundError, OrderService, RateService, ValidationError
 from ..services.audit import record_audit
 from ..utils.pagination import parse_page
 
@@ -103,6 +105,40 @@ def _material_units(service: OrderService):
     return {material.id: (material.unit or "cft") for material in service.lookups.list_materials()}
 
 
+def _maybe_save_rate_from_order(request, form, form_data, current_user, service: OrderService):
+    """Save the order's rates as a ContractorRate when the user opted in on the save-rates popup."""
+    if (form_data.get("save_rate") or "") != "1":
+        return
+    if not getattr(current_user, "can", lambda _c: False)("rates.create"):
+        return
+    effective_from = _parse_date(form_data.get("rate_effective_from"))
+    if effective_from is None or not form.contractor_id.data or not form.site_id.data or not form.contractor_rate.data:
+        return
+    effective_to = _parse_date(form_data.get("rate_effective_to"))
+
+    # Rates are saved per vehicle owner; resolve the owner from the order's vehicle.
+    vehicle = db.session.get(Vehicle, form.vehicle_id.data) if form.vehicle_id.data else None
+    vehicle_owner_id = vehicle.owner_id if vehicle else None
+
+    try:
+        RateService().save_rate_from_order({
+            "contractor_id": form.contractor_id.data,
+            "site_id": form.site_id.data,
+            "from_site_id": form.from_site_id.data or None,
+            "material_id": form.material_id.data or None,
+            "vehicle_owner_id": vehicle_owner_id,
+            "unit": _material_units(service).get(form.material_id.data, "cft"),
+            "rate": form.contractor_rate.data,
+            "vehicle_rate": form.vehicle_rate.data or None,
+            "effective_from": effective_from.date(),
+            "effective_to": effective_to.date() if effective_to else None,
+            "notes": "Saved from order entry",
+        })
+        flash(request, "Rates saved — they will be suggested automatically on future orders for this route.", "success")
+    except Exception:
+        flash(request, "Order was added, but the rates could not be saved. You can add them from the Rates page.", "warning")
+
+
 @router.get("/orders", name="orders.orders")
 async def orders(request: Request, current_user=Depends(require_permission("orders.view"))):
     service = OrderService()
@@ -195,6 +231,7 @@ async def create_order(request: Request, current_user=Depends(require_permission
             order = service.create_order(service.input_from_form(form, form_data), created_by_id=getattr(current_user, "id", None))
             record_audit(current_user, "create", "order", order.id, f"Order #{order.id} — {order.material_name}, {order.delivered_quantity or order.quantity} {order.unit}")
             flash(request, "Order added successfully!", "success")
+            _maybe_save_rate_from_order(request, form, form_data, current_user, service)
             return RedirectResponse(url=str(request.url_for("orders.orders")), status_code=303)
         except (ConflictError, ValidationError, ValueError) as exc:
             flash(request, str(exc), "warning")
@@ -204,6 +241,7 @@ async def create_order(request: Request, current_user=Depends(require_permission
         "orders/create.html",
         form=form,
         material_units=_material_units(service),
+        can_save_rates=bool(getattr(current_user, "can", lambda _c: False)("rates.create")),
         status_code=400 if request.method == "POST" and form.errors else 200,
     )
 

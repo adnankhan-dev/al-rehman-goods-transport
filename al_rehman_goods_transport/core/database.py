@@ -64,6 +64,7 @@ def init_db():
     _upgrade_schema()
     _add_order_entry_audit_columns()
     _add_petrol_pump_opening_balance()
+    _add_contractor_rate_vehicle_owner()
     _run_one_time_backfills()
 
 
@@ -76,6 +77,20 @@ def _add_petrol_pump_opening_balance():
     if "opening_balance" not in columns:
         with engine.begin() as connection:
             connection.execute(text("ALTER TABLE petrol_pump ADD COLUMN opening_balance FLOAT DEFAULT 0"))
+
+
+def _add_contractor_rate_vehicle_owner():
+    """Add ContractorRate.vehicle_owner_id to existing databases (SQLite + Postgres).
+
+    Saved rates can be scoped to a specific vehicle owner; NULL means the rate
+    applies to any owner on the route. INTEGER is portable across both DBs."""
+    inspector = inspect(engine)
+    if "contractor_rate" not in inspector.get_table_names():
+        return
+    columns = {column["name"] for column in inspector.get_columns("contractor_rate")}
+    if "vehicle_owner_id" not in columns:
+        with engine.begin() as connection:
+            connection.execute(text("ALTER TABLE contractor_rate ADD COLUMN vehicle_owner_id INTEGER"))
 
 
 def _add_order_entry_audit_columns():

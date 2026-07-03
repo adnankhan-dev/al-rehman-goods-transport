@@ -94,6 +94,15 @@ env var overrides the DB.
 - **Vehicle owners:** payments/outstanding/standalone diesel appear in their statement + bill.
   "Receipt from Vehicle Owner" transaction (owners sometimes buy fuel from our pump and pay cash;
   balances can go negative). Ledger advances are reflected; per-order advance column removed.
+- **Smart Save-Rates (order form):** saved rates (`ContractorRate`) are scoped by contractor +
+  to-site + optional from-site/material/**vehicle owner** (owner chosen by the user — rates can
+  differ per owner on the same route; NULL owner = any). After confirming an order, if the entered
+  rates aren't already saved for that scope, a popup offers to save them with Valid From/Upto dates
+  (`save_rate`/`rate_effective_from`/`rate_effective_to` hidden fields → `_maybe_save_rate_from_order`,
+  gated by `rates.create`). `RateService.save_rate_from_order` end-dates any overlapping same-scope
+  rate. Lookup tie-break scores: owner match +4, from-site +2, material +1; `/api/rates/lookup`
+  accepts `vehicle_id` and resolves the owner server-side. The contractor rates print deliberately
+  does NOT show the vehicle-owner column (customer-facing).
 - **Plants:** related orders shown when a plant is opened; plants have printable statements like pumps.
 - **Print/PDF layout:** letterhead + page-break handling (avoid breaking right after the header);
   don't print internal phrasing like "net of diesel and advances" or developer formula captions —

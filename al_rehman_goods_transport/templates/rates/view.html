@@ -33,6 +33,7 @@
                 {{ detail_value("From Site", rate.from_site.name if rate.from_site else "—") }}
                 {{ detail_value("To Site (Delivery)", rate.site.name) }}
                 {{ detail_value("Material", rate.material.name if rate.material else "All Materials") }}
+                {{ detail_value("Vehicle Owner", rate.vehicle_owner.name if rate.vehicle_owner else "Any Owner") }}
                 {{ detail_value("Unit", rate.unit|upper) }}
             </div>
         </div>

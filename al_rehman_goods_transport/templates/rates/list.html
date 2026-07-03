@@ -55,6 +55,7 @@
                         <th>From Site</th>
                         <th>To Site</th>
                         <th>Material</th>
+                        <th>Vehicle Owner</th>
                         <th>Unit</th>
                         <th>Rate (Rs.)</th>
                         <th>Vehicle Rate (Rs.)</th>
@@ -76,6 +77,7 @@
                         <td><span class="table-text">{{ rate.from_site.name if rate.from_site else "-" }}</span></td>
                         <td><span class="table-text">{{ rate.site.name }}</span></td>
                         <td><span class="table-text">{{ rate.material.name if rate.material else "All Materials" }}</span></td>
+                        <td><span class="table-text">{{ rate.vehicle_owner.name if rate.vehicle_owner else "Any Owner" }}</span></td>
                         <td><span class="table-text">{{ rate.unit|upper }}</span></td>
                         <td><span class="table-amount">Rs. {{ "%.2f"|format(rate.rate) }}</span></td>
                         <td><span class="table-amount">{{ "Rs. %.2f"|format(rate.vehicle_rate) if rate.vehicle_rate else "—" }}</span></td>
@@ -112,7 +114,7 @@
                     </tr>
                     {% else %}
                     <tr>
-                        <td colspan="12">
+                        <td colspan="13">
                             {{ empty_state("No rates found. Add a rate to get started.", "bi-tag") }}
                         </td>
                     </tr>

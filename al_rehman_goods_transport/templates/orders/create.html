@@ -7,6 +7,9 @@
 {% call form_shell("Add New Order", "Enter the full order, delivery, and settlement details in one step so the order is ready for reporting and billing immediately.", "Orders", url_for('orders.orders'), "Back to Orders") %}
 <form method="POST" id="orderForm" class="form-stack order-form" enctype="multipart/form-data">
     {{ form.hidden_tag() }}
+    <input type="hidden" name="save_rate" id="save_rate" value="">
+    <input type="hidden" name="rate_effective_from" id="rate_effective_from" value="">
+    <input type="hidden" name="rate_effective_to" id="rate_effective_to" value="">
     <section class="form-section-panel">
         <div class="form-section-heading">
             <h3>1. Vehicle Information</h3>
@@ -102,6 +105,42 @@
             <div class="modal-footer">
                 <button type="button" class="btn btn-ui-neutral" data-bs-dismiss="modal">Continue Editing</button>
                 <button type="button" class="btn btn-ui-primary" id="confirmOrderReviewBtn">Submit Order</button>
+            </div>
+        </div>
+    </div>
+</div>
+<div class="modal fade" id="saveRateModal" tabindex="-1" aria-labelledby="saveRateModalLabel" aria-hidden="true" data-bs-backdrop="static">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow-lg">
+            <div class="modal-header">
+                <div>
+                    <div class="eyebrow mb-1">Smart Rates</div>
+                    <h5 class="modal-title mb-0" id="saveRateModalLabel">Save these rates for this route?</h5>
+                </div>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p class="mb-2">These rates are not saved yet for this contractor, route, material, and vehicle owner. Save them once and they will be suggested automatically on future orders.</p>
+                <div class="detail-panel mb-3">
+                    <div class="detail-list" id="saveRateSummary"></div>
+                </div>
+                <div class="form-grid-two">
+                    <div class="form-field">
+                        <label class="form-label" for="save_rate_from_input">Valid From <span class="text-danger">*</span></label>
+                        <input type="date" id="save_rate_from_input" class="form-control" required>
+                        <div class="form-text">Defaults to the order date.</div>
+                    </div>
+                    <div class="form-field">
+                        <label class="form-label" for="save_rate_to_input">Valid Upto</label>
+                        <input type="date" id="save_rate_to_input" class="form-control">
+                        <div class="form-text">Leave empty if the rates stay valid until changed.</div>
+                    </div>
+                </div>
+                <div class="alert alert-warning mb-0 mt-2" id="saveRateDateError" style="display:none;">Please enter a valid "Valid From" date (and a "Valid Upto" date that is not before it).</div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-ui-neutral" id="skipSaveRateBtn">No, Just Add Order</button>
+                <button type="button" class="btn btn-ui-primary" id="confirmSaveRateBtn">Yes, Save Rates &amp; Add Order</button>
             </div>
         </div>
     </div>
@@ -266,9 +305,8 @@
         });
 
         confirmOrderReviewBtn.addEventListener('click', function() {
-            reviewConfirmed = true;
             reviewModal.hide();
-            orderForm.submit();
+            maybePromptSaveRate();
         });
 
         reviewModalElement.addEventListener('hidden.bs.modal', function() {
@@ -283,6 +321,7 @@
         const rateHint = document.getElementById('rateHint');
         const materialSelect = document.getElementById('material_id');
         const orderDateInput = document.getElementById('order_date');
+        const vehicleSelect = document.getElementById('vehicle_id');
 
         function fetchApplicableRate() {
             const contractorId = contractorSelect.value;
@@ -290,6 +329,7 @@
             const fromSiteId = fromSiteSelect ? fromSiteSelect.value : '';
             const materialId = materialSelect ? materialSelect.value : '';
             const orderDate = orderDateInput ? orderDateInput.value : '';
+            const vehicleId = vehicleSelect ? vehicleSelect.value : '';
 
             if (!contractorId || contractorId === '0' || !siteId || siteId === '0') {
                 rateHint.style.display = 'none';
@@ -302,6 +342,7 @@
                 from_site_id: fromSiteId || '',
                 material_id: materialId || '',
                 order_date: orderDate || '',
+                vehicle_id: (vehicleId && vehicleId !== '0') ? vehicleId : '',
             });
 
             fetch('/api/rates/lookup?' + params.toString())
@@ -311,12 +352,13 @@
                         const validTo = data.effective_to ? ` to ${data.effective_to}` : ' onwards';
                         const material = data.material ? ` · ${data.material}` : '';
                         const fromSite = data.from_site ? ` · From: ${data.from_site}` : '';
+                        const ownerPart = data.vehicle_owner ? ` · Owner: ${data.vehicle_owner}` : '';
                         const vehiclePart = data.vehicle_rate ? ` · Vehicle: Rs. ${data.vehicle_rate.toFixed(2)}` : '';
                         rateHint.innerHTML = `
                             <div class="rate-hint-inner">
                                 <div class="rate-hint-info">
                                     <i class="bi bi-tag-fill"></i>
-                                    <span>Saved rate: <strong>Rs. ${data.rate.toFixed(2)} / ${data.unit.toUpperCase()}</strong>${vehiclePart}${fromSite}${material}</span>
+                                    <span>Saved rate: <strong>Rs. ${data.rate.toFixed(2)} / ${data.unit.toUpperCase()}</strong>${vehiclePart}${ownerPart}${fromSite}${material}</span>
                                     <small>Valid: ${data.effective_from}${validTo}</small>
                                     ${data.notes ? `<small class="rate-hint-notes">${data.notes}</small>` : ''}
                                 </div>
@@ -347,6 +389,107 @@
         if (fromSiteSelect) fromSiteSelect.addEventListener('change', fetchApplicableRate);
         if (materialSelect) materialSelect.addEventListener('change', fetchApplicableRate);
         if (orderDateInput) orderDateInput.addEventListener('change', fetchApplicableRate);
+        if (vehicleSelect) vehicleSelect.addEventListener('change', fetchApplicableRate);
+
+        // --- Smart Save-Rates popup ---
+        // After the user confirms the order in the review modal, check whether the
+        // entered rates are already saved for this contractor/route/material. If
+        // not, offer to save them (with validity dates) before submitting.
+        const CAN_SAVE_RATES = {{ (can_save_rates | default(false)) | tojson }};
+        const saveRateModalElement = document.getElementById('saveRateModal');
+        const saveRateModal = new bootstrap.Modal(saveRateModalElement);
+        const saveRateSummary = document.getElementById('saveRateSummary');
+        const saveRateFromInput = document.getElementById('save_rate_from_input');
+        const saveRateToInput = document.getElementById('save_rate_to_input');
+        const saveRateDateError = document.getElementById('saveRateDateError');
+        let saveRateChoiceMade = false;
+
+        function submitOrderForm() {
+            reviewConfirmed = true;
+            orderForm.submit();
+        }
+
+        function maybePromptSaveRate() {
+            const contractorId = contractorSelect.value;
+            const siteId = siteSelect.value;
+            const contractorRate = parseFloat(contractorRateInput.value || '0');
+            const vehicleRate = parseFloat(vehicleRateInput ? (vehicleRateInput.value || '0') : '0');
+
+            if (!CAN_SAVE_RATES || !contractorId || contractorId === '0' || !siteId || siteId === '0' || !(contractorRate > 0)) {
+                submitOrderForm();
+                return;
+            }
+
+            const params = new URLSearchParams({
+                contractor_id: contractorId,
+                site_id: siteId,
+                from_site_id: (fromSiteSelect && fromSiteSelect.value !== '0') ? fromSiteSelect.value : '',
+                material_id: (materialSelect && materialSelect.value !== '0') ? materialSelect.value : '',
+                order_date: orderDateInput ? orderDateInput.value : '',
+                vehicle_id: (vehicleSelect && vehicleSelect.value !== '0') ? vehicleSelect.value : '',
+            });
+
+            fetch('/api/rates/lookup?' + params.toString())
+                .then(r => r.json())
+                .then(data => {
+                    const savedMatches = data.found
+                        && Number(data.rate) === contractorRate
+                        && (!vehicleRate || Number(data.vehicle_rate || 0) === vehicleRate);
+                    if (savedMatches) {
+                        submitOrderForm();
+                    } else {
+                        openSaveRatePrompt(contractorRate, vehicleRate);
+                    }
+                })
+                .catch(() => submitOrderForm());
+        }
+
+        function openSaveRatePrompt(contractorRate, vehicleRate) {
+            const unit = currentUnit() || 'unit';
+            const money = function(n) { return 'Rs. ' + (Number(n) || 0).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2}); };
+            renderDetailList(saveRateSummary, [
+                { label: 'Contractor', value: selectedText(contractorSelect) },
+                { label: 'From Site', value: (fromSiteSelect && fromSiteSelect.value !== '0') ? selectedText(fromSiteSelect) : 'Any' },
+                { label: 'To Site', value: selectedText(siteSelect) },
+                { label: 'Material', value: (materialSelect && materialSelect.value !== '0') ? selectedText(materialSelect) : 'Any' },
+                { label: 'Vehicle (Owner)', value: (vehicleSelect && vehicleSelect.value !== '0') ? selectedText(vehicleSelect) : 'Any' },
+                { label: 'Contractor Rate', value: `${money(contractorRate)} / ${unit}` },
+                { label: 'Vehicle Rate', value: vehicleRate ? `${money(vehicleRate)} / ${unit}` : '—' }
+            ]);
+            saveRateFromInput.value = (orderDateInput && orderDateInput.value) || new Date().toISOString().slice(0, 10);
+            saveRateToInput.value = '';
+            saveRateDateError.style.display = 'none';
+            saveRateChoiceMade = false;
+            saveRateModal.show();
+        }
+
+        document.getElementById('skipSaveRateBtn').addEventListener('click', function() {
+            saveRateChoiceMade = true;
+            saveRateModal.hide();
+            submitOrderForm();
+        });
+
+        document.getElementById('confirmSaveRateBtn').addEventListener('click', function() {
+            const fromValue = saveRateFromInput.value;
+            const toValue = saveRateToInput.value;
+            if (!fromValue || (toValue && toValue < fromValue)) {
+                saveRateDateError.style.display = 'block';
+                return;
+            }
+            document.getElementById('save_rate').value = '1';
+            document.getElementById('rate_effective_from').value = fromValue;
+            document.getElementById('rate_effective_to').value = toValue || '';
+            saveRateChoiceMade = true;
+            saveRateModal.hide();
+            submitOrderForm();
+        });
+
+        // Dismissing the popup (X button) counts as "No" — the order still submits.
+        saveRateModalElement.addEventListener('hidden.bs.modal', function() {
+            if (!saveRateChoiceMade) {
+                submitOrderForm();
+            }
+        });
     });
 </script>
 {% endblock %}

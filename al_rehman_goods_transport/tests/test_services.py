@@ -535,6 +535,55 @@ class OrderFinanceServiceTests(unittest.TestCase):
         # Matching material chosen → the more specific rate wins.
         self.assertEqual(service.find_applicable_rate(self.contractor_id, self.site_id, material_id=self.material_id, check_date=check).rate, 130)
 
+    def test_owner_scoped_rate_beats_route_wide_rate(self):
+        from datetime import date as date_type
+
+        route_wide = ContractorRate(contractor_id=self.contractor_id, site_id=self.site_id, unit="cft", rate=100, vehicle_rate=80, effective_from=date_type(2026, 1, 1))
+        owner_scoped = ContractorRate(contractor_id=self.contractor_id, site_id=self.site_id, vehicle_owner_id=self.owner_id, unit="cft", rate=100, vehicle_rate=90, effective_from=date_type(2026, 1, 1))
+        db.session.add_all([route_wide, owner_scoped])
+        db.session.commit()
+
+        service = RateService()
+        check = date_type(2026, 6, 13)
+
+        # No vehicle picked yet → the route-wide rate is the safe default.
+        self.assertEqual(service.find_applicable_rate(self.contractor_id, self.site_id, check_date=check).id, route_wide.id)
+        # Matching owner → the owner-specific rate wins.
+        self.assertEqual(service.find_applicable_rate(self.contractor_id, self.site_id, vehicle_owner_id=self.owner_id, check_date=check).id, owner_scoped.id)
+        # A different owner conflicts with the scoped rate → falls back to route-wide.
+        self.assertEqual(service.find_applicable_rate(self.contractor_id, self.site_id, vehicle_owner_id=999999, check_date=check).id, route_wide.id)
+
+    def test_save_rate_from_order_end_dates_overlapping_same_scope_rate(self):
+        from datetime import date as date_type
+
+        old = ContractorRate(contractor_id=self.contractor_id, site_id=self.site_id, unit="cft", rate=100, effective_from=date_type(2026, 1, 1))
+        scoped = ContractorRate(contractor_id=self.contractor_id, site_id=self.site_id, material_id=self.material_id, unit="cft", rate=130, effective_from=date_type(2026, 1, 1))
+        db.session.add_all([old, scoped])
+        db.session.commit()
+
+        service = RateService()
+        new = service.save_rate_from_order({
+            "contractor_id": self.contractor_id,
+            "site_id": self.site_id,
+            "from_site_id": None,
+            "material_id": None,
+            "unit": "cft",
+            "rate": 120,
+            "vehicle_rate": 95,
+            "effective_from": date_type(2026, 7, 1),
+            "effective_to": None,
+            "notes": "Saved from order entry",
+        })
+
+        # The overlapping same-scope rate is closed the day before the new one starts.
+        self.assertEqual(old.effective_to, date_type(2026, 6, 30))
+        # A rate with a different scope (material-specific) is left untouched.
+        self.assertIsNone(scoped.effective_to)
+
+        # Old window still answers before the switch; the new rate answers after it.
+        self.assertEqual(service.find_applicable_rate(self.contractor_id, self.site_id, check_date=date_type(2026, 5, 1)).rate, 100)
+        self.assertEqual(service.find_applicable_rate(self.contractor_id, self.site_id, check_date=date_type(2026, 7, 2)).id, new.id)
+
     def test_performance_report_builds_trend_and_rankings(self):
         order = Order(
             vehicle_id=self.vehicle_one_id,
