@@ -97,6 +97,10 @@ class BillingService:
 
         trips_gross = sum(o.remaining_vehicle_payment() for o in vehicle_owner_activity_rows)
         diesel_deduction_total = sum(float(d.amount or 0) for d in vehicle_owner_diesel_rows)
+        # Vehicle-owner bills are presented grouped by vehicle.
+        owner_vehicle_groups = []
+        if bill.entity_type == "vehicle_owner":
+            owner_vehicle_groups = group_owner_activity_by_vehicle(vehicle_owner_activity_rows, vehicle_owner_diesel_rows)
         related_transactions = self.related_transactions(bill)
 
         # Petrol pump bill: previous balance + this bill's diesel - payments made
@@ -140,6 +144,7 @@ class BillingService:
             "loading_activity_rows": loading_activity_rows,
             "vehicle_owner_activity_rows": vehicle_owner_activity_rows,
             "vehicle_owner_diesel_rows": vehicle_owner_diesel_rows,
+            "owner_vehicle_groups": owner_vehicle_groups,
             "trips_gross": trips_gross,
             "diesel_deduction_total": diesel_deduction_total,
             "balance_summary": balance_summary(bill.entity_type, self._entity_balance(bill)),
@@ -825,6 +830,63 @@ def _sorted_material_groups(material_groups):
         material_groups.values(),
         key=lambda g: (g["material"], g["contractor_rate"] if g["contractor_rate"] is not None else float("inf")),
     )
+
+
+def group_owner_activity_by_vehicle(orders, diesel_rows=None, advance_rows=None):
+    """Group an owner's trips (plus optional fuel-log diesel and vehicle
+    advances) by vehicle, for owner statements and vehicle-owner bills.
+
+    Returns vehicle groups sorted by vehicle number, each:
+        {vehicle, vehicle_number, orders, diesel_rows, advance_rows,
+         trip_count, total_delivered, gross, order_diesel, net_payable,
+         standalone_diesel, advances, vehicle_payable}
+    where net_payable = gross − order diesel, and
+    vehicle_payable = net_payable − fuel-log diesel − advances to the vehicle."""
+    groups = {}
+
+    def group_for(vehicle, vehicle_id):
+        key = vehicle_id if vehicle_id is not None else 0
+        if key not in groups:
+            groups[key] = {
+                "vehicle": vehicle,
+                "vehicle_number": vehicle.vehicle_number if vehicle else "—",
+                "orders": [],
+                "diesel_rows": [],
+                "advance_rows": [],
+                "trip_count": 0,
+                "total_delivered": 0.0,
+                "gross": 0.0,
+                "order_diesel": 0.0,
+                "net_payable": 0.0,
+                "standalone_diesel": 0.0,
+                "advances": 0.0,
+                "vehicle_payable": 0.0,
+            }
+        return groups[key]
+
+    for order in orders or []:
+        group = group_for(order.vehicle, order.vehicle_id)
+        group["orders"].append(order)
+        group["trip_count"] += 1
+        group["total_delivered"] += float(order.delivered_quantity or order.quantity or 0)
+        group["gross"] += float(order.total_vehicle_amount())
+        group["order_diesel"] += float(order.total_diesel_amount())
+        group["net_payable"] += float(order.remaining_vehicle_payment())
+
+    for entry in diesel_rows or []:
+        group = group_for(entry.vehicle, entry.vehicle_id)
+        group["diesel_rows"].append(entry)
+        group["standalone_diesel"] += float(entry.amount or 0)
+
+    for txn in advance_rows or []:
+        group = group_for(txn.vehicle, txn.vehicle_id)
+        group["advance_rows"].append(txn)
+        group["advances"] += float(txn.amount or 0)
+
+    result = sorted(groups.values(), key=lambda g: g["vehicle_number"])
+    for group in result:
+        group["vehicle_payable"] = group["net_payable"] - group["standalone_diesel"] - group["advances"]
+    return result
 
 
 def group_orders_by_site_and_material(orders):

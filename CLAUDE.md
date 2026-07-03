@@ -35,12 +35,13 @@ env var overrides the DB.
 
 ## 3. ⚠️ Hard rules (read before editing/testing)
 
-1. **NEVER wipe `data/app.db`.** The real local DB has **162 orders**. Tests historically wiped it
+1. **NEVER wipe `data/app.db`.** It is the real local DB (163 orders as of 2026-07-03; the count
+   grows with use — record it before any test run and verify it is unchanged after). Tests historically wiped it
    because importing the package builds the engine against the live `DATABASE_URL` before test
    overrides apply. Protections live in `tests/__init__.py` (it sets `os.environ["DATABASE_URL"]`
    to a throwaway `_test_app.db`, sets `settings.database_url`, and calls `configure_engine(...)`).
    - **When testing manually:** copy `app.db` to a `mktemp -d` temp file and point at the copy.
-     After ANY test run, verify `SELECT COUNT(*) FROM "orders"` on `data/app.db` is still **162**.
+     After ANY test run, verify `SELECT COUNT(*) FROM "orders"` on `data/app.db` is unchanged.
 2. **Pin FastAPI/Starlette.** `requirements.txt` pins `fastapi==0.138.0`, `starlette==1.3.1`.
    A silent rebuild once upgraded Starlette 0.x→1.x, which changed `include_router` internals and
    broke URL resolution (`NoMatchFound: bills.print_bill`) — every route on live 500'd. Do not
@@ -113,7 +114,7 @@ env var overrides the DB.
 
 - Run: `PYTHONPATH=. .venv/Scripts/python.exe -m unittest al_rehman_goods_transport.tests.test_services al_rehman_goods_transport.tests.test_routes`
 - Expect **one pre-existing failure** on Windows (a backup test) — that's known/acceptable.
-- **Always** confirm `data/app.db` orders count is still **162** afterward.
+- **Always** confirm `data/app.db` orders count is unchanged afterward (compare before/after).
 
 ## 7. Git / workflow conventions
 

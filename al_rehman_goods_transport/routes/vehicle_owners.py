@@ -9,6 +9,7 @@ from ..core.templating import render_template
 from ..extensions import db
 from ..forms import VehicleOwnerForm
 from ..models import DieselEntry, Transaction, VehicleOwner
+from ..services.billing import group_owner_activity_by_vehicle
 
 
 router = APIRouter()
@@ -77,7 +78,9 @@ def _owner_orders_and_summary(owner):
         "advances": advances_total,
         "outstanding": outstanding,
     }
-    return related_orders, summary, standalone_diesel_rows, payments, advances
+    # Statement/bill are presented grouped by vehicle, each with its own subtotals.
+    vehicle_groups = group_owner_activity_by_vehicle(related_orders, standalone_diesel_rows, advances)
+    return related_orders, summary, standalone_diesel_rows, payments, advances, vehicle_groups
 
 
 @router.get("/vehicle-owners", name="vehicle_owners.index")
@@ -108,7 +111,7 @@ async def view_vehicle_owner(id: int, request: Request, _current_user=Depends(re
     owner = db.session.get(VehicleOwner, id)
     if owner is None:
         raise HTTPException(status_code=404, detail="Vehicle owner not found")
-    related_orders, owner_summary, standalone_diesel_rows, payments, advances = _owner_orders_and_summary(owner)
+    related_orders, owner_summary, standalone_diesel_rows, payments, advances, vehicle_groups = _owner_orders_and_summary(owner)
     related_transactions = sorted(owner.transactions, key=lambda transaction: (transaction.date, transaction.id), reverse=True)
     return render_template(
         request,
@@ -119,6 +122,7 @@ async def view_vehicle_owner(id: int, request: Request, _current_user=Depends(re
         standalone_diesel_rows=standalone_diesel_rows,
         advances=advances,
         payments=payments,
+        vehicle_groups=vehicle_groups,
         related_transactions=related_transactions,
     )
 
@@ -128,7 +132,7 @@ async def print_vehicle_owner(id: int, request: Request, _current_user=Depends(r
     owner = db.session.get(VehicleOwner, id)
     if owner is None:
         raise HTTPException(status_code=404, detail="Vehicle owner not found")
-    related_orders, owner_summary, standalone_diesel_rows, payments, advances = _owner_orders_and_summary(owner)
+    related_orders, owner_summary, standalone_diesel_rows, payments, advances, vehicle_groups = _owner_orders_and_summary(owner)
     return render_template(
         request,
         "vehicle_owners/print.html",
@@ -139,6 +143,7 @@ async def print_vehicle_owner(id: int, request: Request, _current_user=Depends(r
         standalone_diesel_rows=standalone_diesel_rows,
         payments=payments,
         advances=advances,
+        vehicle_groups=vehicle_groups,
         now=datetime.now(),
     )
 

@@ -136,7 +136,7 @@
     </div>
     {% endif %}
 
-    {% if orders_by_site %}
+    {% if orders_by_site and bill.entity_type != 'vehicle_owner' %}
     <div class="table-panel table-panel-list">
         <div class="table-panel-header table-panel-header">
             <div>
@@ -329,71 +329,115 @@
     </div>
     {% endif %}
 
-    {% if vehicle_owner_activity_rows %}
+    {% if owner_vehicle_groups %}
     <div class="table-panel table-panel-list">
         <div class="table-panel-header">
             <div>
                 <h3 class="table-panel-title">Vehicle owner activity</h3>
-                <p class="table-panel-copy">Owner-side trip detail behind this bill, including vehicle, quantity, rate, delivery receipt, and date.</p>
+                <p class="table-panel-copy">Trips grouped by vehicle — each vehicle shows its own subtotal, with the overall summary at the bottom.</p>
             </div>
         </div>
-        <div class="table-responsive">
-            <table class="table detail-table">
-                <thead>
-                    <tr>
-                        <th>Date</th>
-                        <th>Vehicle</th>
-                        <th>Delivered Qty</th>
-                        <th>Vehicle Rate</th>
-                        <th>Delivery Receipt</th>
-                        <th>Receipt Image</th>
-                        <th class="text-end">Payable</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for order in vehicle_owner_activity_rows %}
-                    <tr>
-                        <td>{{ (order.completion_date or order.order_date).strftime('%Y-%m-%d') }}</td>
-                        <td>{{ order.vehicle.vehicle_number if order.vehicle else '-' }}</td>
-                        <td>{{ "%.2f"|format(order.delivered_quantity or order.quantity or 0) }} {{ order.unit|upper }}</td>
-                        <td>Rs. {{ "%.2f"|format(order.vehicle_rate or 0) }}</td>
-                        <td>{{ order.receipt_number or '-' }}</td>
-                        <td>
-                            {% if order.delivery_receipt_image %}
-                            <a href="{{ order.delivery_receipt_image }}" target="_blank" rel="noopener">View</a>
-                            {% else %}-{% endif %}
-                        </td>
-                        <td class="text-end">Rs. {{ "%.2f"|format(order.remaining_vehicle_payment()) }}</td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-                <tfoot>
-                    <tr class="material-subtotal-row">
-                        <td colspan="6"><strong>Gross Trips Total</strong></td>
-                        <td class="text-end"><strong>Rs. {{ "%.2f"|format(trips_gross) }}</strong></td>
-                    </tr>
-                    {% if vehicle_owner_diesel_rows %}
-                    {% for entry in vehicle_owner_diesel_rows %}
-                    <tr style="color:var(--muted);">
-                        <td>{{ entry.date.strftime('%Y-%m-%d') }}</td>
-                        <td colspan="2">{{ entry.vehicle.vehicle_number if entry.vehicle else '-' }} — Diesel deduction</td>
-                        <td>{{ entry.petrol_pump.name if entry.petrol_pump else '-' }}</td>
-                        <td>{{ entry.receipt_number or '-' }}</td>
-                        <td>{{ "%.2f"|format(entry.litres or 0) }} L</td>
-                        <td class="text-end" style="color:#dc2626;">− Rs. {{ "%.2f"|format(entry.amount or 0) }}</td>
-                    </tr>
-                    {% endfor %}
-                    <tr class="material-subtotal-row">
-                        <td colspan="6"><strong>Diesel Deductions</strong></td>
-                        <td class="text-end" style="color:#dc2626;"><strong>− Rs. {{ "%.2f"|format(diesel_deduction_total) }}</strong></td>
-                    </tr>
-                    <tr class="bill-grand-total-row">
-                        <td colspan="6"><strong>Net Payable</strong></td>
-                        <td class="text-end"><strong>Rs. {{ "%.2f"|format(trips_gross - diesel_deduction_total) }}</strong></td>
-                    </tr>
-                    {% endif %}
-                </tfoot>
-            </table>
+
+        {% for vg in owner_vehicle_groups %}
+        <div class="bill-site-block">
+            <div class="bill-site-head">Vehicle: {{ vg.vehicle_number }}
+                <span class="badge bg-secondary">{{ vg.trip_count }} trip{% if vg.trip_count != 1 %}s{% endif %}</span>
+            </div>
+            <div class="table-responsive">
+                <table class="table detail-table">
+                    <thead>
+                        <tr>
+                            <th>Date</th>
+                            <th>From Site</th>
+                            <th>To Site</th>
+                            <th>Material</th>
+                            <th>Delivered Qty</th>
+                            <th>Vehicle Rate</th>
+                            <th>Delivery Receipt</th>
+                            <th>Receipt Image</th>
+                            <th class="text-end">Payable</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for order in vg.orders %}
+                        <tr>
+                            <td>{{ (order.completion_date or order.order_date).strftime('%Y-%m-%d') }}</td>
+                            <td>{{ order.from_site.name if order.from_site else '-' }}</td>
+                            <td>{{ order.site.name if order.site else '-' }}</td>
+                            <td>{{ order.material_name }}</td>
+                            <td>{{ "%.2f"|format(order.delivered_quantity or order.quantity or 0) }} {{ order.unit|upper }}</td>
+                            <td>Rs. {{ "%.2f"|format(order.vehicle_rate or 0) }}</td>
+                            <td>{{ order.receipt_number or '-' }}</td>
+                            <td>
+                                {% if order.delivery_receipt_image %}
+                                <a href="{{ order.delivery_receipt_image }}" target="_blank" rel="noopener">View</a>
+                                {% else %}-{% endif %}
+                            </td>
+                            <td class="text-end">Rs. {{ "%.2f"|format(order.remaining_vehicle_payment()) }}</td>
+                        </tr>
+                        {% endfor %}
+                        {% for entry in vg.diesel_rows %}
+                        <tr style="color:var(--muted);">
+                            <td>{{ entry.date.strftime('%Y-%m-%d') }}</td>
+                            <td colspan="3">Fuel-Log diesel — {{ entry.petrol_pump.name if entry.petrol_pump else '-' }}</td>
+                            <td>{{ "%.2f"|format(entry.litres or 0) }} L</td>
+                            <td></td>
+                            <td>{{ entry.receipt_number or '-' }}</td>
+                            <td></td>
+                            <td class="text-end" style="color:#dc2626;">− Rs. {{ "%.2f"|format(entry.amount or 0) }}</td>
+                        </tr>
+                        {% endfor %}
+                        <tr class="material-subtotal-row">
+                            <td colspan="4"><strong>Vehicle {{ vg.vehicle_number }} Subtotal</strong></td>
+                            <td><strong>{{ "%.2f"|format(vg.total_delivered) }}</strong></td>
+                            <td colspan="3" class="text-end"><strong>Gross Rs. {{ "%.2f"|format(vg.gross) }} · Diesel − Rs. {{ "%.2f"|format(vg.order_diesel + vg.standalone_diesel) }}</strong></td>
+                            <td class="text-end"><strong>Rs. {{ "%.2f"|format(vg.vehicle_payable) }}</strong></td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        {% endfor %}
+
+        <div class="bill-material-summary">
+            <h4 class="bill-material-summary-title">Overall Summary by Vehicle</h4>
+            <div class="table-responsive">
+                <table class="table detail-table bill-summary-table">
+                    <thead>
+                        <tr>
+                            <th>Vehicle</th>
+                            <th>Trips</th>
+                            <th>Delivered</th>
+                            <th>Gross Amt</th>
+                            <th>Order Diesel</th>
+                            <th>Fuel-Log Diesel</th>
+                            <th class="text-end">Net Payable</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for vg in owner_vehicle_groups %}
+                        <tr>
+                            <td>{{ vg.vehicle_number }}</td>
+                            <td>{{ vg.trip_count }}</td>
+                            <td>{{ "%.2f"|format(vg.total_delivered) }}</td>
+                            <td>Rs. {{ "%.2f"|format(vg.gross) }}</td>
+                            <td>{% if vg.order_diesel %}− Rs. {{ "%.2f"|format(vg.order_diesel) }}{% else %}—{% endif %}</td>
+                            <td>{% if vg.standalone_diesel %}− Rs. {{ "%.2f"|format(vg.standalone_diesel) }}{% else %}—{% endif %}</td>
+                            <td class="text-end">Rs. {{ "%.2f"|format(vg.vehicle_payable) }}</td>
+                        </tr>
+                        {% endfor %}
+                        <tr class="bill-grand-total-row">
+                            <td><strong>Grand Total</strong></td>
+                            <td><strong>{{ owner_vehicle_groups|sum(attribute='trip_count') }}</strong></td>
+                            <td><strong>{{ "%.2f"|format(owner_vehicle_groups|sum(attribute='total_delivered')) }}</strong></td>
+                            <td><strong>Rs. {{ "%.2f"|format(owner_vehicle_groups|sum(attribute='gross')) }}</strong></td>
+                            <td><strong>− Rs. {{ "%.2f"|format(owner_vehicle_groups|sum(attribute='order_diesel')) }}</strong></td>
+                            <td><strong>− Rs. {{ "%.2f"|format(diesel_deduction_total) }}</strong></td>
+                            <td class="text-end"><strong>Rs. {{ "%.2f"|format(trips_gross - diesel_deduction_total) }}</strong></td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
         </div>
     </div>
     {% endif %}

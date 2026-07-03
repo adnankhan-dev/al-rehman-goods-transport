@@ -75,71 +75,126 @@
                 <div class="meta-card"><span>Outstanding</span><strong>Rs. {{ "{:,.0f}".format(owner_summary.outstanding) }}</strong></div>
             </section>
 
+            {% for vg in vehicle_groups %}
+            <div class="vehicle-block">
+                <h3 style="margin:{{ '4px' if loop.first else '22px' }} 0 8px;color:var(--brand);font-size:1rem;">
+                    Vehicle {{ vg.vehicle_number }}
+                    <span style="font-weight:400;color:var(--muted);font-size:0.82rem;">({{ vg.trip_count }} trip{% if vg.trip_count != 1 %}s{% endif %})</span>
+                </h3>
+                {% if vg.orders %}
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Date</th>
+                            <th>From Site</th>
+                            <th>To Site</th>
+                            <th>Material</th>
+                            <th class="num">Delivered</th>
+                            <th class="num">Rate</th>
+                            <th class="num">Gross Amt</th>
+                            <th class="num">Diesel</th>
+                            <th class="num">Net Payable</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for order in vg.orders %}
+                        <tr>
+                            <td>{{ (order.completion_date or order.order_date).strftime('%d-%m-%Y') }}</td>
+                            <td>{{ order.from_site.name if order.from_site else "-" }}</td>
+                            <td>{{ order.site.name if order.site else "-" }}</td>
+                            <td>{{ order.material_name }}</td>
+                            <td class="num">{{ "%.2f"|format(order.delivered_quantity or order.quantity or 0) }} {{ (order.unit or 'cft')|upper }}</td>
+                            <td class="num">{{ "%.2f"|format(order.vehicle_rate or 0) }}</td>
+                            <td class="num">{{ "{:,.0f}".format(order.total_vehicle_amount()) }}</td>
+                            <td class="num">{% if order.total_diesel_amount() %}-{{ "{:,.0f}".format(order.total_diesel_amount()) }}{% else %}—{% endif %}</td>
+                            <td class="num">{{ "{:,.0f}".format(order.remaining_vehicle_payment()) }}</td>
+                        </tr>
+                        {% endfor %}
+                        <tr class="subtotal">
+                            <td colspan="4">Vehicle {{ vg.vehicle_number }} Subtotal</td>
+                            <td class="num">{{ "%.2f"|format(vg.total_delivered) }}</td>
+                            <td></td>
+                            <td class="num">{{ "{:,.0f}".format(vg.gross) }}</td>
+                            <td class="num">-{{ "{:,.0f}".format(vg.order_diesel) }}</td>
+                            <td class="num">{{ "{:,.0f}".format(vg.net_payable) }}</td>
+                        </tr>
+                    </tbody>
+                </table>
+                {% endif %}
+
+                {% if vg.diesel_rows %}
+                <h4 style="margin:12px 0 6px;color:var(--muted);font-size:0.85rem;">Fuel-Log Diesel — {{ vg.vehicle_number }}</h4>
+                <table>
+                    <thead>
+                        <tr><th>Date</th><th>Pump</th><th>Receipt</th><th class="num">Litres</th><th class="num">Amount</th></tr>
+                    </thead>
+                    <tbody>
+                        {% for entry in vg.diesel_rows %}
+                        <tr>
+                            <td>{{ entry.date.strftime('%d-%m-%Y') }}</td>
+                            <td>{{ entry.petrol_pump.name if entry.petrol_pump else '-' }}</td>
+                            <td>{{ entry.receipt_number or '-' }}</td>
+                            <td class="num">{{ "%.2f"|format(entry.litres) if entry.litres else '—' }}</td>
+                            <td class="num">− {{ "{:,.0f}".format(entry.amount or 0) }}</td>
+                        </tr>
+                        {% endfor %}
+                        <tr class="subtotal"><td colspan="4">Fuel-Log Diesel — {{ vg.vehicle_number }}</td><td class="num">− {{ "{:,.0f}".format(vg.standalone_diesel) }}</td></tr>
+                    </tbody>
+                </table>
+                {% endif %}
+
+                <div style="margin:8px 0 4px;text-align:right;font-size:0.85rem;color:var(--ink);">
+                    <strong>Vehicle {{ vg.vehicle_number }} Net:</strong>
+                    Rs. {{ "{:,.0f}".format(vg.net_payable) }}
+                    {% if vg.standalone_diesel %}− Fuel-Log diesel Rs. {{ "{:,.0f}".format(vg.standalone_diesel) }}{% endif %}
+                    {% if vg.advances %}− Advances Rs. {{ "{:,.0f}".format(vg.advances) }}{% endif %}
+                    = <strong>Rs. {{ "{:,.0f}".format(vg.vehicle_payable) }}</strong>
+                </div>
+            </div>
+            {% else %}
+            <table>
+                <tbody><tr><td style="text-align:center;">No trips recorded for this owner.</td></tr></tbody>
+            </table>
+            {% endfor %}
+
+            {% if vehicle_groups %}
+            <h3 style="margin:22px 0 8px;color:var(--brand);font-size:1rem;">Summary by Vehicle</h3>
             <table>
                 <thead>
                     <tr>
-                        <th>Date</th>
                         <th>Vehicle</th>
-                        <th>From Site</th>
-                        <th>To Site</th>
-                        <th>Material</th>
+                        <th class="num">Trips</th>
                         <th class="num">Delivered</th>
-                        <th class="num">Rate</th>
                         <th class="num">Gross Amt</th>
-                        <th class="num">Diesel</th>
+                        <th class="num">Order Diesel</th>
+                        <th class="num">Fuel-Log Diesel</th>
+                        <th class="num">Advances</th>
                         <th class="num">Net Payable</th>
                     </tr>
                 </thead>
                 <tbody>
-                    {% for order in related_orders %}
+                    {% for vg in vehicle_groups %}
                     <tr>
-                        <td>{{ (order.completion_date or order.order_date).strftime('%d-%m-%Y') }}</td>
-                        <td>{{ order.vehicle.vehicle_number if order.vehicle else '-' }}</td>
-                        <td>{{ order.from_site.name if order.from_site else "-" }}</td>
-                        <td>{{ order.site.name if order.site else "-" }}</td>
-                        <td>{{ order.material_name }}</td>
-                        <td class="num">{{ "%.2f"|format(order.delivered_quantity or order.quantity or 0) }} {{ (order.unit or 'cft')|upper }}</td>
-                        <td class="num">{{ "%.2f"|format(order.vehicle_rate or 0) }}</td>
-                        <td class="num">{{ "{:,.0f}".format(order.total_vehicle_amount()) }}</td>
-                        <td class="num">{% if order.total_diesel_amount() %}-{{ "{:,.0f}".format(order.total_diesel_amount()) }}{% else %}—{% endif %}</td>
-                        <td class="num">{{ "{:,.0f}".format(order.remaining_vehicle_payment()) }}</td>
+                        <td>{{ vg.vehicle_number }}</td>
+                        <td class="num">{{ vg.trip_count }}</td>
+                        <td class="num">{{ "%.2f"|format(vg.total_delivered) }}</td>
+                        <td class="num">{{ "{:,.0f}".format(vg.gross) }}</td>
+                        <td class="num">{% if vg.order_diesel %}− {{ "{:,.0f}".format(vg.order_diesel) }}{% else %}—{% endif %}</td>
+                        <td class="num">{% if vg.standalone_diesel %}− {{ "{:,.0f}".format(vg.standalone_diesel) }}{% else %}—{% endif %}</td>
+                        <td class="num">{% if vg.advances %}− {{ "{:,.0f}".format(vg.advances) }}{% else %}—{% endif %}</td>
+                        <td class="num">{{ "{:,.0f}".format(vg.vehicle_payable) }}</td>
                     </tr>
-                    {% else %}
-                    <tr><td colspan="10" style="text-align:center;">No trips recorded for this owner.</td></tr>
                     {% endfor %}
-                </tbody>
-                {% if related_orders %}
-                <tfoot>
                     <tr class="subtotal">
-                        <td colspan="5">Totals</td>
-                        <td class="num">{{ "%.2f"|format(owner_summary.total_delivered) }}</td>
-                        <td></td>
-                        <td class="num">{{ "{:,.0f}".format(owner_summary.gross) }}</td>
-                        <td class="num">-{{ "{:,.0f}".format(owner_summary.diesel) }}</td>
-                        <td class="num">{{ "{:,.0f}".format(owner_summary.net_payable) }}</td>
+                        <td>All Vehicles</td>
+                        <td class="num">{{ vehicle_groups|sum(attribute='trip_count') }}</td>
+                        <td class="num">{{ "%.2f"|format(vehicle_groups|sum(attribute='total_delivered')) }}</td>
+                        <td class="num">{{ "{:,.0f}".format(vehicle_groups|sum(attribute='gross')) }}</td>
+                        <td class="num">− {{ "{:,.0f}".format(vehicle_groups|sum(attribute='order_diesel')) }}</td>
+                        <td class="num">− {{ "{:,.0f}".format(vehicle_groups|sum(attribute='standalone_diesel')) }}</td>
+                        <td class="num">− {{ "{:,.0f}".format(vehicle_groups|sum(attribute='advances')) }}</td>
+                        <td class="num">{{ "{:,.0f}".format(vehicle_groups|sum(attribute='vehicle_payable')) }}</td>
                     </tr>
-                </tfoot>
-                {% endif %}
-            </table>
-
-            {% if standalone_diesel_rows %}
-            <h3 style="margin:22px 0 8px;color:var(--brand);font-size:1rem;">Fuel-Log Diesel Deductions</h3>
-            <table>
-                <thead>
-                    <tr><th>Date</th><th>Vehicle</th><th>Pump</th><th>Receipt</th><th class="num">Litres</th><th class="num">Amount</th></tr>
-                </thead>
-                <tbody>
-                    {% for entry in standalone_diesel_rows %}
-                    <tr>
-                        <td>{{ entry.date.strftime('%d-%m-%Y') }}</td>
-                        <td>{{ entry.vehicle.vehicle_number if entry.vehicle else '-' }}</td>
-                        <td>{{ entry.petrol_pump.name if entry.petrol_pump else '-' }}</td>
-                        <td>{{ entry.receipt_number or '-' }}</td>
-                        <td class="num">{{ "%.2f"|format(entry.litres) if entry.litres else '—' }}</td>
-                        <td class="num">− {{ "{:,.0f}".format(entry.amount or 0) }}</td>
-                    </tr>
-                    {% endfor %}
-                    <tr class="subtotal"><td colspan="5">Total Fuel-Log Diesel</td><td class="num">− {{ "{:,.0f}".format(owner_summary.standalone_diesel) }}</td></tr>
                 </tbody>
             </table>
             {% endif %}
