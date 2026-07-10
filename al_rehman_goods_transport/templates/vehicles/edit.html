@@ -13,6 +13,7 @@
         {{ render_field(form.vehicle_type, placeholder="Vehicle type") }}
         {{ render_field(form.capacity) }}
         {{ render_field(form.fitness_certificate, placeholder="Fitness certificate") }}
+        {{ render_field(form.opening_balance, placeholder="e.g. 50000", help_text="Pre-ERP amount carried forward. Shown as 'Previous Balance' on statements and bills.") }}
     </div>
     {{ render_field(form.insurance_details, rows=3, placeholder="Insurance details") }}
     {{ form_actions("Update Vehicle", url_for('vehicles.vehicles')) }}

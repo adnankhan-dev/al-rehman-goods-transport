@@ -95,6 +95,50 @@ env var overrides the DB.
 - **Vehicle owners:** payments/outstanding/standalone diesel appear in their statement + bill.
   "Receipt from Vehicle Owner" transaction (owners sometimes buy fuel from our pump and pay cash;
   balances can go negative). Ledger advances are reflected; per-order advance column removed.
+- **Ledger update (transactions, bills, opening balances, letterhead):**
+  - **Generic transactions:** the transaction form is Direction (Payment To / Receipt From) → Entity
+    Type → Entity → Date → Amount. The internal type is `f"{entity_type}_{direction}"`; every entity
+    (contractor, vehicle owner, plant, petrol pump, vehicle) supports both directions. Added inverse
+    effects `contractor_payment`, `plant_receipt`, `petrol_pump_receipt`, `vehicle_receipt` in
+    `services/transactions.py::_apply_transaction_effect`. Two `_transaction_input_from_form` copies
+    exist (routes/ledger.py — the live one the form posts to — and routes/transactions.py); keep both in sync.
+  - **Transaction + bill approval** (mirrors orders/diesel): new manual transactions and new bills are
+    created **pending** via `approval_status` (default `approved`; migrations additive/idempotent).
+    Pending transactions post no balances and are hidden from the ledger/statements; pending bills are
+    hidden and cannot be settled. Settlement/system transactions stay auto-approved (`create_transaction(..., approval_status="pending")` only from the manual form). New `ledger.approve` permission (admin + accounts).
+    Shared **Ledger Approvals** page `/ledger/pending` (route defined in routes/transactions.py) lists
+    pending transactions + bills; approve/reject in routes/transactions.py and routes/bills.py. Sidebar
+    badge via `nav_pending_ledger`.
+  - **Order edit ⇒ re-approval:** editing an approved (unbilled) order reverses its financials and sets it back to pending (`OrderService.update_order`).
+  - **Opening balances:** contractor/vehicle_owner/plant/vehicle gained `opening_balance` (pump already had it), settable on create/edit forms; `effective_balance = balance + opening_balance`. Shown as "Previous Balance".
+  - **Bill numbering:** `BILL-<FIRSTWORD>-NNN` (uppercase first word of entity name, per-prefix sequence, collision-safe) — `repositories/billing.py::next_bill_number(entity_name=…)`.
+  - **Bill display:** the bill view top box shows only **Net Payable**; every bill (view + print) has a
+    **Financial Summary** = previous balance + this bill − payments/receipts in the bill tenure → net
+    payable (`bill_snapshot["financial_summary"]`). Pending bills show an approve/reject banner and hide the settle form.
+  - **Editable letterhead:** business name/address/two contact lines are stored in `AppSetting`
+    (`letterhead_*`), edited on the Settings page (`update_letterhead` action). Injected into every
+    template via `core/templating._base_context` as `letterhead`; the two Python-generated documents
+    (orders statement, manual entry form) fetch `SettingsService().get_letterhead()`.
+- **Order & Diesel approval workflow:** every new order and every new fuel-log diesel entry is
+  created **pending** and posts **no financials** (no ledger, no vehicle-owner/pump/vehicle balance,
+  no P&L, not billable) and is **hidden** from all lists/reports/statements until an approver clears
+  it. Gate field: `Order.approval_status` / `DieselEntry.approval_status` (`'pending'`/`'approved'`,
+  default `'approved'` so existing rows are grandfathered; migrations `_add_order_approval_columns`
+  / `_add_diesel_approval_columns` are additive + idempotent). Pending orders also carry
+  `status='Pending Approval'` (approved → `'Completed'`) so the many existing `status=="Completed"`
+  queries exclude them automatically; the query sites **without** a status filter were gated
+  explicitly (`repositories/orders.py` list/count, `services/dashboard.py` counts, diesel fuel-log
+  list, billing/reports/petrol-pump/vehicle-owner diesel queries, `plant_loadings_all`). New
+  permissions `orders.approve` / `diesel.approve` (admin + accounts by default). **Rates are NOT
+  entered at order creation** — the add-order form has no rate fields; the approver sets contractor
+  & vehicle rates on the **Pending Approvals** screen (`/orders/pending`, grouped contractor → to-site
+  → material → vehicle owner, rate inputs pre-filled from saved `ContractorRate` suggestions) and can
+  save the applied rate (same save-rate popup, now on approval). Approve is per-row / per-group /
+  approve-all; reject deletes the pending record (safe — no financials posted). `OrderService`:
+  `create_order` (pending, no sync), `approve_order` (sets rates + `sync_order_financials`),
+  `reject_order`, `list_pending_approvals`; `DieselService`: `create_entry` (pending, no balance),
+  `approve_entry` (applies balances), `reject_entry`. Sidebar badges via `nav_pending_orders` /
+  `nav_pending_diesel` injected in `core/templating._base_context`.
 - **Smart Save-Rates (order form):** saved rates (`ContractorRate`) are scoped by contractor +
   to-site + optional from-site/material/**vehicle owner** (owner chosen by the user — rates can
   differ per owner on the same route; NULL owner = any). After confirming an order, if the entered

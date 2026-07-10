@@ -65,7 +65,7 @@
                     <li>
                         <a href="{{ url_for('orders.orders') }}"
                            data-label="All Orders" title="All Orders"
-                           class="app-nav-link {% if path.startswith('/orders') and path != '/orders/create' %}active{% endif %}">
+                           class="app-nav-link {% if path.startswith('/orders') and path not in ['/orders/create', '/orders/pending'] %}active{% endif %}">
                             <span class="app-nav-link-icon"><i class="bi bi-card-list icon-dispatch"></i></span>
                             <span class="app-nav-link-text">All Orders</span>
                         </a>
@@ -75,9 +75,35 @@
                     <li>
                         <a href="{{ url_for('diesel.index') }}"
                            data-label="Fuel Log" title="Fuel Log"
-                           class="app-nav-link {% if path.startswith('/diesel') %}active{% endif %}">
+                           class="app-nav-link {% if path.startswith('/diesel') and path != '/diesel/pending' %}active{% endif %}">
                             <span class="app-nav-link-icon"><i class="bi bi-droplet-fill icon-dispatch"></i></span>
                             <span class="app-nav-link-text">Fuel Log</span>
+                        </a>
+                    </li>
+                    {% endif %}
+                    {% if current_user.can('orders.approve') %}
+                    <li>
+                        <a href="{{ url_for('orders.pending_approvals') }}"
+                           data-label="Pending Approvals" title="Pending Approvals"
+                           class="app-nav-link {% if path == '/orders/pending' %}active{% endif %}">
+                            <span class="app-nav-link-icon nav-icon-count">
+                                <i class="bi bi-truck icon-dispatch"></i>
+                                {% if nav_pending_orders %}<sup class="nav-count-sup">{{ nav_pending_orders }}</sup>{% endif %}
+                            </span>
+                            <span class="app-nav-link-text">Pending Approvals</span>
+                        </a>
+                    </li>
+                    {% endif %}
+                    {% if current_user.can('diesel.approve') %}
+                    <li>
+                        <a href="{{ url_for('diesel.pending_approvals') }}"
+                           data-label="Diesel Approvals" title="Diesel Approvals"
+                           class="app-nav-link {% if path == '/diesel/pending' %}active{% endif %}">
+                            <span class="app-nav-link-icon nav-icon-count">
+                                <i class="bi bi-fuel-pump-fill icon-dispatch"></i>
+                                {% if nav_pending_diesel %}<sup class="nav-count-sup">{{ nav_pending_diesel }}</sup>{% endif %}
+                            </span>
+                            <span class="app-nav-link-text">Diesel Approvals</span>
                         </a>
                     </li>
                     {% endif %}
@@ -93,11 +119,24 @@
                     <li>
                         <a href="{{ url_for('ledger.index') }}"
                            data-label="Ledger & Bills" title="Ledger & Bills"
-                           class="app-nav-link {% if path.startswith('/ledger') or path.startswith('/bills') or path.startswith('/transactions') %}active{% endif %}">
+                           class="app-nav-link {% if (path.startswith('/ledger') or path.startswith('/bills') or path.startswith('/transactions')) and path != '/ledger/pending' %}active{% endif %}">
                             <span class="app-nav-link-icon"><i class="bi bi-cash-stack icon-finance"></i></span>
                             <span class="app-nav-link-text">Ledger & Bills</span>
                         </a>
                     </li>
+                    {% if current_user.can('ledger.approve') %}
+                    <li>
+                        <a href="{{ url_for('ledger.pending_approvals') }}"
+                           data-label="Ledger Approvals" title="Ledger Approvals"
+                           class="app-nav-link {% if path == '/ledger/pending' %}active{% endif %}">
+                            <span class="app-nav-link-icon nav-icon-count">
+                                <i class="bi bi-check2-square icon-finance"></i>
+                                {% if nav_pending_ledger %}<sup class="nav-count-sup">{{ nav_pending_ledger }}</sup>{% endif %}
+                            </span>
+                            <span class="app-nav-link-text">Ledger Approvals</span>
+                        </a>
+                    </li>
+                    {% endif %}
                     <li>
                         <a href="{{ url_for('financial_entities.index') }}"
                            data-label="Financial Entities" title="Financial Entities"

@@ -123,13 +123,76 @@ def template_url_for(request: Request, route_name: str, **params) -> str:
     return url or "/"
 
 
+def _pending_approval_counts(user):
+    """(orders, diesel) awaiting approval — for the sidebar badges. Only queried
+    for users who can approve; never raises (e.g. before the columns migrate)."""
+    if user is None:
+        return (0, 0)
+    can = getattr(user, "can", None)
+    if not callable(can):
+        return (0, 0)
+    orders_pending = diesel_pending = ledger_pending = 0
+    try:
+        if can("orders.approve"):
+            from ..models import Order
+            orders_pending = Order.query.filter(Order.approval_status == "pending").count()
+    except Exception:
+        orders_pending = 0
+    try:
+        if can("diesel.approve"):
+            from ..models import DieselEntry
+            diesel_pending = DieselEntry.query.filter(DieselEntry.approval_status == "pending").count()
+    except Exception:
+        diesel_pending = 0
+    try:
+        if can("ledger.approve"):
+            from ..models import Bill, Transaction
+            ledger_pending = (
+                Transaction.query.filter(Transaction.approval_status == "pending").count()
+                + Bill.query.filter(Bill.approval_status == "pending").count()
+            )
+    except Exception:
+        ledger_pending = 0
+    return (orders_pending, diesel_pending, ledger_pending)
+
+
+_LETTERHEAD_DEFAULTS = {
+    "name": ("letterhead_name", "Al Rehman Goods Transport"),
+    "address": ("letterhead_address", "Bahtr Mor Wah Cantt"),
+    "contact1": ("letterhead_contact1", "Contact No. Ahsan Niazi 0307-2342827"),
+    "contact2": ("letterhead_contact2", "Inam Khan - 0301-5749086"),
+}
+
+
+def _letterhead():
+    """Editable printed-document header. Read straight from AppSetting (with
+    defaults) so it is available to every template without importing the
+    settings service — and never raises before the table exists."""
+    result = {field: default for field, (_key, default) in _LETTERHEAD_DEFAULTS.items()}
+    try:
+        from ..models import AppSetting
+        rows = {s.key: s.value for s in AppSetting.query.all()}
+        for field, (key, default) in _LETTERHEAD_DEFAULTS.items():
+            value = rows.get(key)
+            result[field] = value if value not in (None, "") else default
+    except Exception:
+        pass
+    return result
+
+
 def _base_context(request: Request, **context):
+    current_user = get_optional_user(request)
+    orders_pending, diesel_pending, ledger_pending = _pending_approval_counts(current_user)
     base_context = {
         "request": request,
         "config": {"APP_NAME": settings.app_name},
-        "current_user": get_optional_user(request),
+        "current_user": current_user,
         "flashes": pop_flashes(request),
         "url_for": lambda route_name, **params: template_url_for(request, route_name, **params),
+        "nav_pending_orders": orders_pending,
+        "nav_pending_diesel": diesel_pending,
+        "nav_pending_ledger": ledger_pending,
+        "letterhead": _letterhead(),
     }
     base_context.update(context)
     return base_context

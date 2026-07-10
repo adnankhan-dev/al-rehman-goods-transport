@@ -321,27 +321,30 @@
         <input type="hidden" name="mode" value="transaction">
         <div class="form-grid-two">
             {{ render_field(transaction_form.type) }}
+            <div id="entityTypeField">
+                {{ render_field(transaction_form.entity_type) }}
+            </div>
+            <div id="vehicleField" style="display: none;">
+                {{ render_field(transaction_form.vehicle_id) }}
+            </div>
+            <div id="vehicleOwnerField" style="display: none;">
+                {{ render_field(transaction_form.vehicle_owner_id) }}
+            </div>
+            <div id="contractorField" style="display: none;">
+                {{ render_field(transaction_form.contractor_id) }}
+            </div>
+            <div id="plantField" style="display: none;">
+                {{ render_field(transaction_form.plant_id) }}
+            </div>
+            <div id="petrolPumpField" style="display: none;">
+                {{ render_field(transaction_form.petrol_pump_id) }}
+            </div>
             {{ render_field(transaction_form.date) }}
             {{ render_field(transaction_form.amount) }}
             {{ render_field(transaction_form.payment_method) }}
             {{ render_field(transaction_form.reference, placeholder="Reference") }}
         </div>
         {{ render_field(transaction_form.description, rows=3, placeholder="Description") }}
-        <div id="vehicleField" style="display: none;">
-            {{ render_field(transaction_form.vehicle_id) }}
-        </div>
-        <div id="vehicleOwnerField" style="display: none;">
-            {{ render_field(transaction_form.vehicle_owner_id) }}
-        </div>
-        <div id="contractorField" style="display: none;">
-            {{ render_field(transaction_form.contractor_id) }}
-        </div>
-        <div id="plantField" style="display: none;">
-            {{ render_field(transaction_form.plant_id) }}
-        </div>
-        <div id="petrolPumpField" style="display: none;">
-            {{ render_field(transaction_form.petrol_pump_id) }}
-        </div>
         {{ form_actions("Post Transaction", url_for('ledger.index')) }}
     </form>
     {% endif %}
@@ -400,33 +403,36 @@
 <script>
     document.addEventListener('DOMContentLoaded', function() {
         const typeSelect = document.getElementById('type');
-        const vehicleField = document.getElementById('vehicleField');
-        const vehicleOwnerField = document.getElementById('vehicleOwnerField');
-        const contractorField = document.getElementById('contractorField');
-        const plantField = document.getElementById('plantField');
-        const petrolPumpField = document.getElementById('petrolPumpField');
+        const entityTypeField = document.getElementById('entityTypeField');
+        const entityTypeSelect = document.getElementById('entity_type');
+        const entityFields = {
+            vehicle: document.getElementById('vehicleField'),
+            vehicle_owner: document.getElementById('vehicleOwnerField'),
+            contractor: document.getElementById('contractorField'),
+            plant: document.getElementById('plantField'),
+            petrol_pump: document.getElementById('petrolPumpField'),
+        };
 
         function toggleFields() {
-            const type = typeSelect.value;
-            vehicleField.style.display = (type === 'vehicle_payment') ? 'block' : 'none';
-            vehicleOwnerField.style.display = (type === 'vehicle_owner_payment' || type === 'vehicle_owner_receipt') ? 'block' : 'none';
-            contractorField.style.display = (type === 'contractor_receipt') ? 'block' : 'none';
-            plantField.style.display = (type === 'plant_payment') ? 'block' : 'none';
-            petrolPumpField.style.display = (type === 'petrol_pump_payment') ? 'block' : 'none';
+            const direction = typeSelect.value;
+            const usesEntity = (direction === 'payment' || direction === 'receipt');
+            entityTypeField.style.display = usesEntity ? 'block' : 'none';
 
-            if (type === 'other_expense' || type === 'initial_balance') {
-                vehicleField.style.display = 'none';
-                vehicleOwnerField.style.display = 'none';
-                contractorField.style.display = 'none';
-                plantField.style.display = 'none';
-                petrolPumpField.style.display = 'none';
-            }
+            const chosen = usesEntity ? entityTypeSelect.value : null;
+            Object.keys(entityFields).forEach(function(key) {
+                if (entityFields[key]) {
+                    entityFields[key].style.display = (usesEntity && key === chosen) ? 'block' : 'none';
+                }
+            });
         }
 
         if (typeSelect) {
             typeSelect.addEventListener('change', toggleFields);
-            toggleFields();
         }
+        if (entityTypeSelect) {
+            entityTypeSelect.addEventListener('change', toggleFields);
+        }
+        toggleFields();
     });
 </script>
 {% endif %}

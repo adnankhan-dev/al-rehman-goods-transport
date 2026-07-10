@@ -1,5 +1,7 @@
 from dataclasses import dataclass
-from datetime import datetime, time
+from datetime import UTC, datetime, time
+
+from sqlalchemy import func
 
 from ..extensions import db
 from ..models import Transaction, Vehicle
@@ -9,6 +11,10 @@ from .exceptions import NotFoundError, ValidationError
 
 def _safe_amount(value):
     return float(value or 0.0)
+
+
+def _utc_now():
+    return datetime.now(UTC).replace(tzinfo=None)
 
 
 # Transaction types created by BillingService.settle_bill; when such a
@@ -52,11 +58,18 @@ class TransactionService:
             raise NotFoundError("Transaction not found.")
         return transaction
 
-    def create_transaction(self, transaction_input: TransactionInput, commit=True):
+    def create_transaction(self, transaction_input: TransactionInput, commit=True, approval_status="approved"):
+        """Create a transaction. Manual entries pass approval_status='pending' —
+        they post NO balance effect and stay off the ledger until approved.
+        Settlement and system-generated transactions keep the default 'approved'
+        and apply immediately."""
         self._validate_transaction_input(transaction_input)
-        transaction = Transaction(**self._transaction_kwargs(transaction_input))
+        kwargs = self._transaction_kwargs(transaction_input)
+        kwargs["approval_status"] = approval_status
+        transaction = Transaction(**kwargs)
         try:
-            self._apply_transaction_effect(transaction, reverse=False, apply_financial_effect=transaction_input.apply_financial_effect)
+            if approval_status == "approved":
+                self._apply_transaction_effect(transaction, reverse=False, apply_financial_effect=transaction_input.apply_financial_effect)
             self.transactions.add(transaction)
             if commit:
                 self.session.commit()
@@ -65,10 +78,64 @@ class TransactionService:
             raise
         return transaction
 
+    def approve_transaction(self, transaction_id, approver_id=None):
+        """Approve a pending transaction: apply its balance effect and flip it live."""
+        transaction = self.get_transaction(transaction_id)
+        if transaction.approval_status == "approved":
+            return transaction
+        try:
+            self._apply_transaction_effect(transaction, reverse=False, apply_financial_effect=True)
+            self._adjust_bill_settlement(transaction.type, transaction.reference_id, _safe_amount(transaction.amount))
+            transaction.approval_status = "approved"
+            transaction.approved_by_id = approver_id
+            transaction.approved_at = _utc_now()
+            self.session.commit()
+        except Exception:
+            self.session.rollback()
+            raise
+        return transaction
+
+    def reject_transaction(self, transaction_id):
+        """Discard a pending transaction (no balance effect was applied)."""
+        transaction = self.get_transaction(transaction_id)
+        if transaction.approval_status == "approved":
+            raise ValidationError("Approved transactions cannot be rejected. Delete it instead.")
+        try:
+            self.transactions.delete(transaction)
+            self.session.commit()
+        except Exception:
+            self.session.rollback()
+            raise
+
+    def pending_count(self):
+        return self.session.query(func.count(Transaction.id)).filter(Transaction.approval_status == "pending").scalar() or 0
+
+    def list_pending(self):
+        return (
+            self.session.query(Transaction)
+            .filter(Transaction.approval_status == "pending")
+            .order_by(Transaction.date.desc(), Transaction.id.desc())
+            .all()
+        )
+
     def update_transaction(self, transaction_id, transaction_input: TransactionInput):
         transaction = self.get_transaction(transaction_id)
         if transaction.is_system_generated:
             raise ValidationError("System-generated transactions cannot be edited.")
+
+        self._validate_transaction_input(transaction_input)
+
+        # A pending transaction has applied no effect yet — just rewrite its
+        # fields; the effect is posted when it is approved.
+        if transaction.approval_status == "pending":
+            try:
+                for key, value in self._transaction_kwargs(transaction_input).items():
+                    setattr(transaction, key, value)
+                self.session.commit()
+            except Exception:
+                self.session.rollback()
+                raise
+            return transaction
 
         previous_state = TransactionInput(
             type=transaction.type,
@@ -105,8 +172,10 @@ class TransactionService:
             raise ValidationError("System-generated transactions cannot be deleted.")
 
         try:
-            self._apply_transaction_effect(transaction, reverse=True, apply_financial_effect=True)
-            self._adjust_bill_settlement(transaction.type, transaction.reference_id, -_safe_amount(transaction.amount))
+            # A pending transaction applied no effect, so there is nothing to reverse.
+            if transaction.approval_status != "pending":
+                self._apply_transaction_effect(transaction, reverse=True, apply_financial_effect=True)
+                self._adjust_bill_settlement(transaction.type, transaction.reference_id, -_safe_amount(transaction.amount))
             self.transactions.delete(transaction)
             self.session.commit()
         except Exception:
@@ -185,11 +254,15 @@ class TransactionService:
 
         required_entity_fields = {
             "vehicle_payment": transaction_input.vehicle_id,
+            "vehicle_receipt": transaction_input.vehicle_id,
             "vehicle_owner_payment": transaction_input.vehicle_owner_id,
             "vehicle_owner_receipt": transaction_input.vehicle_owner_id,
             "contractor_receipt": transaction_input.contractor_id,
+            "contractor_payment": transaction_input.contractor_id,
             "plant_payment": transaction_input.plant_id,
+            "plant_receipt": transaction_input.plant_id,
             "petrol_pump_payment": transaction_input.petrol_pump_id,
+            "petrol_pump_receipt": transaction_input.petrol_pump_id,
         }
         required_entity = required_entity_fields.get(transaction_input.type, True)
         if required_entity is None or required_entity == 0:
@@ -212,12 +285,40 @@ class TransactionService:
             self._update_entity_balance("contractor", transaction.contractor_id or transaction.entity_id, -amount)
             return
 
+        # Generic inverse of contractor_receipt: paying a contractor (advance/
+        # refund). Money out; the contractor's receivable rises.
+        if transaction.type == "contractor_payment":
+            company.balance = _safe_amount(company.balance) - amount
+            self._update_entity_balance("contractor", transaction.contractor_id or transaction.entity_id, amount)
+            return
+
+        # Generic inverse of plant_payment / petrol_pump_payment: money received
+        # from a plant/pump (e.g. a refund). Money in; their payable rises.
+        if transaction.type == "plant_receipt":
+            company.balance = _safe_amount(company.balance) + amount
+            self._update_entity_balance("plant", transaction.plant_id or transaction.entity_id, amount)
+            return
+
+        if transaction.type == "petrol_pump_receipt":
+            company.balance = _safe_amount(company.balance) + amount
+            self._update_entity_balance("petrol_pump", transaction.petrol_pump_id or transaction.entity_id, amount)
+            return
+
         if transaction.type == "vehicle_payment":
             company.balance = _safe_amount(company.balance) - amount
             self._update_entity_balance("vehicle", transaction.vehicle_id or transaction.entity_id, -amount)
             vehicle = self.session.get(Vehicle, transaction.vehicle_id or transaction.entity_id) if (transaction.vehicle_id or transaction.entity_id) else None
             if vehicle and vehicle.owner_id:
                 self._update_entity_balance("vehicle_owner", vehicle.owner_id, -amount)
+            return
+
+        # Generic inverse of vehicle_payment: money received against a vehicle.
+        if transaction.type == "vehicle_receipt":
+            company.balance = _safe_amount(company.balance) + amount
+            self._update_entity_balance("vehicle", transaction.vehicle_id or transaction.entity_id, amount)
+            vehicle = self.session.get(Vehicle, transaction.vehicle_id or transaction.entity_id) if (transaction.vehicle_id or transaction.entity_id) else None
+            if vehicle and vehicle.owner_id:
+                self._update_entity_balance("vehicle_owner", vehicle.owner_id, amount)
             return
 
         if transaction.type == "vehicle_owner_payment":

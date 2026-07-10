@@ -7,7 +7,12 @@ class TransactionRepository:
         self.session = session or db.session
 
     def list_all(self):
-        return self.session.query(Transaction).order_by(Transaction.date.desc(), Transaction.id.desc()).all()
+        return (
+            self.session.query(Transaction)
+            .filter(Transaction.approval_status == "approved")
+            .order_by(Transaction.date.desc(), Transaction.id.desc())
+            .all()
+        )
 
     def get(self, transaction_id):
         return self.session.get(Transaction, transaction_id)
@@ -36,7 +41,11 @@ class TransactionRepository:
             return []
         return (
             self.session.query(Transaction)
-            .filter(Transaction.entity_type == entity_type, Transaction.entity_id == entity_id)
+            .filter(
+                Transaction.entity_type == entity_type,
+                Transaction.entity_id == entity_id,
+                Transaction.approval_status == "approved",
+            )
             .order_by(Transaction.date.desc(), Transaction.id.desc())
             .all()
         )

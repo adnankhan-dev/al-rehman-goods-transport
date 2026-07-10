@@ -55,27 +55,30 @@ def _populate_transaction_choices(form, context):
     form.petrol_pump_id.choices = [(0, "Select Petrol Pump")] + [(pump.id, pump.name) for pump in context["petrol_pumps"]]
 
 
+_ENTITY_ID_FIELD = {
+    "contractor": "contractor_id",
+    "vehicle_owner": "vehicle_owner_id",
+    "plant": "plant_id",
+    "petrol_pump": "petrol_pump_id",
+    "vehicle": "vehicle_id",
+}
+
+
 def _transaction_input_from_form(form):
+    direction = form.type.data  # 'payment' | 'receipt' | 'other_expense' | 'initial_balance'
     entity_type = None
     entity_id = None
-    if form.type.data == "vehicle_payment":
-        entity_type = "vehicle"
-        entity_id = form.vehicle_id.data if form.vehicle_id.data != 0 else None
-    elif form.type.data in ("vehicle_owner_payment", "vehicle_owner_receipt"):
-        entity_type = "vehicle_owner"
-        entity_id = form.vehicle_owner_id.data if form.vehicle_owner_id.data != 0 else None
-    elif form.type.data == "contractor_receipt":
-        entity_type = "contractor"
-        entity_id = form.contractor_id.data if form.contractor_id.data != 0 else None
-    elif form.type.data == "plant_payment":
-        entity_type = "plant"
-        entity_id = form.plant_id.data if form.plant_id.data != 0 else None
-    elif form.type.data == "petrol_pump_payment":
-        entity_type = "petrol_pump"
-        entity_id = form.petrol_pump_id.data if form.petrol_pump_id.data != 0 else None
+    tx_type = direction
+    if direction in ("payment", "receipt"):
+        entity_type = form.entity_type.data or None
+        field_name = _ENTITY_ID_FIELD.get(entity_type)
+        if field_name:
+            raw = getattr(form, field_name).data
+            entity_id = raw if raw not in (None, 0) else None
+        tx_type = f"{entity_type}_{direction}" if entity_type else direction
 
     return TransactionInput(
-        type=form.type.data,
+        type=tx_type,
         amount=form.amount.data,
         date=form.date.data,
         description=form.description.data,
@@ -140,10 +143,10 @@ async def create_entry(request: Request, current_user=Depends(require_permission
     if request.method == "POST":
         if mode == "transaction" and transaction_form.validate():
             try:
-                transaction = TransactionService().create_transaction(_transaction_input_from_form(transaction_form))
+                transaction = TransactionService().create_transaction(_transaction_input_from_form(transaction_form), approval_status="pending")
                 record_audit(current_user, "create", "transaction", transaction.id, f"{transaction.type} Rs. {transaction.amount:,.2f} — {transaction.entity_name}")
-                flash(request, "Ledger transaction posted successfully.", "success")
-                return RedirectResponse(url=str(request.url_for("transactions.view_transaction", id=transaction.id)), status_code=303)
+                flash(request, "Transaction submitted for approval. It will post to the ledger once approved.", "success")
+                return RedirectResponse(url=str(request.url_for("ledger.index")), status_code=303)
             except ValidationError as exc:
                 flash(request, str(exc), "warning")
         elif mode == "bill":
@@ -161,7 +164,7 @@ async def create_entry(request: Request, current_user=Depends(require_permission
                     notes=filter_state["notes"] or None,
                 )
                 record_audit(current_user, "create", "bill", bill.id, f"Bill {bill.bill_number} for {bill.entity_name} — Rs. {bill.total_amount:,.2f}")
-                flash(request, f"Bill {bill.bill_number} created successfully.", "success")
+                flash(request, f"Bill {bill.bill_number} created and submitted for approval.", "success")
                 return RedirectResponse(url=str(request.url_for("bills.view_bill", id=bill.id)), status_code=303)
             except (NotFoundError, ValidationError) as exc:
                 flash(request, str(exc), "warning")

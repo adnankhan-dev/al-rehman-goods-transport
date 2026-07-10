@@ -417,10 +417,10 @@
             <header class="statement-header">
                 <div class="statement-company">
                     <div class="statement-kicker">Official Bill Statement</div>
-                    <h1 class="statement-title">Al Rehman Goods Transport</h1>
-                    <p>Bahtr Mor Wah Cantt</p>
-                    <p><strong>Contact No.</strong> Ahsan Niazi 0307-2342827</p>
-                    <p>Inam Khan - 0301-5749086</p>
+                    <h1 class="statement-title">{{ letterhead.name if letterhead else 'Al Rehman Goods Transport' }}</h1>
+                    <p>{{ letterhead.address if letterhead else 'Bahtr Mor Wah Cantt' }}</p>
+                    <p>{{ letterhead.contact1 if letterhead else 'Contact No. Ahsan Niazi 0307-2342827' }}</p>
+                    <p>{{ letterhead.contact2 if letterhead else 'Inam Khan - 0301-5749086' }}</p>
                 </div>
                 <div class="statement-meta">
                     <div class="meta-row">
@@ -465,6 +465,23 @@
             <section class="statement-section">
                 <h3>Notes</h3>
                 <p class="statement-note">{{ bill.notes }}</p>
+            </section>
+            {% endif %}
+
+            {% if bill.entity_type != 'petrol_pump' and financial_summary %}
+            <section class="statement-section">
+                <h3>Financial Summary</h3>
+                <table class="statement-table">
+                    <tbody>
+                        <tr><td>Previous Balance (carried forward)</td><td class="align-right">Rs. {{ "%.2f"|format(financial_summary.previous_balance) }}</td></tr>
+                        <tr><td>Add: This Bill ({{ bill.bill_number }})</td><td class="align-right">+ Rs. {{ "%.2f"|format(financial_summary.bill_amount) }}</td></tr>
+                        {% for txn in financial_summary.period_transactions %}
+                        <tr style="color:#64748b;"><td style="padding-left:1.5rem;">{{ txn.date.strftime('%Y-%m-%d') if txn.date else '-' }} — {{ txn.type|replace('_', ' ')|title }}{% if txn.reference %} ({{ txn.reference }}){% endif %}</td><td class="align-right">− Rs. {{ "%.2f"|format(txn.amount or 0) }}</td></tr>
+                        {% endfor %}
+                        <tr><td>Less: Payments / Receipts in bill period</td><td class="align-right">− Rs. {{ "%.2f"|format(financial_summary.payments_total) }}</td></tr>
+                        <tr class="grand-total-row"><td><strong>Net Payable</strong></td><td class="align-right"><strong>Rs. {{ "%.2f"|format(financial_summary.net_payable) }}</strong></td></tr>
+                    </tbody>
+                </table>
             </section>
             {% endif %}
 

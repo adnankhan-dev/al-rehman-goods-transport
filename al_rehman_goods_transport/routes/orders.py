@@ -6,8 +6,6 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from ..core.auth import require_permission
 from ..core.flash import flash
 from ..core.templating import render_template
-from ..extensions import db
-from ..models import Vehicle
 from ..forms import EditOrderForm, OrderForm
 from ..services import ConflictError, NotFoundError, OrderService, RateService, ValidationError
 from ..services.audit import record_audit
@@ -105,40 +103,6 @@ def _material_units(service: OrderService):
     return {material.id: (material.unit or "cft") for material in service.lookups.list_materials()}
 
 
-def _maybe_save_rate_from_order(request, form, form_data, current_user, service: OrderService):
-    """Save the order's rates as a ContractorRate when the user opted in on the save-rates popup."""
-    if (form_data.get("save_rate") or "") != "1":
-        return
-    if not getattr(current_user, "can", lambda _c: False)("rates.create"):
-        return
-    effective_from = _parse_date(form_data.get("rate_effective_from"))
-    if effective_from is None or not form.contractor_id.data or not form.site_id.data or not form.contractor_rate.data:
-        return
-    effective_to = _parse_date(form_data.get("rate_effective_to"))
-
-    # Rates are saved per vehicle owner; resolve the owner from the order's vehicle.
-    vehicle = db.session.get(Vehicle, form.vehicle_id.data) if form.vehicle_id.data else None
-    vehicle_owner_id = vehicle.owner_id if vehicle else None
-
-    try:
-        RateService().save_rate_from_order({
-            "contractor_id": form.contractor_id.data,
-            "site_id": form.site_id.data,
-            "from_site_id": form.from_site_id.data or None,
-            "material_id": form.material_id.data or None,
-            "vehicle_owner_id": vehicle_owner_id,
-            "unit": _material_units(service).get(form.material_id.data, "cft"),
-            "rate": form.contractor_rate.data,
-            "vehicle_rate": form.vehicle_rate.data or None,
-            "effective_from": effective_from.date(),
-            "effective_to": effective_to.date() if effective_to else None,
-            "notes": "Saved from order entry",
-        })
-        flash(request, "Rates saved — they will be suggested automatically on future orders for this route.", "success")
-    except Exception:
-        flash(request, "Order was added, but the rates could not be saved. You can add them from the Rates page.", "warning")
-
-
 @router.get("/orders", name="orders.orders")
 async def orders(request: Request, current_user=Depends(require_permission("orders.view"))):
     service = OrderService()
@@ -230,8 +194,7 @@ async def create_order(request: Request, current_user=Depends(require_permission
         try:
             order = service.create_order(service.input_from_form(form, form_data), created_by_id=getattr(current_user, "id", None))
             record_audit(current_user, "create", "order", order.id, f"Order #{order.id} — {order.material_name}, {order.delivered_quantity or order.quantity} {order.unit}")
-            flash(request, "Order added successfully!", "success")
-            _maybe_save_rate_from_order(request, form, form_data, current_user, service)
+            flash(request, "Order submitted for approval. An approver will confirm the rates before it is finalised.", "success")
             return RedirectResponse(url=str(request.url_for("orders.orders")), status_code=303)
         except (ConflictError, ValidationError, ValueError) as exc:
             flash(request, str(exc), "warning")
@@ -241,9 +204,113 @@ async def create_order(request: Request, current_user=Depends(require_permission
         "orders/create.html",
         form=form,
         material_units=_material_units(service),
-        can_save_rates=bool(getattr(current_user, "can", lambda _c: False)("rates.create")),
         status_code=400 if request.method == "POST" and form.errors else 200,
     )
+
+
+@router.get("/orders/pending", name="orders.pending_approvals")
+async def pending_approvals(request: Request, _current_user=Depends(require_permission("orders.approve"))):
+    service = OrderService()
+    groups = service.list_pending_approvals()
+    return render_template(
+        request,
+        "orders/pending_approvals.html",
+        groups=groups,
+        pending_count=sum(len(g["rows"]) for g in groups),
+        can_save_rates=bool(getattr(_current_user, "can", lambda _c: False)("rates.create")),
+    )
+
+
+def _rate_pair(form_data, order_id):
+    def _f(name):
+        raw = form_data.get(name)
+        try:
+            return float(raw) if raw not in (None, "") else None
+        except (TypeError, ValueError):
+            return None
+    return _f(f"contractor_rate_{order_id}"), _f(f"vehicle_rate_{order_id}")
+
+
+def _maybe_save_approval_rate(request, form_data, service: OrderService):
+    """Persist a ContractorRate when the approver chose to save the rate they
+    applied, so it auto-suggests on future orders and remaining pending rows."""
+    if (form_data.get("save_rate") or "") != "1":
+        return
+    contractor_id = _parse_int(form_data.get("save_rate_contractor_id"))
+    site_id = _parse_int(form_data.get("save_rate_site_id"))
+    effective_from = _parse_date(form_data.get("rate_effective_from"))
+    try:
+        contractor_rate = float(form_data.get("save_rate_contractor_rate"))
+    except (TypeError, ValueError):
+        return
+    if not contractor_id or not site_id or effective_from is None:
+        return
+    effective_to = _parse_date(form_data.get("rate_effective_to"))
+    try:
+        vehicle_rate = float(form_data.get("save_rate_vehicle_rate"))
+    except (TypeError, ValueError):
+        vehicle_rate = None
+    try:
+        RateService().save_rate_from_order({
+            "contractor_id": contractor_id,
+            "site_id": site_id,
+            "from_site_id": _parse_int(form_data.get("save_rate_from_site_id")) or None,
+            "material_id": _parse_int(form_data.get("save_rate_material_id")) or None,
+            "vehicle_owner_id": _parse_int(form_data.get("save_rate_owner_id")) or None,
+            "unit": (form_data.get("save_rate_unit") or "cft").strip() or "cft",
+            "rate": contractor_rate,
+            "vehicle_rate": vehicle_rate,
+            "effective_from": effective_from.date(),
+            "effective_to": effective_to.date() if effective_to else None,
+            "notes": "Saved from order approval",
+        })
+    except Exception:
+        flash(request, "Orders approved, but the rate could not be saved to the rate list.", "warning")
+
+
+@router.post("/orders/approve", name="orders.approve_orders")
+async def approve_orders(request: Request, current_user=Depends(require_permission("orders.approve"))):
+    service = OrderService()
+    form_data = await request.form()
+    order_ids = [i for i in (_parse_int(v) for v in (form_data.get("order_ids") or "").split(",")) if i]
+    if not order_ids:
+        flash(request, "No orders were selected for approval.", "warning")
+        return RedirectResponse(url=str(request.url_for("orders.pending_approvals")), status_code=303)
+
+    approved = 0
+    errors = 0
+    for order_id in order_ids:
+        contractor_rate, vehicle_rate = _rate_pair(form_data, order_id)
+        if not contractor_rate or contractor_rate <= 0:
+            errors += 1
+            continue
+        try:
+            service.approve_order(order_id, contractor_rate=contractor_rate, vehicle_rate=vehicle_rate, approver_id=getattr(current_user, "id", None))
+            record_audit(current_user, "approve", "order", order_id, f"Order #{order_id} approved")
+            approved += 1
+        except (NotFoundError, ValidationError, ValueError):
+            errors += 1
+
+    if approved:
+        _maybe_save_approval_rate(request, form_data, service)
+        flash(request, f"{approved} order(s) approved and posted.", "success")
+    if errors:
+        flash(request, f"{errors} order(s) were skipped — a contractor rate greater than zero is required to approve.", "warning")
+    return RedirectResponse(url=str(request.url_for("orders.pending_approvals")), status_code=303)
+
+
+@router.post("/orders/{id}/reject", name="orders.reject_order")
+async def reject_order(id: int, request: Request, current_user=Depends(require_permission("orders.approve"))):
+    service = OrderService()
+    try:
+        service.reject_order(id)
+        record_audit(current_user, "reject", "order", id, f"Order #{id} rejected")
+        flash(request, "Pending order rejected and removed.", "success")
+    except NotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValidationError as exc:
+        flash(request, str(exc), "warning")
+    return RedirectResponse(url=str(request.url_for("orders.pending_approvals")), status_code=303)
 
 
 @router.get("/orders/{id}", name="orders.view_order")
@@ -276,10 +343,13 @@ async def edit_order(id: int, request: Request, current_user=Depends(require_per
 
     if request.method == "POST" and form.validate():
         try:
-            service.update_order(id, service.input_from_form(form, form_data))
+            updated = service.update_order(id, service.input_from_form(form, form_data))
             record_audit(current_user, "update", "order", id, f"Order #{id} updated")
             flash(request, "Order updated successfully!", "success")
-            return RedirectResponse(url=str(request.url_for("orders.orders")), status_code=303)
+            # A still-pending order isn't in the main register, so send the
+            # approver back to the Pending Approvals screen.
+            dest = "orders.pending_approvals" if updated.approval_status == "pending" else "orders.orders"
+            return RedirectResponse(url=str(request.url_for(dest)), status_code=303)
         except (ConflictError, ValidationError, ValueError) as exc:
             flash(request, str(exc), "warning")
 

@@ -10,9 +10,15 @@ class Plant(db.Model):
     phone = db.Column(db.String(15))
     payment_terms = db.Column(db.String(50))
     balance = db.Column(db.Float, default=0.0)
-    
+    # Pre-ERP carry-forward balance (before the June cutover).
+    opening_balance = db.Column(db.Float, default=0.0, server_default="0")
+
     # Relationship with back_populates
     orders = db.relationship('Order', back_populates='plant')
-    
+
+    @property
+    def effective_balance(self):
+        return float(self.balance or 0.0) + float(self.opening_balance or 0.0)
+
     def __repr__(self):
         return f'<Plant {self.name}>'

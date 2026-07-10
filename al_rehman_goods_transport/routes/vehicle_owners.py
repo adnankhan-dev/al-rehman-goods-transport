@@ -17,7 +17,12 @@ router = APIRouter()
 
 def _owner_orders_and_summary(owner):
     related_orders = sorted(
-        [order for vehicle in owner.vehicles for order in vehicle.orders],
+        [
+            order
+            for vehicle in owner.vehicles
+            for order in vehicle.orders
+            if order.approval_status == "approved"
+        ],
         key=lambda order: (order.completion_date or order.order_date, order.id),
         reverse=True,
     )
@@ -35,7 +40,7 @@ def _owner_orders_and_summary(owner):
     if vehicle_ids:
         standalone_diesel_rows = (
             db.session.query(DieselEntry)
-            .filter(DieselEntry.vehicle_id.in_(vehicle_ids))
+            .filter(DieselEntry.vehicle_id.in_(vehicle_ids), DieselEntry.approval_status == "approved")
             .order_by(DieselEntry.date.desc(), DieselEntry.id.desc())
             .all()
         )
@@ -97,6 +102,7 @@ async def create_vehicle_owner(request: Request, _current_user=Depends(require_p
             name=form.name.data,
             phone=form.phone.data,
             address=form.address.data,
+            opening_balance=form.opening_balance.data or 0.0,
         )
         db.session.add(owner)
         db.session.commit()
@@ -159,6 +165,7 @@ async def edit_vehicle_owner(id: int, request: Request, _current_user=Depends(re
         owner.name = form.name.data
         owner.phone = form.phone.data
         owner.address = form.address.data
+        owner.opening_balance = form.opening_balance.data or 0.0
 
         for vehicle in owner.vehicles:
             vehicle.sync_owner_name()

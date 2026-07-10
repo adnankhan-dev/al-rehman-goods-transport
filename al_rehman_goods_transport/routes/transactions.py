@@ -21,28 +21,32 @@ def _populate_transaction_choices(form: TransactionForm):
     form.petrol_pump_id.choices = [(0, "Select Petrol Pump")] + [(pump.id, pump.name) for pump in PetrolPump.query.order_by(PetrolPump.name.asc()).all()]
 
 
+_ENTITY_ID_FIELD = {
+    "contractor": "contractor_id",
+    "vehicle_owner": "vehicle_owner_id",
+    "plant": "plant_id",
+    "petrol_pump": "petrol_pump_id",
+    "vehicle": "vehicle_id",
+}
+
+
 def _transaction_input_from_form(form):
+    direction = form.type.data  # 'payment' | 'receipt' | 'other_expense' | 'initial_balance'
     entity_type = None
     entity_id = None
+    tx_type = direction
 
-    if form.type.data == "vehicle_payment":
-        entity_type = "vehicle"
-        entity_id = form.vehicle_id.data if form.vehicle_id.data != 0 else None
-    elif form.type.data in ("vehicle_owner_payment", "vehicle_owner_receipt"):
-        entity_type = "vehicle_owner"
-        entity_id = form.vehicle_owner_id.data if form.vehicle_owner_id.data != 0 else None
-    elif form.type.data == "contractor_receipt":
-        entity_type = "contractor"
-        entity_id = form.contractor_id.data if form.contractor_id.data != 0 else None
-    elif form.type.data == "plant_payment":
-        entity_type = "plant"
-        entity_id = form.plant_id.data if form.plant_id.data != 0 else None
-    elif form.type.data == "petrol_pump_payment":
-        entity_type = "petrol_pump"
-        entity_id = form.petrol_pump_id.data if form.petrol_pump_id.data != 0 else None
+    if direction in ("payment", "receipt"):
+        entity_type = form.entity_type.data or None
+        field_name = _ENTITY_ID_FIELD.get(entity_type)
+        if field_name:
+            raw = getattr(form, field_name).data
+            entity_id = raw if raw not in (None, 0) else None
+        # Internal type, e.g. contractor + receipt -> contractor_receipt.
+        tx_type = f"{entity_type}_{direction}" if entity_type else direction
 
     return TransactionInput(
-        type=form.type.data,
+        type=tx_type,
         amount=form.amount.data,
         date=form.date.data,
         description=form.description.data,
@@ -73,14 +77,74 @@ async def create_transaction(request: Request, current_user=Depends(require_perm
 
     if request.method == "POST" and form.validate():
         try:
-            transaction = TransactionService().create_transaction(_transaction_input_from_form(form))
+            transaction = TransactionService().create_transaction(_transaction_input_from_form(form), approval_status="pending")
             record_audit(current_user, "create", "transaction", transaction.id, f"{transaction.type} Rs. {transaction.amount:,.2f} — {transaction.entity_name}")
-            flash(request, "Transaction added successfully!", "success")
+            flash(request, "Transaction submitted for approval. It will post to the ledger once approved.", "success")
             return RedirectResponse(url=str(request.url_for("transactions.transactions")), status_code=303)
         except ValidationError as exc:
             flash(request, str(exc), "warning")
 
     return render_template(request, "transactions/create.html", form=form)
+
+
+@router.get("/ledger/pending", name="ledger.pending_approvals")
+async def ledger_pending(request: Request, _current_user=Depends(require_permission("ledger.approve"))):
+    service = TransactionService()
+    from ..services import BillingService
+
+    pending_transactions = service.list_pending()
+    pending_bills = BillingService().list_pending_bills()
+    return render_template(
+        request,
+        "ledger/pending_approvals.html",
+        pending_transactions=pending_transactions,
+        pending_bills=pending_bills,
+        pending_count=len(pending_transactions) + len(pending_bills),
+    )
+
+
+@router.post("/transactions/approve", name="transactions.approve_transactions")
+async def approve_transactions(request: Request, current_user=Depends(require_permission("ledger.approve"))):
+    service = TransactionService()
+    form_data = await request.form()
+
+    def _int(value):
+        try:
+            return int(value)
+        except (TypeError, ValueError):
+            return None
+
+    ids = [i for i in (_int(v) for v in (form_data.get("transaction_ids") or "").split(",")) if i]
+    if not ids:
+        flash(request, "No transactions were selected for approval.", "warning")
+        return RedirectResponse(url=str(request.url_for("ledger.pending_approvals")), status_code=303)
+    approved = errors = 0
+    for tx_id in ids:
+        try:
+            service.approve_transaction(tx_id, approver_id=getattr(current_user, "id", None))
+            record_audit(current_user, "approve", "transaction", tx_id, f"Transaction #{tx_id} approved")
+            approved += 1
+        except Exception:
+            errors += 1
+    if approved:
+        flash(request, f"{approved} transaction(s) approved and posted.", "success")
+    if errors:
+        flash(request, f"{errors} transaction(s) could not be approved.", "warning")
+    return RedirectResponse(url=str(request.url_for("ledger.pending_approvals")), status_code=303)
+
+
+@router.post("/transactions/{id}/reject", name="transactions.reject_transaction")
+async def reject_transaction(id: int, request: Request, current_user=Depends(require_permission("ledger.approve"))):
+    service = TransactionService()
+    try:
+        service.reject_transaction(id)
+        record_audit(current_user, "reject", "transaction", id, f"Transaction #{id} rejected")
+        flash(request, "Pending transaction rejected and removed.", "success")
+    except NotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValidationError as exc:
+        flash(request, str(exc), "warning")
+    return RedirectResponse(url=str(request.url_for("ledger.pending_approvals")), status_code=303)
 
 
 @router.get("/transactions/{id}", name="transactions.view_transaction")
@@ -102,7 +166,21 @@ async def edit_transaction(id: int, request: Request, current_user=Depends(requi
 
     form = TransactionForm(await request.form() if request.method == "POST" else None, obj=transaction)
     if request.method == "GET":
+        # Reverse-map the stored type (e.g. contractor_receipt) into the generic
+        # direction + entity-type fields the form now uses.
+        stored = transaction.type or ""
+        if stored.endswith("_payment"):
+            form.type.data = "payment"
+            form.entity_type.data = stored[: -len("_payment")]
+        elif stored.endswith("_receipt"):
+            form.type.data = "receipt"
+            form.entity_type.data = stored[: -len("_receipt")]
+        else:
+            form.type.data = stored
+        form.vehicle_id.data = transaction.vehicle_id or 0
         form.vehicle_owner_id.data = transaction.vehicle_owner_id or 0
+        form.contractor_id.data = transaction.contractor_id or 0
+        form.plant_id.data = transaction.plant_id or 0
         form.petrol_pump_id.data = transaction.petrol_pump_id or 0
     _populate_transaction_choices(form)
 

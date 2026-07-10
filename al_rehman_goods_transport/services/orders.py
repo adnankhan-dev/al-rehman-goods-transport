@@ -97,6 +97,60 @@ class OrderService:
             raise NotFoundError("Order not found.")
         return order
 
+    def pending_count(self):
+        return self.orders.pending_count()
+
+    def list_pending_approvals(self):
+        """Pending orders grouped by contractor → to-site → material → vehicle
+        owner (per the approval screen layout). Each order row carries the best
+        saved-rate suggestion so the approver's rate fields are pre-filled."""
+        from .rates import RateService
+
+        rate_service = RateService(self.session)
+        suggestion_cache = {}
+
+        def suggest(order, owner_id):
+            key = (order.contractor_id, order.site_id, order.from_site_id, order.material_id, owner_id)
+            if key not in suggestion_cache:
+                suggestion_cache[key] = rate_service.find_applicable_rate(
+                    order.contractor_id, order.site_id, order.from_site_id, order.material_id,
+                    check_date=(order.order_date.date() if order.order_date else None),
+                    vehicle_owner_id=owner_id,
+                )
+            return suggestion_cache[key]
+
+        groups = {}
+        for order in self.orders.list_pending():
+            owner = order.vehicle.owner if order.vehicle else None
+            owner_id = owner.id if owner else None
+            owner_name = owner.name if owner else (order.vehicle.owner_display_name if order.vehicle else "Unassigned")
+            key = (order.contractor_id, order.site_id, order.material_id, owner_id)
+            if key not in groups:
+                groups[key] = {
+                    "contractor_id": order.contractor_id,
+                    "contractor_name": order.contractor.name if order.contractor else "Unassigned",
+                    "site_id": order.site_id,
+                    "site_name": order.site.name if order.site else "-",
+                    "material_id": order.material_id,
+                    "material_name": order.material_name,
+                    "unit": order.unit or "cft",
+                    "owner_id": owner_id,
+                    "owner_name": owner_name,
+                    "rows": [],
+                }
+            rate = suggest(order, owner_id)
+            groups[key]["rows"].append({
+                "order": order,
+                "suggested_contractor_rate": rate.rate if rate else None,
+                "suggested_vehicle_rate": (rate.vehicle_rate if rate else None),
+                "saved_rate_id": rate.id if rate else None,
+            })
+
+        return sorted(
+            groups.values(),
+            key=lambda g: (g["contractor_name"].lower(), g["site_name"].lower(), g["material_name"].lower(), g["owner_name"].lower()),
+        )
+
     def order_filter_options(self):
         # Filters include archived sites so historical orders can still be filtered;
         # only the entry form (build_form_choices) hides archived sites.
@@ -158,7 +212,35 @@ class OrderService:
         order = Order(order_date=utc_now(), created_at=utc_now(), created_by_id=created_by_id)
         try:
             self._write_order(order, order_input)
+            # New orders are held for approval: no rates yet, no financial
+            # posting, hidden from the register/reports/billing until approved.
+            order.status = "Pending Approval"
+            order.approval_status = "pending"
+            order.contractor_rate = None
+            order.vehicle_rate = None
             self.orders.add(order)
+            self.session.commit()
+        except Exception:
+            self.session.rollback()
+            raise
+        return order
+
+    def approve_order(self, order_id, contractor_rate=None, vehicle_rate=None, approver_id=None):
+        """Approve a pending order: set the confirmed rates, flip it live, and
+        post its financials (ledger, vehicle-owner credit, advance transaction)."""
+        order = self.get_order(order_id)
+        if order.approval_status == "approved":
+            return order
+        try:
+            if contractor_rate is not None:
+                order.contractor_rate = _safe_float(contractor_rate)
+            if vehicle_rate is not None:
+                order.vehicle_rate = _safe_float(vehicle_rate)
+            order.approval_status = "approved"
+            order.status = "Completed"
+            order.approved_by_id = approver_id
+            order.approved_at = utc_now()
+            order.completion_date = order.completion_date or order.order_date or utc_now()
             sync_order_financials(self.session, order)
             TransactionService(self.session).sync_order_advance_transaction(order)
             self.session.commit()
@@ -167,18 +249,40 @@ class OrderService:
             raise
         return order
 
+    def reject_order(self, order_id):
+        """Discard a pending order. Safe to delete outright because a pending
+        order has posted no financials."""
+        order = self.get_order(order_id)
+        if order.approval_status == "approved":
+            raise ValidationError("This order is already approved and cannot be rejected. Delete it from the register instead.")
+        try:
+            self.orders.delete(order)
+            self.session.commit()
+        except Exception:
+            self.session.rollback()
+            raise
+
     def update_order(self, order_id, order_input: OrderInput):
         order = self.get_order(order_id)
         if order.is_billed:
             raise ValidationError("This order is on a contractor bill and cannot be edited. Remove it from the bill first.")
         if order.is_vehicle_owner_billed:
             raise ValidationError("This order is on a vehicle owner bill and cannot be edited. Remove it from the bill first.")
-        previous_snapshot = snapshot_order(order)
 
         try:
+            if order.approval_status == "approved":
+                # Editing a live order sends it back for re-approval: reverse its
+                # posted financials and hold it pending until approved again.
+                reverse_order_financials(self.session, order)
+                transaction_service = TransactionService(self.session)
+                existing_advance = transaction_service.transactions.find_system_order_advance(order.id)
+                if existing_advance:
+                    transaction_service.transactions.delete(existing_advance)
             self._write_order(order, order_input)
-            sync_order_financials(self.session, order, previous_snapshot)
-            TransactionService(self.session).sync_order_advance_transaction(order)
+            order.approval_status = "pending"
+            order.status = "Pending Approval"
+            order.approved_by_id = None
+            order.approved_at = None
             self.session.commit()
         except Exception:
             self.session.rollback()
@@ -229,7 +333,8 @@ class OrderService:
         order.plant_amount = order_input.plant_amount if order_input.plant_id else 0.0
         order.commission = order_input.commission
         order.remarks = order_input.remarks
-        order.status = "Completed"
+        # NOTE: status/approval_status are owned by create_order / approve_order /
+        # update_order — not set here — so the approval workflow stays intact.
         order.completion_date = order.completion_date or order.order_date or utc_now()
 
         if order_input.delivery_receipt_image is not None:
@@ -292,6 +397,9 @@ class OrderService:
         include_profit is set, a net profit summary (revenue minus vehicle and
         plant costs) is appended."""
         from .billing import group_orders_by_site_and_material
+        from .settings import SettingsService
+
+        letterhead = SettingsService(self.session).get_letterhead()
 
         def money(value):
             return f"Rs. {float(value or 0):,.2f}"
@@ -566,10 +674,10 @@ class OrderService:
                     </div>
                     <header class="letterhead">
                         <div class="letterhead-brand">
-                            <div class="letterhead-name">Al Rehman Goods Transport</div>
-                            <div class="letterhead-line">Bahtr Mor Wah Cantt</div>
-                            <div class="letterhead-line">Contact No. Ahsan Niazi 0307-2342827</div>
-                            <div class="letterhead-line">Inam Khan - 0301-5749086</div>
+                            <div class="letterhead-name">{escape(letterhead['name'])}</div>
+                            <div class="letterhead-line">{escape(letterhead['address'])}</div>
+                            <div class="letterhead-line">{escape(letterhead['contact1'])}</div>
+                            <div class="letterhead-line">{escape(letterhead['contact2'])}</div>
                         </div>
                         <div class="letterhead-meta">
                             <div style="text-transform: uppercase; letter-spacing: 0.14em; color: #d97706; font-size: 0.74rem; font-weight: 700;">Detailed Statement</div>

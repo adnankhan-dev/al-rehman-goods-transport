@@ -37,6 +37,7 @@ PERMISSION_GROUPS = [
             {"code": "orders.create", "label": "Create Orders", "description": "Create new orders."},
             {"code": "orders.edit", "label": "Edit Orders", "description": "Update or complete existing orders."},
             {"code": "orders.delete", "label": "Delete Orders", "description": "Delete existing orders."},
+            {"code": "orders.approve", "label": "Approve Orders", "description": "Review pending orders, set contractor/vehicle rates, and approve or reject them."},
         ],
     },
     {
@@ -48,6 +49,7 @@ PERMISSION_GROUPS = [
             {"code": "ledger.create", "label": "Create Ledger Entries", "description": "Post transactions and create bills."},
             {"code": "ledger.edit", "label": "Edit Ledger Entries", "description": "Update settlements and editable transaction records."},
             {"code": "ledger.delete", "label": "Delete Ledger Entries", "description": "Delete editable transaction records."},
+            {"code": "ledger.approve", "label": "Approve Ledger Entries", "description": "Review pending transactions and bills and approve or reject them."},
         ],
     },
     {
@@ -59,6 +61,7 @@ PERMISSION_GROUPS = [
             {"code": "diesel.create", "label": "Create Diesel Entries", "description": "Log new diesel entries for vehicles."},
             {"code": "diesel.edit", "label": "Edit Diesel Entries", "description": "Update existing diesel entries."},
             {"code": "diesel.delete", "label": "Delete Diesel Entries", "description": "Delete diesel entry records."},
+            {"code": "diesel.approve", "label": "Approve Diesel Entries", "description": "Review pending diesel entries and approve or reject them."},
         ],
     },
     {
@@ -187,9 +190,12 @@ ROLE_DEFINITIONS = {
             "settings.view",
             "settings.manage",
             "orders.view",
+            "orders.approve",
             "diesel.view",
+            "diesel.approve",
             "ledger.view",
             "ledger.create",
+            "ledger.approve",
             "rates.view",
             "contractors.view",
             "sites.view",

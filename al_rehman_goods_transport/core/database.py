@@ -65,6 +65,11 @@ def init_db():
     _add_order_entry_audit_columns()
     _add_petrol_pump_opening_balance()
     _add_contractor_rate_vehicle_owner()
+    _add_order_approval_columns()
+    _add_diesel_approval_columns()
+    _add_entity_opening_balances()
+    _add_transaction_approval_columns()
+    _add_bill_approval_columns()
     _run_one_time_backfills()
 
 
@@ -91,6 +96,94 @@ def _add_contractor_rate_vehicle_owner():
     if "vehicle_owner_id" not in columns:
         with engine.begin() as connection:
             connection.execute(text("ALTER TABLE contractor_rate ADD COLUMN vehicle_owner_id INTEGER"))
+
+
+def _add_entity_opening_balances():
+    """Add a pre-ERP `opening_balance` to contractor / vehicle_owner / plant /
+    vehicle (petrol_pump already has one). Additive, idempotent, SQLite+Postgres."""
+    inspector = inspect(engine)
+    for table in ("contractor", "vehicle_owner", "plant", "vehicle"):
+        if table not in inspector.get_table_names():
+            continue
+        columns = {column["name"] for column in inspector.get_columns(table)}
+        if "opening_balance" not in columns:
+            with engine.begin() as connection:
+                connection.execute(text(f"ALTER TABLE {table} ADD COLUMN opening_balance FLOAT DEFAULT 0"))
+
+
+def _add_transaction_approval_columns():
+    """Add approval-workflow columns to the transaction table. Existing rows
+    default to 'approved' so posted/system transactions are unaffected."""
+    inspector = inspect(engine)
+    if "transaction" not in inspector.get_table_names():
+        return
+    columns = {column["name"] for column in inspector.get_columns("transaction")}
+    with engine.begin() as connection:
+        if "approval_status" not in columns:
+            connection.execute(text("ALTER TABLE \"transaction\" ADD COLUMN approval_status VARCHAR(20) DEFAULT 'approved'"))
+            connection.execute(text("UPDATE \"transaction\" SET approval_status = 'approved' WHERE approval_status IS NULL"))
+        if "approved_by_id" not in columns:
+            connection.execute(text("ALTER TABLE \"transaction\" ADD COLUMN approved_by_id INTEGER"))
+        if "approved_at" not in columns:
+            connection.execute(text("ALTER TABLE \"transaction\" ADD COLUMN approved_at TIMESTAMP"))
+
+
+def _add_bill_approval_columns():
+    """Add approval-workflow columns to the bill table. Existing bills default
+    to 'approved' so they stay visible and settleable exactly as before."""
+    inspector = inspect(engine)
+    if "bill" not in inspector.get_table_names():
+        return
+    columns = {column["name"] for column in inspector.get_columns("bill")}
+    with engine.begin() as connection:
+        if "approval_status" not in columns:
+            connection.execute(text("ALTER TABLE bill ADD COLUMN approval_status VARCHAR(20) DEFAULT 'approved'"))
+            connection.execute(text("UPDATE bill SET approval_status = 'approved' WHERE approval_status IS NULL"))
+        if "approved_by_id" not in columns:
+            connection.execute(text("ALTER TABLE bill ADD COLUMN approved_by_id INTEGER"))
+        if "approved_at" not in columns:
+            connection.execute(text("ALTER TABLE bill ADD COLUMN approved_at TIMESTAMP"))
+
+
+def _add_order_approval_columns():
+    """Add the order approval-workflow columns to existing databases.
+
+    Runs on SQLite and Postgres. Existing orders default to 'approved' so they
+    stay visible and financially posted exactly as before — only newly created
+    orders start 'pending'. Additive, idempotent, and never rewrites data."""
+    inspector = inspect(engine)
+    if "orders" not in inspector.get_table_names():
+        return
+    columns = {column["name"] for column in inspector.get_columns("orders")}
+    with engine.begin() as connection:
+        if "approval_status" not in columns:
+            connection.execute(text("ALTER TABLE orders ADD COLUMN approval_status VARCHAR(20) DEFAULT 'approved'"))
+            # Belt-and-suspenders: make sure every existing row is explicitly approved.
+            connection.execute(text("UPDATE orders SET approval_status = 'approved' WHERE approval_status IS NULL"))
+        if "approved_by_id" not in columns:
+            connection.execute(text("ALTER TABLE orders ADD COLUMN approved_by_id INTEGER"))
+        if "approved_at" not in columns:
+            connection.execute(text("ALTER TABLE orders ADD COLUMN approved_at TIMESTAMP"))
+
+
+def _add_diesel_approval_columns():
+    """Add the diesel-entry approval-workflow columns to existing databases.
+
+    Existing diesel entries default to 'approved' so pump/vehicle balances and
+    statements are unchanged; only new entries start 'pending'. Additive and
+    idempotent (SQLite + Postgres)."""
+    inspector = inspect(engine)
+    if "diesel_entry" not in inspector.get_table_names():
+        return
+    columns = {column["name"] for column in inspector.get_columns("diesel_entry")}
+    with engine.begin() as connection:
+        if "approval_status" not in columns:
+            connection.execute(text("ALTER TABLE diesel_entry ADD COLUMN approval_status VARCHAR(20) DEFAULT 'approved'"))
+            connection.execute(text("UPDATE diesel_entry SET approval_status = 'approved' WHERE approval_status IS NULL"))
+        if "approved_by_id" not in columns:
+            connection.execute(text("ALTER TABLE diesel_entry ADD COLUMN approved_by_id INTEGER"))
+        if "approved_at" not in columns:
+            connection.execute(text("ALTER TABLE diesel_entry ADD COLUMN approved_at TIMESTAMP"))
 
 
 def _add_order_entry_audit_columns():

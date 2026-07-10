@@ -137,10 +137,10 @@
     <div class="body">
         <div style="display:flex;flex-wrap:wrap;justify-content:space-between;align-items:flex-start;gap:16px;border-bottom:2px solid #e2e8f0;padding-bottom:14px;margin-bottom:18px;">
             <div>
-                <div style="font-size:1.5rem;font-weight:800;color:#0b2742;letter-spacing:-0.01em;">Al Rehman Goods Transport</div>
-                <div style="color:#64748b;font-size:0.82rem;line-height:1.6;">Bahtr Mor Wah Cantt</div>
-                <div style="color:#64748b;font-size:0.82rem;line-height:1.6;">Contact No. Ahsan Niazi 0307-2342827</div>
-                <div style="color:#64748b;font-size:0.82rem;line-height:1.6;">Inam Khan - 0301-5749086</div>
+                <div style="font-size:1.5rem;font-weight:800;color:#0b2742;letter-spacing:-0.01em;">{{ letterhead.name if letterhead else 'Al Rehman Goods Transport' }}</div>
+                <div style="color:#64748b;font-size:0.82rem;line-height:1.6;">{{ letterhead.address if letterhead else 'Bahtr Mor Wah Cantt' }}</div>
+                <div style="color:#64748b;font-size:0.82rem;line-height:1.6;">{{ letterhead.contact1 if letterhead else 'Contact No. Ahsan Niazi 0307-2342827' }}</div>
+                <div style="color:#64748b;font-size:0.82rem;line-height:1.6;">{{ letterhead.contact2 if letterhead else 'Inam Khan - 0301-5749086' }}</div>
             </div>
             <div style="text-transform:uppercase;letter-spacing:0.14em;color:#d97706;font-size:0.74rem;font-weight:700;white-space:nowrap;">Account Statement</div>
         </div>

@@ -27,6 +27,35 @@
     </div>
 
     <div class="detail-panel">
+        <h3>Printed Document Letterhead</h3>
+        <p class="form-note">This header appears at the top of every printed document — bills, statements, reports, and the manual entry form.</p>
+        <form method="POST" class="form-stack mt-2">
+            <input type="hidden" name="action" value="update_letterhead">
+            <div class="form-grid-two">
+                <div class="form-field">
+                    <label class="form-label" for="letterhead_name">Business Name</label>
+                    <input class="form-control" type="text" id="letterhead_name" name="letterhead_name" value="{{ letterhead_settings.name }}">
+                </div>
+                <div class="form-field">
+                    <label class="form-label" for="letterhead_address">Address</label>
+                    <input class="form-control" type="text" id="letterhead_address" name="letterhead_address" value="{{ letterhead_settings.address }}">
+                </div>
+                <div class="form-field">
+                    <label class="form-label" for="letterhead_contact1">Contact Line 1</label>
+                    <input class="form-control" type="text" id="letterhead_contact1" name="letterhead_contact1" value="{{ letterhead_settings.contact1 }}">
+                </div>
+                <div class="form-field">
+                    <label class="form-label" for="letterhead_contact2">Contact Line 2</label>
+                    <input class="form-control" type="text" id="letterhead_contact2" name="letterhead_contact2" value="{{ letterhead_settings.contact2 }}">
+                </div>
+            </div>
+            <div class="form-actions">
+                <button type="submit" class="btn btn-ui-primary"><i class="bi bi-save"></i> Save Letterhead</button>
+            </div>
+        </form>
+    </div>
+
+    <div class="detail-panel">
         <h3>Balance Reconciliation &amp; Audit</h3>
         <p class="form-note">Compare every stored account balance against the balance recomputed from orders, diesel entries, and payments — and review who changed what.</p>
         <div class="form-actions">

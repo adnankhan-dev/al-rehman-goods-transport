@@ -315,10 +315,10 @@
         <!-- Document header -->
         <div class="doc-header">
             <div>
-                <div class="company-name">Al Rehman Goods Transport</div>
-                <div class="company-contact">Bahtr Mor Wah Cantt</div>
-                <div class="company-contact">Contact No. Ahsan Niazi 0307-2342827</div>
-                <div class="company-contact">Inam Khan - 0301-5749086</div>
+                <div class="company-name">{{ letterhead.name if letterhead else 'Al Rehman Goods Transport' }}</div>
+                <div class="company-contact">{{ letterhead.address if letterhead else 'Bahtr Mor Wah Cantt' }}</div>
+                <div class="company-contact">{{ letterhead.contact1 if letterhead else 'Contact No. Ahsan Niazi 0307-2342827' }}</div>
+                <div class="company-contact">{{ letterhead.contact2 if letterhead else 'Inam Khan - 0301-5749086' }}</div>
                 <div class="doc-title">ERP Ledger Register</div>
             </div>
             <div class="doc-meta">

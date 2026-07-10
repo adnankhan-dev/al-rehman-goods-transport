@@ -14,9 +14,15 @@ class Vehicle(db.Model):
     fitness_certificate = db.Column(db.String(100))
     created_at = db.Column(db.DateTime, default=db.func.current_timestamp())
     balance = db.Column(db.Float, default=0.0)
+    # Pre-ERP carry-forward balance (before the June cutover).
+    opening_balance = db.Column(db.Float, default=0.0, server_default="0")
 
     owner = db.relationship("VehicleOwner", back_populates="vehicles")
     orders = db.relationship("Order", back_populates="vehicle")
+
+    @property
+    def effective_balance(self):
+        return float(self.balance or 0.0) + float(self.opening_balance or 0.0)
 
     @property
     def owner_display_name(self):

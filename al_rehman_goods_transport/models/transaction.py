@@ -22,6 +22,13 @@ class Transaction(db.Model):
     reference = db.Column(db.String(50))
     is_system_generated = db.Column(db.Boolean, default=False, nullable=False)
 
+    # Approval workflow: a manually-posted transaction is 'pending' and applies
+    # NO balance effect and is hidden from the ledger until approved. Default
+    # 'approved' so existing rows and system-generated ones are unaffected.
+    approval_status = db.Column(db.String(20), default="approved", server_default="approved", nullable=False)
+    approved_by_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=True)
+    approved_at = db.Column(db.DateTime, nullable=True)
+
     vehicle_id = db.Column(db.Integer, db.ForeignKey("vehicle.id"), nullable=True)
     vehicle_owner_id = db.Column(db.Integer, db.ForeignKey("vehicle_owner.id"), nullable=True)
     contractor_id = db.Column(db.Integer, db.ForeignKey("contractor.id"), nullable=True)
@@ -33,6 +40,10 @@ class Transaction(db.Model):
     contractor = db.relationship("Contractor", backref=db.backref("transactions", lazy=True))
     plant = db.relationship("Plant", backref=db.backref("transactions", lazy=True))
     petrol_pump = db.relationship("PetrolPump", back_populates="transactions")
+
+    @property
+    def is_pending_approval(self):
+        return self.approval_status == "pending"
 
     @property
     def entity_name(self):

@@ -168,6 +168,50 @@ async def diesel_create(request: Request, current_user=Depends(require_permissio
     return render_template(request, "diesel/create.html", form=form, diesel_rate=diesel_rate, pump_prices=PetrolPumpService().prices_map())
 
 
+@router.get("/diesel/pending", name="diesel.pending_approvals")
+async def diesel_pending(request: Request, _=Depends(require_permission("diesel.approve"))):
+    service = DieselService()
+    entries = service.list_pending()
+    return render_template(request, "diesel/pending_approvals.html", entries=entries, pending_count=len(entries))
+
+
+@router.post("/diesel/approve", name="diesel.approve_entries")
+async def diesel_approve(request: Request, current_user=Depends(require_permission("diesel.approve"))):
+    service = DieselService()
+    form_data = await request.form()
+    entry_ids = [i for i in (_parse_int(v) for v in (form_data.get("entry_ids") or "").split(",")) if i]
+    if not entry_ids:
+        flash(request, "No diesel entries were selected for approval.", "warning")
+        return RedirectResponse(url=str(request.url_for("diesel.pending_approvals")), status_code=303)
+    approved = errors = 0
+    for entry_id in entry_ids:
+        try:
+            service.approve_entry(entry_id, approver_id=getattr(current_user, "id", None))
+            record_audit(current_user, "approve", "diesel_entry", entry_id, f"Diesel entry #{entry_id} approved")
+            approved += 1
+        except Exception:
+            errors += 1
+    if approved:
+        flash(request, f"{approved} diesel entry(ies) approved and posted.", "success")
+    if errors:
+        flash(request, f"{errors} entry(ies) could not be approved.", "warning")
+    return RedirectResponse(url=str(request.url_for("diesel.pending_approvals")), status_code=303)
+
+
+@router.post("/diesel/{id}/reject", name="diesel.reject_entry")
+async def diesel_reject(id: int, request: Request, current_user=Depends(require_permission("diesel.approve"))):
+    service = DieselService()
+    try:
+        service.reject_entry(id)
+        record_audit(current_user, "reject", "diesel_entry", id, f"Diesel entry #{id} rejected")
+        flash(request, "Pending diesel entry rejected and removed.", "success")
+    except NotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except Exception as exc:
+        flash(request, str(exc), "warning")
+    return RedirectResponse(url=str(request.url_for("diesel.pending_approvals")), status_code=303)
+
+
 @router.get("/diesel/{id}", name="diesel.view")
 async def diesel_view(id: int, request: Request, _=Depends(require_permission("diesel.view"))):
     service = DieselService()

@@ -110,7 +110,7 @@ class ReportRepository:
         """Diesel module entries (live flow). Order-based filters apply via the
         optional linked order; entries without an order are excluded only when
         such a filter is active."""
-        query = self.session.query(DieselEntry)
+        query = self.session.query(DieselEntry).filter(DieselEntry.approval_status == "approved")
 
         order_filter_keys = ("contractor_id", "site_id", "from_site_id", "material_id", "billing_status")
         if any(filters.get(key) for key in order_filter_keys):

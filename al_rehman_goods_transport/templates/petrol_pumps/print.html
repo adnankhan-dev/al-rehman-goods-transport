@@ -47,10 +47,10 @@
             <header class="letterhead">
                 <div>
                     <div class="kicker">Petrol Pump Statement</div>
-                    <div class="company-name">Al Rehman Goods Transport</div>
-                    <div class="company-line">Bahtr Mor Wah Cantt</div>
-                    <div class="company-line">Contact No. Ahsan Niazi 0307-2342827</div>
-                    <div class="company-line">Inam Khan - 0301-5749086</div>
+                    <div class="company-name">{{ letterhead.name if letterhead else 'Al Rehman Goods Transport' }}</div>
+                    <div class="company-line">{{ letterhead.address if letterhead else 'Bahtr Mor Wah Cantt' }}</div>
+                    <div class="company-line">{{ letterhead.contact1 if letterhead else 'Contact No. Ahsan Niazi 0307-2342827' }}</div>
+                    <div class="company-line">{{ letterhead.contact2 if letterhead else 'Inam Khan - 0301-5749086' }}</div>
                 </div>
                 <div style="text-align:right;">
                     <div class="company-line"><strong style="font-size:1.05rem;color:var(--ink);">{{ petrol_pump.name }}</strong></div>

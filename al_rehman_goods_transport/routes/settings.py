@@ -91,6 +91,20 @@ async def settings_dashboard(request: Request, current_user=Depends(require_any_
                 except ValidationError as exc:
                     flash(request, str(exc), "warning")
 
+        elif action == "update_letterhead":
+            if not current_user.can("settings.manage"):
+                flash(request, "You do not have permission to update ERP settings.", "warning")
+                return RedirectResponse(url=str(request.url_for("settings.index")), status_code=303)
+            service.update_letterhead(
+                name=form_data.get("letterhead_name"),
+                address=form_data.get("letterhead_address"),
+                contact1=form_data.get("letterhead_contact1"),
+                contact2=form_data.get("letterhead_contact2"),
+            )
+            record_audit(current_user, "update", "settings", None, "Printed-document letterhead updated")
+            flash(request, "Letterhead updated. It now appears on all printed documents.", "success")
+            return RedirectResponse(url=str(request.url_for("settings.index")), status_code=303)
+
     return render_template(
         request,
         "settings/index.html",
@@ -103,6 +117,7 @@ async def settings_dashboard(request: Request, current_user=Depends(require_any_
         auto_backup=automatic_backup_status(),
         contractors=LookupRepository().list_contractors(),
         current_month=datetime.now().strftime("%Y-%m"),
+        letterhead_settings=service.get_letterhead(),
         **service.diesel_rate_context(),
     )
 

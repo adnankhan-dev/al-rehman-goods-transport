@@ -40,6 +40,7 @@ async def create_vehicle(request: Request, _current_user=Depends(require_permiss
             insurance_details=form.insurance_details.data,
             fitness_certificate=form.fitness_certificate.data,
             balance=form.balance.data or 0.0,
+            opening_balance=form.opening_balance.data or 0.0,
         )
         vehicle.sync_owner_name()
         db.session.add(vehicle)
@@ -103,6 +104,7 @@ async def edit_vehicle(id: int, request: Request, _current_user=Depends(require_
         vehicle.capacity = form.capacity.data
         vehicle.insurance_details = form.insurance_details.data
         vehicle.fitness_certificate = form.fitness_certificate.data
+        vehicle.opening_balance = form.opening_balance.data or 0.0
         vehicle.sync_owner_name()
         db.session.commit()
         flash(request, "Vehicle updated successfully!", "success")

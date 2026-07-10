@@ -11,7 +11,12 @@ class OrderRepository:
         self.session = session or db.session
 
     def list_all(self):
-        return self.session.query(Order).order_by(Order.order_date.desc(), Order.id.desc()).all()
+        return (
+            self.session.query(Order)
+            .filter(Order.approval_status == "approved")
+            .order_by(Order.order_date.desc(), Order.id.desc())
+            .all()
+        )
 
     def list_filtered(self, filters):
         return self._filtered_query(filters).all()
@@ -23,7 +28,28 @@ class OrderRepository:
         return items, total
 
     def total_count(self):
-        return self.session.query(func.count(Order.id)).scalar() or 0
+        return (
+            self.session.query(func.count(Order.id))
+            .filter(Order.approval_status == "approved")
+            .scalar()
+            or 0
+        )
+
+    def pending_count(self):
+        return (
+            self.session.query(func.count(Order.id))
+            .filter(Order.approval_status == "pending")
+            .scalar()
+            or 0
+        )
+
+    def list_pending(self):
+        return (
+            self.session.query(Order)
+            .filter(Order.approval_status == "pending")
+            .order_by(Order.contractor_id, Order.site_id, Order.material_id, Order.order_date.asc(), Order.id.asc())
+            .all()
+        )
 
     def filtered_pnl(self, filters):
         """Profit & loss over the FULL filtered set.
@@ -70,7 +96,9 @@ class OrderRepository:
         }
 
     def _filtered_query(self, filters):
-        query = self.session.query(Order)
+        # Approved orders only — pending-approval orders live on the Pending
+        # Approvals page and must never leak into the register, summaries, or P&L.
+        query = self.session.query(Order).filter(Order.approval_status == "approved")
 
         if filters.get("contractor_id"):
             query = query.filter(Order.contractor_id == filters["contractor_id"])

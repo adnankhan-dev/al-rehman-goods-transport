@@ -23,11 +23,44 @@ class BillingService:
     def list_bills(self):
         return self.billing.list_bills()
 
+    def list_pending_bills(self):
+        return self.billing.list_pending_bills()
+
+    def pending_bill_count(self):
+        return self.billing.pending_bill_count()
+
     def get_bill(self, bill_id):
         bill = self.billing.get_bill(bill_id)
         if bill is None:
             raise NotFoundError("Bill not found.")
         return bill
+
+    def approve_bill(self, bill_id, approver_id=None):
+        """Approve a pending bill so it becomes visible on the ledger and can be
+        settled. (Creating a bill only reserves its trips/entries; approval makes
+        it live. No entity balance moves until it is settled.)"""
+        from datetime import UTC, datetime
+
+        bill = self.get_bill(bill_id)
+        if bill.approval_status == "approved":
+            return bill
+        try:
+            bill.approval_status = "approved"
+            bill.approved_by_id = approver_id
+            bill.approved_at = datetime.now(UTC).replace(tzinfo=None)
+            self.session.commit()
+        except Exception:
+            self.session.rollback()
+            raise
+        return bill
+
+    def reject_bill(self, bill_id):
+        """Reject a pending bill: release its reserved trips/entries and delete
+        it. Safe because a pending bill has posted no settlement/balance effect."""
+        bill = self.get_bill(bill_id)
+        if bill.approval_status == "approved":
+            raise ValidationError("This bill is already approved and cannot be rejected. Delete it instead.")
+        self._release_and_delete_bill(bill)
 
     def bill_snapshot(self, bill_id):
         bill = self.get_bill(bill_id)
@@ -127,8 +160,37 @@ class BillingService:
                 pump_period_payments += float(txn.amount or 0)
             pump_net_payable = pump_opening_balance + float(bill.total_amount or 0) - pump_period_payments
 
+        # Generic financial summary for EVERY bill: previous (pre-ERP) balance +
+        # this bill's amount, less the payments/receipts recorded during the bill
+        # tenure = net payable. Mirrors the pump statement for all entity types.
+        entity_obj = bill.contractor or bill.plant or bill.petrol_pump or bill.vehicle_owner
+
+        def _as_date(value):
+            return value.date() if hasattr(value, "date") else value
+
+        _start = _as_date(bill.start_date) if bill.start_date else None
+        _end = _as_date(bill.end_date) if bill.end_date else None
+        period_transactions = []
+        for txn in related_transactions:
+            txn_date = _as_date(txn.date) if txn.date else None
+            if _start and txn_date and txn_date < _start:
+                continue
+            if _end and txn_date and txn_date > _end:
+                continue
+            period_transactions.append(txn)
+        previous_balance = float(getattr(entity_obj, "opening_balance", 0) or 0) if entity_obj else 0.0
+        period_payments_total = sum(float(t.amount or 0) for t in period_transactions)
+        financial_summary = {
+            "previous_balance": previous_balance,
+            "bill_amount": float(bill.total_amount or 0),
+            "period_transactions": period_transactions,
+            "payments_total": period_payments_total,
+            "net_payable": previous_balance + float(bill.total_amount or 0) - period_payments_total,
+        }
+
         return {
             "bill": bill,
+            "financial_summary": financial_summary,
             "orders": linked_orders,
             "orders_grouped": orders_grouped,
             "orders_by_site": orders_by_site,
@@ -272,7 +334,7 @@ class BillingService:
                 raise ValidationError("Selected account does not have an outstanding balance to bill.")
 
         bill = Bill(
-            bill_number=self.billing.next_bill_number(bill_date),
+            bill_number=self.billing.next_bill_number(entity_name=getattr(entity, "name", None)),
             entity_type=entity_type,
             contractor_id=entity.id if entity_type == "contractor" else None,
             plant_id=entity.id if entity_type == "plant" else None,
@@ -284,6 +346,7 @@ class BillingService:
             material_type=material_type or None,
             notes=notes,
             total_amount=total_amount,
+            approval_status="pending",
         )
 
         try:
@@ -309,6 +372,8 @@ class BillingService:
 
     def settle_bill(self, bill_id, amount, payment_method=None, reference=None):
         bill = self.get_bill(bill_id)
+        if bill.approval_status == "pending":
+            raise ValidationError("This bill is awaiting approval and cannot be settled yet.")
         settlement_amount = float(amount or 0.0)
         if settlement_amount <= 0:
             raise ValidationError("Settlement amount must be greater than zero.")
@@ -354,7 +419,9 @@ class BillingService:
             raise ValidationError(
                 "This bill has recorded settlements and cannot be deleted. Reverse the settlement transactions first, then delete and recreate the bill."
             )
+        return self._release_and_delete_bill(bill)
 
+    def _release_and_delete_bill(self, bill):
         # Release every record this bill claimed so the trips/entries become
         # available for billing again, then remove the bill itself.
         self.session.query(Order).filter(Order.bill_id == bill.id).update(
@@ -757,8 +824,8 @@ class BillingService:
         return entity
 
 
-def generate_bill_number(bill_date=None):
-    return BillingService().billing.next_bill_number(bill_date)
+def generate_bill_number(entity_name=None):
+    return BillingService().billing.next_bill_number(entity_name=entity_name)
 
 
 def contractor_billable_orders(contractor_id, site_ids=None, material_type=None, start_date=None, end_date=None):

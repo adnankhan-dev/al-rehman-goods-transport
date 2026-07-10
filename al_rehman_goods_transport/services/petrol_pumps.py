@@ -90,7 +90,7 @@ class PetrolPumpService:
         diesel_entries = self.billing.petrol_pump_activity_rows(petrol_pump.id)
         standalone_entries = (
             DieselEntry.query
-            .filter(DieselEntry.petrol_pump_id == petrol_pump.id)
+            .filter(DieselEntry.petrol_pump_id == petrol_pump.id, DieselEntry.approval_status == "approved")
             .order_by(DieselEntry.date.desc(), DieselEntry.id.desc())
             .all()
         )
@@ -116,7 +116,7 @@ class PetrolPumpService:
         order_diesel_all = self.billing.petrol_pump_activity_rows(pump.id)
         standalone_all = (
             DieselEntry.query
-            .filter(DieselEntry.petrol_pump_id == pump.id)
+            .filter(DieselEntry.petrol_pump_id == pump.id, DieselEntry.approval_status == "approved")
             .order_by(DieselEntry.date.desc(), DieselEntry.id.desc())
             .all()
         )

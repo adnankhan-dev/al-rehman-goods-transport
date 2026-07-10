@@ -1,0 +1,98 @@
+{% extends "base.html" %}
+{% from "_formhelpers.html" import form_shell, metric_tile, empty_state %}
+
+{% block title %}Diesel Approvals - Al Rehman Goods Transport{% endblock %}
+
+{% block content %}
+{% call form_shell("Diesel Approvals", "Review pending diesel entries and approve them to post to the pump and vehicle balances, or reject to discard.", "Diesel", url_for('diesel.index'), "Back to Fuel Log") %}
+<section class="content-stack">
+    <div class="collection-overview">
+        {{ metric_tile("Entries Awaiting Approval", pending_count, "Not yet posted to balances", "primary", "bi bi-hourglass-split") }}
+    </div>
+
+    {% if not entries %}
+        {{ empty_state("No diesel entries are waiting for approval.", "bi-check2-circle") }}
+    {% else %}
+    <form method="POST" action="{{ url_for('diesel.approve_entries') }}" id="dieselApprovalForm">
+        <input type="hidden" name="entry_ids" id="entry_ids" value="">
+        <div class="d-flex justify-content-end mb-3">
+            <button type="button" class="btn btn-ui-primary" onclick="approveAllDiesel()">
+                <i class="bi bi-check2-all"></i> Approve All ({{ pending_count }})
+            </button>
+        </div>
+        <div class="table-panel">
+            <div class="table-panel-header">
+                <h3 class="table-panel-title">Pending diesel entries</h3>
+                <span class="section-count">{{ entries|length }} entries</span>
+            </div>
+            <div class="table-responsive">
+                <table class="table detail-table">
+                    <thead>
+                        <tr>
+                            <th>Date</th>
+                            <th>Vehicle / Owner</th>
+                            <th>Petrol Pump</th>
+                            <th>Receipt</th>
+                            <th>Linked Order</th>
+                            <th class="text-end">Litres</th>
+                            <th class="text-end">Amount</th>
+                            <th class="text-end">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for entry in entries %}
+                        <tr class="diesel-approval-row" data-entry-id="{{ entry.id }}">
+                            <td>{{ entry.date.strftime('%d %b %Y') if entry.date else '-' }}</td>
+                            <td>
+                                <strong>{{ entry.vehicle.vehicle_number if entry.vehicle else '-' }}</strong>
+                                <div class="text-muted small">{{ entry.vehicle.owner_display_name if entry.vehicle else '-' }}</div>
+                            </td>
+                            <td>{{ entry.petrol_pump.name if entry.petrol_pump else '—' }}</td>
+                            <td>{{ entry.receipt_number or '-' }}</td>
+                            <td>{{ ('#' ~ entry.order_id) if entry.order_id else '—' }}</td>
+                            <td class="text-end">{{ ("%.2f"|format(entry.litres)) if entry.litres else '—' }}</td>
+                            <td class="text-end">Rs. {{ "%.2f"|format(entry.amount or 0) }}</td>
+                            <td class="text-end text-nowrap">
+                                <button type="button" class="btn btn-sm btn-ui-primary" onclick="approveDieselRow(this)">
+                                    <i class="bi bi-check-lg"></i> Approve
+                                </button>
+                                <button type="submit" class="btn btn-sm btn-ui-danger"
+                                        formaction="{{ url_for('diesel.reject_entry', id=entry.id) }}"
+                                        onclick="return confirm('Reject and remove this pending diesel entry?');">
+                                    <i class="bi bi-x-lg"></i>
+                                </button>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </form>
+    {% endif %}
+</section>
+{% endcall %}
+{% endblock %}
+
+{% block page_scripts %}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const form = document.getElementById('dieselApprovalForm');
+        if (!form) return;
+        const entryIdsInput = document.getElementById('entry_ids');
+        function submitApproval(ids) {
+            entryIdsInput.value = ids.join(',');
+            form.submit();
+        }
+        window.approveDieselRow = function(btn) {
+            const row = btn.closest('.diesel-approval-row');
+            submitApproval([row.dataset.entryId]);
+        };
+        window.approveAllDiesel = function() {
+            const rows = Array.from(document.querySelectorAll('.diesel-approval-row'));
+            if (!rows.length) return;
+            submitApproval(rows.map(r => r.dataset.entryId));
+        };
+    });
+</script>
+{% endblock %}

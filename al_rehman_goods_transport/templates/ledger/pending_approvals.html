@@ -1,0 +1,126 @@
+{% extends "base.html" %}
+{% from "_formhelpers.html" import form_shell, metric_tile, empty_state %}
+
+{% block title %}Ledger Approvals - Al Rehman Goods Transport{% endblock %}
+
+{% block content %}
+{% call form_shell("Ledger Approvals", "Review pending transactions and bills. Approving a transaction posts its balances; approving a bill makes it visible and settleable. Rejecting discards it.", "Finance", url_for('ledger.index'), "Back to Ledger") %}
+<section class="content-stack">
+    <div class="collection-overview">
+        {{ metric_tile("Pending Transactions", pending_transactions|length, "Not yet posted to balances", "primary", "bi bi-arrow-left-right") }}
+        {{ metric_tile("Pending Bills", pending_bills|length, "Not yet visible or settleable", "ocean", "bi bi-receipt") }}
+    </div>
+
+    {% if not pending_transactions and not pending_bills %}
+        {{ empty_state("Nothing is waiting for approval in the ledger.", "bi-check2-circle") }}
+    {% endif %}
+
+    {% if pending_transactions %}
+    <form method="POST" action="{{ url_for('transactions.approve_transactions') }}" id="txApprovalForm">
+        <input type="hidden" name="transaction_ids" id="transaction_ids" value="">
+        <div class="table-panel">
+            <div class="table-panel-header">
+                <h3 class="table-panel-title">Pending transactions</h3>
+                <div class="table-toolbar">
+                    <span class="section-count">{{ pending_transactions|length }}</span>
+                    <button type="button" class="btn btn-sm btn-ui-primary" onclick="approveAllTx()"><i class="bi bi-check2-all"></i> Approve All</button>
+                </div>
+            </div>
+            <div class="table-responsive">
+                <table class="table detail-table">
+                    <thead>
+                        <tr>
+                            <th>Date</th>
+                            <th>Type</th>
+                            <th>Entity</th>
+                            <th class="text-end">Amount</th>
+                            <th>Reference</th>
+                            <th class="text-end">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for tx in pending_transactions %}
+                        <tr class="tx-approval-row" data-tx-id="{{ tx.id }}">
+                            <td>{{ tx.date.strftime('%d %b %Y') if tx.date else '-' }}</td>
+                            <td>{{ tx.type|replace('_', ' ')|title }}</td>
+                            <td>{{ tx.entity_name }}</td>
+                            <td class="text-end">Rs. {{ "%.2f"|format(tx.amount or 0) }}</td>
+                            <td>{{ tx.reference or '-' }}</td>
+                            <td class="text-end text-nowrap">
+                                <button type="button" class="btn btn-sm btn-ui-primary" onclick="approveTxRow(this)"><i class="bi bi-check-lg"></i> Approve</button>
+                                <button type="submit" class="btn btn-sm btn-ui-danger"
+                                        formaction="{{ url_for('transactions.reject_transaction', id=tx.id) }}"
+                                        onclick="return confirm('Reject and remove this pending transaction?');"><i class="bi bi-x-lg"></i></button>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </form>
+    {% endif %}
+
+    {% if pending_bills %}
+    <div class="table-panel">
+        <div class="table-panel-header">
+            <h3 class="table-panel-title">Pending bills</h3>
+            <span class="section-count">{{ pending_bills|length }}</span>
+        </div>
+        <div class="table-responsive">
+            <table class="table detail-table">
+                <thead>
+                    <tr>
+                        <th>Bill #</th>
+                        <th>Entity</th>
+                        <th>Type</th>
+                        <th>Date</th>
+                        <th class="text-end">Amount</th>
+                        <th class="text-end">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for bill in pending_bills %}
+                    <tr>
+                        <td><a href="{{ url_for('bills.view_bill', id=bill.id) }}">{{ bill.bill_number }}</a></td>
+                        <td>{{ bill.entity_name }}</td>
+                        <td>{{ bill.entity_type|replace('_', ' ')|title }}</td>
+                        <td>{{ bill.bill_date.strftime('%d %b %Y') if bill.bill_date else '-' }}</td>
+                        <td class="text-end">Rs. {{ "%.2f"|format(bill.total_amount or 0) }}</td>
+                        <td class="text-end text-nowrap">
+                            <form method="POST" action="{{ url_for('bills.approve_bill', id=bill.id) }}" class="d-inline">
+                                <button type="submit" class="btn btn-sm btn-ui-primary"><i class="bi bi-check-lg"></i> Approve</button>
+                            </form>
+                            <form method="POST" action="{{ url_for('bills.reject_bill', id=bill.id) }}" class="d-inline"
+                                  onsubmit="return confirm('Reject bill {{ bill.bill_number }} and release its records?');">
+                                <button type="submit" class="btn btn-sm btn-ui-danger"><i class="bi bi-x-lg"></i></button>
+                            </form>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {% endif %}
+</section>
+{% endcall %}
+{% endblock %}
+
+{% block page_scripts %}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const form = document.getElementById('txApprovalForm');
+        if (!form) return;
+        const idsInput = document.getElementById('transaction_ids');
+        function submitApproval(ids) { idsInput.value = ids.join(','); form.submit(); }
+        window.approveTxRow = function(btn) {
+            submitApproval([btn.closest('.tx-approval-row').dataset.txId]);
+        };
+        window.approveAllTx = function() {
+            const rows = Array.from(document.querySelectorAll('.tx-approval-row'));
+            if (rows.length) submitApproval(rows.map(r => r.dataset.txId));
+        };
+    });
+</script>
+{% endblock %}

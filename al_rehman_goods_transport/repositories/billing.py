@@ -23,7 +23,23 @@ class BillingRepository:
         self.session = session or db.session
 
     def list_bills(self):
-        return self.session.query(Bill).order_by(Bill.bill_date.desc(), Bill.id.desc()).all()
+        return (
+            self.session.query(Bill)
+            .filter(Bill.approval_status == "approved")
+            .order_by(Bill.bill_date.desc(), Bill.id.desc())
+            .all()
+        )
+
+    def list_pending_bills(self):
+        return (
+            self.session.query(Bill)
+            .filter(Bill.approval_status == "pending")
+            .order_by(Bill.bill_date.desc(), Bill.id.desc())
+            .all()
+        )
+
+    def pending_bill_count(self):
+        return self.session.query(func.count(Bill.id)).filter(Bill.approval_status == "pending").scalar() or 0
 
     def get_bill(self, bill_id):
         return self.session.get(Bill, bill_id)
@@ -33,11 +49,25 @@ class BillingRepository:
         self.session.flush()
         return bill
 
-    def next_bill_number(self, bill_date=None):
-        bill_date = bill_date or datetime.now(UTC).replace(tzinfo=None)
-        prefix = f"BL-{bill_date.strftime('%Y%m%d')}-"
-        count = self.session.query(Bill).filter(Bill.bill_number.like(f"{prefix}%")).count()
-        return f"{prefix}{count + 1:03d}"
+    def next_bill_number(self, entity_name=None):
+        """Per-entity sequential bill number: BILL-<FIRSTWORD>-001, where
+        FIRSTWORD is the uppercased first word of the account name (e.g. 'MKA' →
+        BILL-MKA-001, 'Ahsan Malla Khel' → BILL-AHSAN-001). Robust against
+        deleted bills — the sequence continues from the current max for the
+        prefix so numbers never collide with the unique constraint."""
+        import re
+
+        name = (entity_name or "").strip()
+        first_word = name.split()[0] if name else "GEN"
+        slug = re.sub(r"[^A-Za-z0-9]", "", first_word).upper() or "GEN"
+        prefix = f"BILL-{slug}-"
+        existing = self.session.query(Bill.bill_number).filter(Bill.bill_number.like(f"{prefix}%")).all()
+        max_seq = 0
+        for (number,) in existing:
+            tail = (number or "")[len(prefix):]
+            if tail.isdigit():
+                max_seq = max(max_seq, int(tail))
+        return f"{prefix}{max_seq + 1:03d}"
 
     def get_contractor(self, contractor_id):
         return self.session.get(Contractor, contractor_id)
@@ -104,6 +134,7 @@ class BillingRepository:
             .filter(
                 DieselEntry.petrol_pump_id == petrol_pump_id,
                 DieselEntry.bill_id.is_(None),
+                DieselEntry.approval_status == "approved",
             )
             .order_by(DieselEntry.date.desc(), DieselEntry.id.desc())
         )
@@ -151,7 +182,10 @@ class BillingRepository:
     def standalone_diesel_rows(self, petrol_pump_id, start_date=None, end_date=None):
         query = (
             self.session.query(DieselEntry)
-            .filter(DieselEntry.petrol_pump_id == petrol_pump_id)
+            .filter(
+                DieselEntry.petrol_pump_id == petrol_pump_id,
+                DieselEntry.approval_status == "approved",
+            )
             .order_by(DieselEntry.date.desc(), DieselEntry.id.desc())
         )
         if start_date is not None:
@@ -202,7 +236,7 @@ class BillingRepository:
         query = (
             self.session.query(OrderLoading)
             .join(Order, Order.id == OrderLoading.order_id)
-            .filter(OrderLoading.plant_id == plant_id)
+            .filter(OrderLoading.plant_id == plant_id, Order.approval_status == "approved")
             .order_by(Order.completion_date.desc(), Order.order_date.desc(), OrderLoading.id.desc())
         )
         if start_date is not None:
@@ -237,6 +271,7 @@ class BillingRepository:
             .filter(
                 Vehicle.owner_id == vehicle_owner_id,
                 DieselEntry.vehicle_owner_bill_id.is_(None),
+                DieselEntry.approval_status == "approved",
             )
             .order_by(DieselEntry.date.desc(), DieselEntry.id.desc())
         )

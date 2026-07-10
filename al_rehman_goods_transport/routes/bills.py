@@ -110,7 +110,7 @@ async def create_bill(request: Request, current_user=Depends(require_permission(
                 notes=filter_state["notes"] or None,
             )
             record_audit(current_user, "create", "bill", bill.id, f"Bill {bill.bill_number} for {bill.entity_name} — Rs. {bill.total_amount:,.2f}")
-            flash(request, f"Bill {bill.bill_number} created for {bill.entity_name}.", "success")
+            flash(request, f"Bill {bill.bill_number} created for {bill.entity_name} and submitted for approval.", "success")
             return RedirectResponse(url=str(request.url_for("bills.view_bill", id=bill.id)), status_code=303)
         except (NotFoundError, ValidationError) as exc:
             flash(request, str(exc), "warning")
@@ -192,6 +192,34 @@ async def delete_bill(id: int, request: Request, current_user=Depends(require_pe
     record_audit(current_user, "delete", "bill", id, f"Bill {bill_number} deleted; linked records released for re-billing.")
     flash(request, f"Bill {bill_number} deleted. Its trips and entries are available to bill again.", "success")
     return RedirectResponse(url=str(request.url_for("ledger.index")), status_code=303)
+
+
+@router.post("/bills/{id}/approve", name="bills.approve_bill")
+async def approve_bill(id: int, request: Request, current_user=Depends(require_permission("ledger.approve"))):
+    service = BillingService()
+    try:
+        bill = service.approve_bill(id, approver_id=getattr(current_user, "id", None))
+        record_audit(current_user, "approve", "bill", bill.id, f"Bill {bill.bill_number} approved")
+        flash(request, f"Bill {bill.bill_number} approved.", "success")
+    except NotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValidationError as exc:
+        flash(request, str(exc), "warning")
+    return RedirectResponse(url=str(request.url_for("ledger.pending_approvals")), status_code=303)
+
+
+@router.post("/bills/{id}/reject", name="bills.reject_bill")
+async def reject_bill(id: int, request: Request, current_user=Depends(require_permission("ledger.approve"))):
+    service = BillingService()
+    try:
+        service.reject_bill(id)
+        record_audit(current_user, "reject", "bill", id, f"Bill #{id} rejected; linked records released.")
+        flash(request, "Pending bill rejected and its records released.", "success")
+    except NotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValidationError as exc:
+        flash(request, str(exc), "warning")
+    return RedirectResponse(url=str(request.url_for("ledger.pending_approvals")), status_code=303)
 
 
 @router.post("/bills/{id}/settle", name="bills.settle_bill")

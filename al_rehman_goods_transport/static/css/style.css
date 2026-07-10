@@ -251,6 +251,28 @@ body.auth-page {
     width: 1.3rem;
 }
 
+/* Pending-count superscript that sits on the corner of a nav icon. */
+.nav-icon-count {
+    position: relative;
+    overflow: visible;
+}
+.nav-count-sup {
+    position: absolute;
+    top: -0.45rem;
+    right: -0.55rem;
+    min-width: 1rem;
+    padding: 0 0.28rem;
+    height: 1rem;
+    line-height: 1rem;
+    font-size: 0.62rem;
+    font-weight: 700;
+    text-align: center;
+    color: #7c2d12;
+    background: #f59e0b;
+    border-radius: 999px;
+    box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.9);
+}
+
 /* One distinct icon colour per sidebar section. */
 .icon-overview { color: #3b82f6; }   /* Overview  — blue */
 .icon-dispatch { color: #22c55e; }   /* Dispatch  — green */
@@ -2493,6 +2515,35 @@ a.status-badge-completed:hover {
 
 .detail-table tbody > tr:hover > td:first-child {
     border-left-color: var(--primary);
+}
+
+/* Compact Pending Approvals table — small fonts and tight padding so every
+   column (details + both rate inputs + actions) fits in one view without any
+   horizontal scrolling. */
+.approval-table thead > tr > th {
+    font-size: 0.62rem;
+    padding: 0.4rem 0.45rem !important;
+}
+.approval-table tbody > tr > td {
+    font-size: 0.72rem;
+    padding: 0.45rem 0.45rem !important;
+}
+.approval-table tbody > tr > td .small,
+.approval-table tbody > tr > td .text-muted.small {
+    font-size: 0.64rem;
+}
+.approval-table .form-control-sm {
+    font-size: 0.72rem;
+    padding: 0.18rem 0.35rem;
+    max-width: 82px;
+    min-height: auto;
+}
+.approval-table .btn-sm {
+    padding: 0.2rem 0.4rem;
+    font-size: 0.66rem;
+}
+.approval-table .btn-sm i {
+    font-size: 0.72rem;
 }
 
 .orders-register-table .table-main strong,

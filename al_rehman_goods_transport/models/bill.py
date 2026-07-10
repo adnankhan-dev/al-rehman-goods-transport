@@ -26,6 +26,13 @@ class Bill(db.Model):
     settled_amount = db.Column(db.Float, default=0.0, nullable=False)
     created_at = db.Column(db.DateTime, default=utc_now, nullable=False)
 
+    # Approval workflow: a new bill is 'pending' — its linked trips/entries are
+    # reserved but it is hidden from the ledger and cannot be settled until an
+    # approver clears it. Default 'approved' so existing bills are unaffected.
+    approval_status = db.Column(db.String(20), default="approved", server_default="approved", nullable=False)
+    approved_by_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=True)
+    approved_at = db.Column(db.DateTime, nullable=True)
+
     contractor = db.relationship("Contractor", backref=db.backref("bills", lazy=True))
     plant = db.relationship("Plant", backref=db.backref("bills", lazy=True))
     petrol_pump = db.relationship("PetrolPump", backref=db.backref("bills", lazy=True))
@@ -43,6 +50,10 @@ class Bill(db.Model):
         if self.entity_type == "vehicle_owner" and self.vehicle_owner:
             return self.vehicle_owner.name
         return "Unassigned"
+
+    @property
+    def is_pending_approval(self):
+        return self.approval_status == "pending"
 
     @property
     def outstanding_amount(self):

@@ -1,3 +1,4 @@
+from datetime import UTC, datetime
 from datetime import date as date_type
 from datetime import timedelta
 
@@ -11,6 +12,10 @@ from .exceptions import NotFoundError, ValidationError
 
 def _safe(value):
     return float(value or 0.0)
+
+
+def utc_now():
+    return datetime.now(UTC).replace(tzinfo=None)
 
 
 def receipt_sort_key(receipt_number):
@@ -28,8 +33,12 @@ class DieselService:
     def __init__(self, session=None):
         self.session = session or db.session
 
-    def list_entries(self, vehicle_id=None, pump_id=None, owner_id=None, date_from=None, date_to=None, search=None):
+    def list_entries(self, vehicle_id=None, pump_id=None, owner_id=None, date_from=None, date_to=None, search=None, approval_status="approved"):
         q = DieselEntry.query
+        # Only approved entries appear in the fuel log; pending ones live on the
+        # Pending Approvals page until an approver clears them.
+        if approval_status is not None:
+            q = q.filter(DieselEntry.approval_status == approval_status)
         if vehicle_id:
             q = q.filter(DieselEntry.vehicle_id == vehicle_id)
         if pump_id:
@@ -116,19 +125,62 @@ class DieselService:
             notes=(data.get("notes") or "").strip() or None,
             balance_applied=False,
             vehicle_balance_applied=False,
+            # Held for approval: applies no pump/vehicle balance and is hidden from
+            # the fuel log and statements until approved.
+            approval_status="pending",
         )
         try:
             self.session.add(entry)
-            if entry.petrol_pump_id:
-                self._adjust_pump_balance(entry.petrol_pump_id, +_safe(entry.amount))
-                entry.balance_applied = True
-            self._adjust_vehicle_balance(entry.vehicle_id, -_safe(entry.amount))
-            entry.vehicle_balance_applied = True
             self.session.commit()
         except Exception:
             self.session.rollback()
             raise
         return entry
+
+    def pending_count(self):
+        return self.session.query(func.count(DieselEntry.id)).filter(DieselEntry.approval_status == "pending").scalar() or 0
+
+    def list_pending(self):
+        entries = (
+            DieselEntry.query.filter(DieselEntry.approval_status == "pending").all()
+        )
+        entries.sort(key=lambda e: (e.date or date_type.today(), receipt_sort_key(e.receipt_number)))
+        return entries
+
+    def approve_entry(self, entry_id, approver_id=None):
+        """Approve a pending diesel entry: apply the pump and vehicle balances
+        (the same posting create_entry used to do immediately)."""
+        entry = self.get_entry(entry_id)
+        if entry.approval_status == "approved":
+            return entry
+        try:
+            if entry.petrol_pump_id and not entry.balance_applied:
+                self._adjust_pump_balance(entry.petrol_pump_id, +_safe(entry.amount))
+                entry.balance_applied = True
+            if not entry.vehicle_balance_applied:
+                self._adjust_vehicle_balance(entry.vehicle_id, -_safe(entry.amount))
+                entry.vehicle_balance_applied = True
+            entry.approval_status = "approved"
+            entry.approved_by_id = approver_id
+            entry.approved_at = utc_now()
+            self.session.commit()
+        except Exception:
+            self.session.rollback()
+            raise
+        return entry
+
+    def reject_entry(self, entry_id):
+        """Discard a pending diesel entry. Safe to delete because a pending entry
+        has applied no balances."""
+        entry = self.get_entry(entry_id)
+        if entry.approval_status == "approved":
+            raise ValidationError("This entry is already approved and cannot be rejected. Delete it instead.")
+        try:
+            self.session.delete(entry)
+            self.session.commit()
+        except Exception:
+            self.session.rollback()
+            raise
 
     def update_entry(self, entry_id, data):
         entry = self.get_entry(entry_id)
@@ -147,6 +199,15 @@ class DieselService:
         entry.amount = data["amount"]
         entry.receipt_number = (data.get("receipt_number") or "").strip() or None
         entry.notes = (data.get("notes") or "").strip() or None
+
+        # A pending entry has applied no balances — editing it must not post any.
+        if entry.approval_status == "pending":
+            try:
+                self.session.commit()
+            except Exception:
+                self.session.rollback()
+                raise
+            return entry
 
         try:
             # reverse old pump effect, apply new
@@ -192,7 +253,7 @@ class DieselService:
         if vehicle_id:
             orders = (
                 Order.query
-                .filter(Order.vehicle_id == vehicle_id)
+                .filter(Order.vehicle_id == vehicle_id, Order.approval_status == "approved")
                 .order_by(Order.order_date.desc())
                 .limit(100)
                 .all()

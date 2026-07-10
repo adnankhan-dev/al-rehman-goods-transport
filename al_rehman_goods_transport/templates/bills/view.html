@@ -41,11 +41,23 @@
     {% else %}
     {% set entity_href = None %}
     {% endif %}
+    {% if bill.approval_status == 'pending' %}
+    <div class="alert alert-warning d-flex justify-content-between align-items-center flex-wrap gap-2">
+        <span><i class="bi bi-hourglass-split"></i> This bill is <strong>awaiting approval</strong>. It is hidden from the ledger and cannot be settled until approved.</span>
+        {% if current_user.can('ledger.approve') %}
+        <span class="d-flex gap-2">
+            <form method="POST" action="{{ url_for('bills.approve_bill', id=bill.id) }}" class="d-inline">
+                <button type="submit" class="btn btn-sm btn-ui-primary"><i class="bi bi-check-lg"></i> Approve</button>
+            </form>
+            <form method="POST" action="{{ url_for('bills.reject_bill', id=bill.id) }}" class="d-inline" onsubmit="return confirm('Reject and release this bill?');">
+                <button type="submit" class="btn btn-sm btn-ui-danger"><i class="bi bi-x-lg"></i> Reject</button>
+            </form>
+        </span>
+        {% endif %}
+    </div>
+    {% endif %}
     <div class="collection-overview">
-        {{ metric_tile("Entity", bill.entity_name, bill.entity_type|replace('_', ' ')|title, "midnight", "bi bi-building-fill", entity_href) }}
-        {{ metric_tile("Records Included", linked_trip_count, "Entries covered by this bill", "ocean", "bi bi-list-check") }}
-        {{ metric_tile("Bill Amount", "Rs. " ~ ("%.2f"|format(bill.total_amount)), "Total value captured on this document", "accent", "bi bi-receipt") }}
-        {{ metric_tile("Outstanding", "Rs. " ~ ("%.2f"|format(bill.outstanding_amount)), "Remaining to settle — use form below", "primary", "bi bi-hourglass-split") }}
+        {{ metric_tile("Net Payable", "Rs. " ~ ("%.2f"|format(financial_summary.net_payable)), "Previous balance + this bill − payments in period", "primary", "bi bi-cash-stack", entity_href) }}
     </div>
 
     <div class="detail-grid">
@@ -443,6 +455,41 @@
     {% endif %}
 
     <div class="detail-panel">
+        <h3><i class="bi bi-calculator"></i> Financial Summary</h3>
+        <div class="table-responsive">
+            <table class="table detail-table">
+                <tbody>
+                    <tr>
+                        <td>Previous Balance (carried forward)</td>
+                        <td class="text-end">Rs. {{ "%.2f"|format(financial_summary.previous_balance) }}</td>
+                    </tr>
+                    <tr>
+                        <td>Add: This Bill ({{ bill.bill_number }})</td>
+                        <td class="text-end">+ Rs. {{ "%.2f"|format(financial_summary.bill_amount) }}</td>
+                    </tr>
+                    {% for txn in financial_summary.period_transactions %}
+                    <tr class="text-muted">
+                        <td style="padding-left:1.5rem;">
+                            {{ txn.date.strftime('%d %b %Y') if txn.date else '-' }} —
+                            {{ txn.type|replace('_', ' ')|title }}{% if txn.reference %} ({{ txn.reference }}){% endif %}
+                        </td>
+                        <td class="text-end">− Rs. {{ "%.2f"|format(txn.amount or 0) }}</td>
+                    </tr>
+                    {% endfor %}
+                    <tr>
+                        <td>Less: Payments / Receipts in bill period</td>
+                        <td class="text-end">− Rs. {{ "%.2f"|format(financial_summary.payments_total) }}</td>
+                    </tr>
+                    <tr class="bill-grand-total-row">
+                        <td><strong>Net Payable</strong></td>
+                        <td class="text-end"><strong>Rs. {{ "%.2f"|format(financial_summary.net_payable) }}</strong></td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="detail-panel">
         <h3><i class="bi bi-arrow-left-right"></i> Related Transactions</h3>
         <div class="table-responsive">
             <table class="table table-striped detail-table">
@@ -470,7 +517,7 @@
         </div>
     </div>
 
-    {% if bill.outstanding_amount > 0 %}
+    {% if bill.outstanding_amount > 0 and bill.approval_status == 'approved' %}
     <div class="detail-panel">
         <h3><i class="bi bi-cash-coin"></i> Settle Bill</h3>
         <form method="POST" action="{{ url_for('bills.settle_bill', id=bill.id) }}" class="filter-grid">

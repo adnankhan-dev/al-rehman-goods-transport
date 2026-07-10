@@ -227,10 +227,10 @@
 <section class="report-print-letterhead">
     <div class="report-print-letterhead-brand">
         <div class="report-print-kicker">ERP Report Statement</div>
-        <h1>Al Rehman Goods Transport</h1>
-        <p>Bahtr Mor Wah Cantt</p>
-        <p>Contact No. Ahsan Niazi 0307-2342827</p>
-        <p>Inam Khan - 0301-5749086</p>
+        <h1>{{ letterhead.name if letterhead else 'Al Rehman Goods Transport' }}</h1>
+        <p>{{ letterhead.address if letterhead else 'Bahtr Mor Wah Cantt' }}</p>
+        <p>{{ letterhead.contact1 if letterhead else 'Contact No. Ahsan Niazi 0307-2342827' }}</p>
+        <p>{{ letterhead.contact2 if letterhead else 'Inam Khan - 0301-5749086' }}</p>
     </div>
     <div class="report-print-letterhead-meta">
         <div><span>Report</span><strong>{{ report_title }}</strong></div>

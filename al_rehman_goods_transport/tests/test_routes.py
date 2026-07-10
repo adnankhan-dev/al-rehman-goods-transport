@@ -104,7 +104,7 @@ class RouteTests(unittest.TestCase):
 
         db.session.refresh(order)
         self.assertEqual(response.status_code, 200)
-        self.assertIn("Bill BL-", response.text)
+        self.assertIn("Bill BILL-ABC-001", response.text)
         self.assertTrue(order.is_billed)
 
         contractor_page = self.client.get(f"/contractors/{contractor.id}")
@@ -145,11 +145,12 @@ class RouteTests(unittest.TestCase):
         )
 
         self.assertEqual(response.status_code, 200)
-        self.assertIn("Transaction Details", response.text)
+        # New transactions are created pending and post nothing until approved.
         self.assertEqual(db.session.query(Transaction).count(), 1)
         transaction = db.session.query(Transaction).first()
         self.assertEqual(transaction.type, "other_expense")
         self.assertEqual(transaction.reference, "EXP-001")
+        self.assertEqual(transaction.approval_status, "pending")
 
     def test_bill_print_and_excel_export_routes_work(self):
         contractor = Contractor(name="ABC Contractors", contact_person="John Doe")
@@ -271,6 +272,57 @@ class RouteTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn("Al Rehman Goods Transport", response.text)
         self.assertIn("Yard Alpha", response.text)
+
+    def test_pending_approvals_page_and_approve_flow(self):
+        contractor = Contractor(name="ABC Contractors")
+        material = Material(name="Sand")
+        vehicle = Vehicle(vehicle_number="ABC-001")
+        db.session.add_all([contractor, material, vehicle])
+        db.session.flush()
+        site = Site(name="Site One", contractor_id=contractor.id)
+        db.session.add(site)
+        db.session.flush()
+
+        # A pending order (created directly to mimic the add-order flow output).
+        order = Order(
+            vehicle_id=vehicle.id,
+            contractor_id=contractor.id,
+            site_id=site.id,
+            driver_name="Driver One",
+            material_id=material.id,
+            material_type="Sand",
+            quantity=100,
+            delivered_quantity=100,
+            receipt_number="RCPT-APPROVE",
+            status="Pending Approval",
+            approval_status="pending",
+        )
+        db.session.add(order)
+        db.session.commit()
+        order_id = order.id
+
+        self._login()
+        # The pending order must NOT appear in the register…
+        register = self.client.get("/orders", follow_redirects=True)
+        self.assertNotIn("RCPT-APPROVE", register.text)
+        # …but it must appear on the Pending Approvals page.
+        pending = self.client.get("/orders/pending", follow_redirects=True)
+        self.assertEqual(pending.status_code, 200)
+        self.assertIn("ABC Contractors", pending.text)
+
+        # Approve it with rates → it posts and becomes visible in the register.
+        approve = self.client.post(
+            "/orders/approve",
+            data={"order_ids": str(order_id), f"contractor_rate_{order_id}": "16", f"vehicle_rate_{order_id}": "10"},
+            follow_redirects=True,
+        )
+        self.assertEqual(approve.status_code, 200)
+        db.session.expire_all()
+        approved = db.session.get(Order, order_id)
+        self.assertEqual(approved.approval_status, "approved")
+        self.assertEqual(approved.status, "Completed")
+        self.assertEqual(approved.contractor_rate, 16)
+        self.assertGreater(db.session.get(Contractor, contractor.id).balance, 0)
 
     def test_reports_workspace_supports_diesel_mode(self):
         contractor = Contractor(name="ABC Contractors", contact_person="John Doe")

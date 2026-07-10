@@ -15,7 +15,7 @@ if str(PACKAGE_PARENT) not in sys.path:
 from al_rehman_goods_transport import db
 from al_rehman_goods_transport.core.database import Base, engine  # engine rebound to the test DB in tests/__init__.py
 from al_rehman_goods_transport.models import AppSetting, Bill, Company, Contractor, DieselEntry, Material, Order, OrderDieselEntry, PetrolPump, Plant, Site, Transaction, Vehicle, VehicleOwner
-from al_rehman_goods_transport.services import BillingService, OrderService, ReportService, SettingsService, TransactionInput, TransactionService, ValidationError
+from al_rehman_goods_transport.services import BillingService, DieselService, OrderService, ReportService, SettingsService, TransactionInput, TransactionService, ValidationError
 from al_rehman_goods_transport.services.order_finance import (
     apply_completed_order_balances,
     apply_order_creation_balances,
@@ -154,11 +154,20 @@ class OrderFinanceServiceTests(unittest.TestCase):
             {"loading_image": None, "delivery_receipt_image": None},
         )
         order = service.create_order(order_input)
+        # New orders are held for approval and post no financials until approved.
+        self.assertEqual(order.approval_status, "pending")
+        self.assertIsNone(order.contractor_rate)
+        self.assertEqual(db.session.get(VehicleOwner, self.owner_id).balance, 0)
+
+        # Approving with the confirmed rates posts the financials.
+        service.approve_order(order.id, contractor_rate=15, vehicle_rate=10)
 
         company = Company.query.first()
         owner = db.session.get(VehicleOwner, self.owner_id)
         advance_tx_count = db.session.query(Transaction).filter(Transaction.type == "vehicle_advance").count()
 
+        self.assertEqual(order.approval_status, "approved")
+        self.assertEqual(order.status, "Completed")
         self.assertEqual(order.remarks, "Night dispatch")
         self.assertEqual(order.from_site_id, self.from_site_id)
         self.assertEqual(order.order_date.date().isoformat(), "2026-04-11")
@@ -167,7 +176,7 @@ class OrderFinanceServiceTests(unittest.TestCase):
         self.assertEqual(order.advance_amount, 0)
         self.assertEqual(advance_tx_count, 0)
         self.assertEqual(company.balance, 0)
-        # The owner is still credited for the vehicle amount of the trip.
+        # The owner is credited for the vehicle amount of the trip after approval.
         self.assertGreater(owner.balance, 0)
 
     def test_order_service_allows_order_without_plant_and_keeps_loading_detail(self):
@@ -324,6 +333,7 @@ class OrderFinanceServiceTests(unittest.TestCase):
 
         billing_service = BillingService()
         bill, _ = billing_service.create_bill("petrol_pump", self.pump_id, entry_ids=[entry.id])
+        billing_service.approve_bill(bill.id)
         billing_service.settle_bill(bill.id, 200, payment_method="cash")
 
         with self.assertRaises(ValidationError):
@@ -346,6 +356,7 @@ class OrderFinanceServiceTests(unittest.TestCase):
 
         billing_service = BillingService()
         bill, _ = billing_service.create_bill("petrol_pump", self.pump_id, entry_ids=[entry.id], notes="Fuel settlement")
+        billing_service.approve_bill(bill.id)
         billing_service.settle_bill(bill.id, 200, payment_method="cash", reference="PAY-1")
 
         db.session.refresh(bill)
@@ -674,6 +685,7 @@ class OrderFinanceServiceTests(unittest.TestCase):
     def test_billed_order_cannot_be_edited_or_deleted(self):
         service = OrderService()
         order = service.create_order(self._order_input())
+        service.approve_order(order.id, contractor_rate=15, vehicle_rate=10)
         bill, _ = create_contractor_bill(self.contractor_id, [order.id])
         db.session.commit()
 
@@ -689,10 +701,12 @@ class OrderFinanceServiceTests(unittest.TestCase):
     def test_settlement_transaction_delete_rolls_back_bill(self):
         service = OrderService()
         order = service.create_order(self._order_input())
+        service.approve_order(order.id, contractor_rate=15, vehicle_rate=10)
         bill, _ = create_contractor_bill(self.contractor_id, [order.id])
         db.session.commit()
 
         billing_service = BillingService()
+        billing_service.approve_bill(bill.id)
         billing_service.settle_bill(bill.id, 600, payment_method="cash", reference="PAY-9")
         db.session.refresh(bill)
         self.assertEqual(bill.settled_amount, 600)
@@ -739,7 +753,8 @@ class OrderFinanceServiceTests(unittest.TestCase):
 
     def test_reconciliation_detects_and_repairs_drift(self):
         service = OrderService()
-        service.create_order(self._order_input(advance_amount=200))
+        order = service.create_order(self._order_input(advance_amount=200))
+        service.approve_order(order.id, contractor_rate=15, vehicle_rate=10)
 
         contractor = db.session.get(Contractor, self.contractor_id)
         self.assertEqual(contractor.balance, 1500)
@@ -764,6 +779,130 @@ class OrderFinanceServiceTests(unittest.TestCase):
 
         with self.assertRaises(ValidationError):
             reconciliation.repair("contractor", self.contractor_id)
+
+    def test_pending_order_is_hidden_until_approved_then_posts(self):
+        service = OrderService()
+        order = service.create_order(self._order_input())
+
+        # Pending: no rates, no financials, hidden from register / summary / P&L.
+        self.assertEqual(order.approval_status, "pending")
+        self.assertEqual(len(service.list_orders_filtered({})), 0)
+        self.assertEqual(service.orders_summary({})["total_trips"], 0)
+        self.assertEqual(service.orders_pnl({})["revenue"], 0)
+        self.assertEqual(service.pending_count(), 1)
+        self.assertEqual(db.session.get(Contractor, self.contractor_id).balance, 0)
+
+        groups = service.list_pending_approvals()
+        self.assertEqual(len(groups), 1)
+        self.assertEqual(len(groups[0]["rows"]), 1)
+
+        # Approving posts the financials and makes it visible.
+        service.approve_order(order.id, contractor_rate=15, vehicle_rate=10)
+        self.assertEqual(len(service.list_orders_filtered({})), 1)
+        self.assertEqual(service.orders_pnl({})["revenue"], 1500)
+        self.assertEqual(service.pending_count(), 0)
+        self.assertEqual(db.session.get(Contractor, self.contractor_id).balance, 1500)
+
+    def test_reject_pending_order_removes_it(self):
+        service = OrderService()
+        order = service.create_order(self._order_input())
+        order_id = order.id
+        service.reject_order(order_id)
+        self.assertIsNone(db.session.get(Order, order_id))
+        self.assertEqual(service.pending_count(), 0)
+
+    def test_diesel_entry_pending_until_approved(self):
+        diesel = DieselService()
+        pump = db.session.get(PetrolPump, self.pump_id)
+        pump_start = float(pump.balance or 0)
+
+        entry = diesel.create_entry({
+            "vehicle_id": self.vehicle_one_id,
+            "petrol_pump_id": self.pump_id,
+            "date": date(2026, 4, 11),
+            "amount": 500,
+        })
+
+        # Pending: no balances applied, hidden from the fuel log.
+        self.assertEqual(entry.approval_status, "pending")
+        self.assertFalse(entry.balance_applied)
+        db.session.refresh(pump)
+        self.assertEqual(float(pump.balance or 0), pump_start)
+        self.assertEqual(len(diesel.list_entries()), 0)
+        self.assertEqual(diesel.pending_count(), 1)
+
+        # Approving applies the pump and vehicle balances.
+        diesel.approve_entry(entry.id)
+        db.session.refresh(pump)
+        self.assertEqual(float(pump.balance or 0), pump_start + 500)
+        self.assertTrue(entry.balance_applied)
+        self.assertTrue(entry.vehicle_balance_applied)
+        self.assertEqual(len(diesel.list_entries()), 1)
+        self.assertEqual(diesel.pending_count(), 0)
+
+    def test_generic_transaction_directions_move_balances_both_ways(self):
+        service = TransactionService()
+        company = Company.query.first()
+
+        # Payment to a contractor (inverse of receipt): money out, receivable up.
+        service.create_transaction(TransactionInput(
+            type="contractor_payment", amount=100, entity_type="contractor",
+            entity_id=self.contractor_id, contractor_id=self.contractor_id,
+        ))
+        self.assertEqual(db.session.get(Contractor, self.contractor_id).balance, 100)
+        self.assertEqual(Company.query.first().balance, -100)
+
+        # Receipt from a plant (inverse of payment): money in, plant payable up.
+        service.create_transaction(TransactionInput(
+            type="plant_receipt", amount=50, entity_type="plant",
+            entity_id=self.plant_id, plant_id=self.plant_id,
+        ))
+        self.assertEqual(db.session.get(Plant, self.plant_id).balance, 50)
+
+        # Receipt from a petrol pump: money in, pump payable up.
+        service.create_transaction(TransactionInput(
+            type="petrol_pump_receipt", amount=30, entity_type="petrol_pump",
+            entity_id=self.pump_id, petrol_pump_id=self.pump_id,
+        ))
+        self.assertEqual(db.session.get(PetrolPump, self.pump_id).balance, 30)
+        # Company: -100 (paid contractor) + 50 (plant) + 30 (pump) = -20.
+        self.assertEqual(Company.query.first().balance, -20)
+
+    def test_manual_transaction_pending_until_approved(self):
+        service = TransactionService()
+        start = float(db.session.get(Contractor, self.contractor_id).balance or 0)
+
+        tx = service.create_transaction(TransactionInput(
+            type="contractor_receipt", amount=300, entity_type="contractor",
+            entity_id=self.contractor_id, contractor_id=self.contractor_id,
+        ), approval_status="pending")
+
+        # Pending: no balance effect, hidden from the ledger list.
+        self.assertEqual(tx.approval_status, "pending")
+        self.assertEqual(float(db.session.get(Contractor, self.contractor_id).balance or 0), start)
+        self.assertEqual(len(service.list_transactions()), 0)
+        self.assertEqual(service.pending_count(), 1)
+
+        # Approving posts the effect and reveals it.
+        service.approve_transaction(tx.id)
+        self.assertEqual(float(db.session.get(Contractor, self.contractor_id).balance or 0), start - 300)
+        self.assertEqual(len(service.list_transactions()), 1)
+        self.assertEqual(service.pending_count(), 0)
+
+    def test_editing_approved_order_sends_it_back_to_pending(self):
+        service = OrderService()
+        order = service.create_order(self._order_input())
+        service.approve_order(order.id, contractor_rate=15, vehicle_rate=10)
+        contractor_after_approve = db.session.get(Contractor, self.contractor_id).balance
+        self.assertEqual(contractor_after_approve, 1500)
+
+        # Editing a live order reverses its financials and holds it for re-approval.
+        service.update_order(order.id, self._order_input(delivered_quantity=50))
+        db.session.refresh(order)
+        self.assertEqual(order.approval_status, "pending")
+        self.assertEqual(order.status, "Pending Approval")
+        self.assertEqual(db.session.get(Contractor, self.contractor_id).balance, 0)
+        self.assertEqual(len(service.list_orders_filtered({})), 0)
 
     def test_financial_entity_transactions_move_company_balance(self):
         fe_service = FinancialEntityService()

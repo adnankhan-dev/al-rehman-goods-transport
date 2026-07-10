@@ -13,9 +13,37 @@ from .exceptions import ValidationError
 class SettingsService:
     DIESEL_RATE_KEY = "diesel_rate"
 
+    # Editable letterhead shown on every printed document. Keys map to
+    # (settings key, default) — defaults preserve the original hardcoded text.
+    LETTERHEAD_FIELDS = {
+        "name": ("letterhead_name", "Al Rehman Goods Transport"),
+        "address": ("letterhead_address", "Bahtr Mor Wah Cantt"),
+        "contact1": ("letterhead_contact1", "Contact No. Ahsan Niazi 0307-2342827"),
+        "contact2": ("letterhead_contact2", "Inam Khan - 0301-5749086"),
+    }
+
     def __init__(self, session=None):
         self.session = session or db.session
         self.settings = SettingsRepository(self.session)
+
+    def get_letterhead(self):
+        result = {}
+        for field, (key, default) in self.LETTERHEAD_FIELDS.items():
+            setting = self.settings.get_by_key(key)
+            value = setting.value if setting and setting.value not in (None, "") else default
+            result[field] = value
+        return result
+
+    def update_letterhead(self, name=None, address=None, contact1=None, contact2=None):
+        values = {"name": name, "address": address, "contact1": contact1, "contact2": contact2}
+        try:
+            for field, (key, _default) in self.LETTERHEAD_FIELDS.items():
+                self.settings.set_value(key, (values.get(field) or "").strip())
+            self.session.commit()
+        except Exception:
+            self.session.rollback()
+            raise
+        return self.get_letterhead()
 
     def get_diesel_rate(self):
         setting = self.settings.get_by_key(self.DIESEL_RATE_KEY)
@@ -58,6 +86,8 @@ class SettingsService:
         from datetime import date
         from html import escape
         from io import StringIO
+
+        letterhead = self.get_letterhead()
 
         # (label, width). From/To kept wide; rates and quantities narrowed with
         # abbreviations (Del. Qty = delivered, Load. Qty = loading).
@@ -137,10 +167,10 @@ class SettingsService:
     <div class="toolbar"><button type="button" class="button" onclick="window.print()">Print / Save PDF</button></div>
     <header class="letterhead">
         <div>
-            <div class="letterhead-name">Al Rehman Goods Transport</div>
-            <div class="letterhead-line">Bahtr Mor Wah Cantt</div>
-            <div class="letterhead-line">Contact No. Ahsan Niazi 0307-2342827</div>
-            <div class="letterhead-line">Inam Khan - 0301-5749086</div>
+            <div class="letterhead-name">{escape(letterhead['name'])}</div>
+            <div class="letterhead-line">{escape(letterhead['address'])}</div>
+            <div class="letterhead-line">{escape(letterhead['contact1'])}</div>
+            <div class="letterhead-line">{escape(letterhead['contact2'])}</div>
         </div>
         <div style="text-align:right;">
             <div style="text-transform:uppercase;letter-spacing:0.14em;color:#d97706;font-size:0.74rem;font-weight:700;">Manual Entry Form</div>

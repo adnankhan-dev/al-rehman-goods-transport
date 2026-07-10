@@ -29,6 +29,7 @@ async def create_contractor(request: Request, _current_user=Depends(require_perm
             address=form.address.data,
             payment_terms=form.payment_terms.data,
             balance=form.balance.data or 0.0,
+            opening_balance=form.opening_balance.data or 0.0,
         )
         db.session.add(contractor)
         db.session.commit()

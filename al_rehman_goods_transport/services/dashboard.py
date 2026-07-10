@@ -11,9 +11,12 @@ def get_dashboard_metrics():
     month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
 
     # ── Operational counts ────────────────────────────────────────────────────
-    total_orders = Order.query.count()
-    orders_this_month = Order.query.filter(Order.order_date >= month_start).count()
+    # Approved orders only — pending-approval orders are excluded everywhere.
+    approved = Order.approval_status == "approved"
+    total_orders = Order.query.filter(approved).count()
+    orders_this_month = Order.query.filter(approved, Order.order_date >= month_start).count()
     unbilled_count = Order.query.filter(
+        approved,
         Order.status == "Completed",
         Order.bill_id.is_(None),
     ).count()
@@ -23,7 +26,7 @@ def get_dashboard_metrics():
     total_sites = Site.query.count()
 
     # ── Financial snapshot (open bills only) ─────────────────────────────────
-    open_bills = Bill.query.all()
+    open_bills = Bill.query.filter(Bill.approval_status == "approved").all()
     contractor_receivables = sum(
         b.outstanding_amount for b in open_bills
         if b.entity_type == "contractor" and b.outstanding_amount > 0
@@ -45,6 +48,7 @@ def get_dashboard_metrics():
     # ── Recent orders (last 8 for the dashboard table) ───────────────────────
     recent_orders = (
         Order.query
+        .filter(approved)
         .order_by(Order.order_date.desc())
         .limit(8)
         .all()
@@ -53,7 +57,7 @@ def get_dashboard_metrics():
     # ── Latest open bills (last 5 unsettled) ─────────────────────────────────
     recent_open_bills = (
         Bill.query
-        .filter(Bill.settled_amount < Bill.total_amount)
+        .filter(Bill.approval_status == "approved", Bill.settled_amount < Bill.total_amount)
         .order_by(Bill.bill_date.desc())
         .limit(5)
         .all()
@@ -63,15 +67,19 @@ def get_dashboard_metrics():
     today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
 
     orders_today_list = Order.query.filter(
+        approved,
         Order.order_date >= today_start,
         Order.status == "Completed",
     ).all()
-    orders_today = Order.query.filter(Order.order_date >= today_start).count()
+    orders_today = Order.query.filter(approved, Order.order_date >= today_start).count()
 
+    diesel_approved = DieselEntry.approval_status == "approved"
     diesel_entries_today = DieselEntry.query.filter(
+        diesel_approved,
         DieselEntry.date >= today_start.date()
     ).count()
     diesel_amount_today = db.session.query(func.sum(DieselEntry.amount)).filter(
+        diesel_approved,
         DieselEntry.date >= today_start.date()
     ).scalar() or 0.0
 
@@ -89,6 +97,7 @@ def get_dashboard_metrics():
 
     # ── Diesel entries this month ─────────────────────────────────────────────
     diesel_this_month = db.session.query(func.sum(DieselEntry.amount)).filter(
+        diesel_approved,
         DieselEntry.date >= month_start.date()
     ).scalar() or 0.0
 

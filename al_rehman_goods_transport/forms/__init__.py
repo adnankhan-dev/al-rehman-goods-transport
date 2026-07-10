@@ -21,8 +21,11 @@ class OrderForm(BaseForm):
     builty_number = StringField('Builty Number', validators=[Optional()])
     receipt_number = StringField('Delivery Receipt Number', validators=[Optional()])
     delivered_quantity = FloatField('Delivered Quantity', validators=[DataRequired()])
-    vehicle_rate = FloatField('Vehicle Rate per Unit', validators=[DataRequired()])
-    contractor_rate = FloatField('Contractor Rate per Unit', validators=[DataRequired()])
+    # Rates are no longer entered at order creation — they are set by an approver
+    # on the Pending Approvals screen. Kept Optional so the field stays available
+    # for legacy paths without blocking submission.
+    vehicle_rate = FloatField('Vehicle Rate per Unit', validators=[Optional()])
+    contractor_rate = FloatField('Contractor Rate per Unit', validators=[Optional()])
     plant_id = SelectField('Plant', coerce=int, validators=[Optional()])
     plant_amount = FloatField('Plant Amount', default=0, validators=[Optional()])
     commission = FloatField('Commission from Vehicle', default=0, validators=[Optional()])
@@ -36,6 +39,7 @@ class VehicleOwnerForm(BaseForm):
     name = StringField('Owner Name', validators=[DataRequired()])
     phone = StringField('Phone', validators=[Optional()])
     address = TextAreaField('Address', validators=[Optional()])
+    opening_balance = FloatField('Previous / Opening Balance (pre-ERP, Rs.)', default=0.0, validators=[Optional()])
     submit = SubmitField('Save Vehicle Owner')
 
 class ContractorForm(BaseForm):
@@ -46,6 +50,7 @@ class ContractorForm(BaseForm):
     address = TextAreaField('Address', validators=[Optional()])
     payment_terms = StringField('Payment Terms', validators=[Optional()])
     balance = FloatField('Initial Balance', default=0.0, validators=[Optional()])  # Add this field
+    opening_balance = FloatField('Previous / Opening Balance (pre-ERP, Rs.)', default=0.0, validators=[Optional()])
     submit = SubmitField('Save Contractor')
 class VehicleForm(BaseForm):
     vehicle_number = StringField('Vehicle Number', validators=[DataRequired()])
@@ -55,6 +60,7 @@ class VehicleForm(BaseForm):
     insurance_details = TextAreaField('Insurance Details', validators=[Optional()])
     fitness_certificate = StringField('Fitness Certificate', validators=[Optional()])
     balance = FloatField('Initial Balance', default=0.0, validators=[Optional()])  # Add this field
+    opening_balance = FloatField('Previous / Opening Balance (pre-ERP, Rs.)', default=0.0, validators=[Optional()])
     submit = SubmitField('Save Vehicle')
 class PlantForm(BaseForm):
     name = StringField('Name', validators=[DataRequired()])
@@ -63,6 +69,7 @@ class PlantForm(BaseForm):
     phone = StringField('Phone', validators=[Optional()])
     payment_terms = StringField('Payment Terms', validators=[Optional()])
     balance = FloatField('Initial Balance', default=0.0, validators=[Optional()])  # Add this field
+    opening_balance = FloatField('Previous / Opening Balance (pre-ERP, Rs.)', default=0.0, validators=[Optional()])
     submit = SubmitField('Save Plant')
 class MaterialForm(BaseForm):
     name = StringField('Material Name', validators=[DataRequired()])
@@ -82,16 +89,22 @@ class SiteForm(BaseForm):
     is_archived = BooleanField('Archive this site (hide from new order entry)', validators=[Optional()])
     submit = SubmitField('Save Site')
 class TransactionForm(BaseForm):
+    # Generic direction first, then the entity type, then the specific account.
+    # The internal transaction type is derived as f"{entity_type}_{direction}"
+    # (e.g. contractor + receipt -> contractor_receipt).
     type = SelectField('Transaction Type', choices=[
-        ('vehicle_payment', 'Payment / Advance to Vehicle'),
-        ('vehicle_owner_payment', 'Payment to Vehicle Owner'),
-        ('vehicle_owner_receipt', 'Receipt from Vehicle Owner'),
-        ('contractor_receipt', 'Receipt from Contractor'),
-        ('plant_payment', 'Payment to Plant'),
-        ('petrol_pump_payment', 'Payment to Petrol Pump'),
-        ('other_expense', 'Other Expense'),  # Add this line
-        ('initial_balance', 'Initial Balance')
+        ('payment', 'Payment To'),
+        ('receipt', 'Receipt From'),
+        ('other_expense', 'Other Expense'),
+        ('initial_balance', 'Initial Balance'),
     ], validators=[DataRequired()])
+    entity_type = SelectField('Entity Type', choices=[
+        ('contractor', 'Contractor'),
+        ('vehicle_owner', 'Vehicle Owner'),
+        ('plant', 'Plant'),
+        ('petrol_pump', 'Petrol Pump'),
+        ('vehicle', 'Vehicle'),
+    ], validators=[Optional()])
     date = DateField('Transaction Date', format='%Y-%m-%d', validators=[Optional()], render_kw={"type": "date"})
     amount = FloatField('Amount', validators=[DataRequired()])
     description = TextAreaField('Description', validators=[Optional()])

@@ -57,6 +57,14 @@ class Order(db.Model):
     created_at = db.Column(db.DateTime, default=utc_now, nullable=True)
     created_by_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=True)
 
+    # Approval workflow: a new order is 'pending' and posts NO financials and is
+    # hidden from lists/reports/billing until an approver sets its rates and
+    # approves it (status flips to 'Completed'). Default 'approved' so existing
+    # rows and any legacy path stay visible.
+    approval_status = db.Column(db.String(20), default="approved", server_default="approved", nullable=False)
+    approved_by_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=True)
+    approved_at = db.Column(db.DateTime, nullable=True)
+
     # Relationships
     vehicle = db.relationship('Vehicle', back_populates='orders')
     contractor = db.relationship('Contractor', back_populates='orders')
@@ -65,6 +73,7 @@ class Order(db.Model):
     plant = db.relationship('Plant', back_populates='orders')
     material = db.relationship("Material", back_populates="orders")
     created_by = db.relationship("User", foreign_keys=[created_by_id], lazy="joined")
+    approved_by = db.relationship("User", foreign_keys=[approved_by_id], lazy="joined")
     bill = db.relationship("Bill", foreign_keys=[bill_id], back_populates="orders")
     vehicle_owner_bill = db.relationship("Bill", foreign_keys=[vehicle_owner_bill_id], backref=db.backref("vehicle_owner_orders", lazy="dynamic"))
     loadings = db.relationship(
@@ -86,6 +95,14 @@ class Order(db.Model):
     @property
     def entered_by_name(self):
         return self.created_by.username if self.created_by else None
+
+    @property
+    def is_pending_approval(self):
+        return self.approval_status == "pending"
+
+    @property
+    def approved_by_name(self):
+        return self.approved_by.username if self.approved_by else None
 
     @property
     def material_name(self):
