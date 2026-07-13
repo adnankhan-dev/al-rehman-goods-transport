@@ -65,17 +65,18 @@ _ENTITY_ID_FIELD = {
 
 
 def _transaction_input_from_form(form):
-    direction = form.type.data  # 'payment' | 'receipt' | 'other_expense' | 'initial_balance'
+    direction = form.type.data  # 'payment' | 'receipt' | 'previous_balance' | 'other_expense' | 'initial_balance'
     entity_type = None
     entity_id = None
     tx_type = direction
-    if direction in ("payment", "receipt"):
+    if direction in ("payment", "receipt", "previous_balance"):
         entity_type = form.entity_type.data or None
         field_name = _ENTITY_ID_FIELD.get(entity_type)
         if field_name:
             raw = getattr(form, field_name).data
             entity_id = raw if raw not in (None, 0) else None
-        tx_type = f"{entity_type}_{direction}" if entity_type else direction
+        if direction != "previous_balance":
+            tx_type = f"{entity_type}_{direction}" if entity_type else direction
 
     return TransactionInput(
         type=tx_type,

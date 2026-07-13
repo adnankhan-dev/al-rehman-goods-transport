@@ -22,19 +22,16 @@ class PetrolPumpService:
             raise NotFoundError("Petrol pump not found.")
         return petrol_pump
 
-    def create_petrol_pump(self, name, opening_balance=None):
+    def create_petrol_pump(self, name):
         normalized_name = (name or "").strip()
         if not normalized_name:
             raise ValidationError("Petrol pump name is required.")
         if self.petrol_pumps.get_by_name(normalized_name):
             raise ConflictError("Petrol pump name already exists.")
 
-        try:
-            opening = float(opening_balance or 0)
-        except (TypeError, ValueError):
-            raise ValidationError("Opening balance must be a number.")
-        # A new pump starts with its balance equal to the opening balance owed.
-        petrol_pump = PetrolPump(name=normalized_name, opening_balance=opening, balance=opening)
+        # Pre-ERP balances are posted as backdated 'Previous Balance' ledger
+        # entries, not stored on the pump record.
+        petrol_pump = PetrolPump(name=normalized_name, balance=0.0)
         try:
             self.petrol_pumps.add(petrol_pump)
             self.session.commit()
@@ -43,7 +40,7 @@ class PetrolPumpService:
             raise
         return petrol_pump
 
-    def update_petrol_pump(self, petrol_pump_id, name, opening_balance=None):
+    def update_petrol_pump(self, petrol_pump_id, name):
         petrol_pump = self.get_petrol_pump(petrol_pump_id)
         normalized_name = (name or "").strip()
         if not normalized_name:
@@ -54,18 +51,6 @@ class PetrolPumpService:
             raise ConflictError("Petrol pump name already exists.")
 
         petrol_pump.name = normalized_name
-
-        if opening_balance is not None:
-            try:
-                new_opening = float(opening_balance or 0)
-            except (TypeError, ValueError):
-                raise ValidationError("Opening balance must be a number.")
-            # Fold the change in opening balance into the pump's running balance so
-            # the current balance stays = opening + diesel - payments.
-            delta = new_opening - float(petrol_pump.opening_balance or 0)
-            petrol_pump.opening_balance = new_opening
-            petrol_pump.balance = float(petrol_pump.balance or 0) + delta
-
         try:
             self.session.commit()
         except Exception:
@@ -87,7 +72,7 @@ class PetrolPumpService:
 
     def dashboard(self, petrol_pump_id):
         petrol_pump = self.get_petrol_pump(petrol_pump_id)
-        diesel_entries = self.billing.petrol_pump_activity_rows(petrol_pump.id)
+        diesel_entries = []  # order-linked diesel is retired; the Fuel Log is the source
         standalone_entries = (
             DieselEntry.query
             .filter(DieselEntry.petrol_pump_id == petrol_pump.id, DieselEntry.approval_status == "approved")
@@ -113,7 +98,6 @@ class PetrolPumpService:
         from ..models import Transaction
 
         pump = self.get_petrol_pump(petrol_pump_id)
-        order_diesel_all = self.billing.petrol_pump_activity_rows(pump.id)
         standalone_all = (
             DieselEntry.query
             .filter(DieselEntry.petrol_pump_id == pump.id, DieselEntry.approval_status == "approved")
@@ -157,40 +141,38 @@ class PetrolPumpService:
 
         from .diesel import receipt_sort_key
 
+        # Order-linked diesel is retired — all fuel lives in the Fuel Log.
         standalone_rows = sorted(
             [r for r in standalone_all if in_period(_as_date(r.date))],
             key=lambda r: receipt_sort_key(r.receipt_number),
         )
-        order_diesel_rows = sorted(
-            [r for r in order_diesel_all if in_period(order_date(r))],
-            key=lambda r: receipt_sort_key(getattr(r, "receipt_number", None)),
-        )
         payments = [t for t in payments_all if in_period(_as_date(t.date))]
 
-        period_diesel = (
-            sum(float(r.amount or 0) for r in standalone_rows)
-            + sum(float(getattr(r, "amount", 0) or 0) for r in order_diesel_rows)
-        )
-        payments_total = sum(float(t.amount or 0) for t in payments)
+        period_diesel = sum(float(r.amount or 0) for r in standalone_rows)
 
-        prior_diesel = (
-            sum(float(r.amount or 0) for r in standalone_all if before_period(_as_date(r.date)))
-            + sum(float(getattr(r, "amount", 0) or 0) for r in order_diesel_all if before_period(order_date(r)))
-        )
-        prior_payments = sum(float(t.amount or 0) for t in payments_all if before_period(_as_date(t.date)))
-        opening_balance = float(pump.opening_balance or 0) + prior_diesel - prior_payments
+        # Previous balance and the period receipts/payments come from the shared
+        # financials engine (previous balance is computed from history, including
+        # backdated 'previous balance' ledger entries — no manual opening field).
+        from .financials import entity_period_financials
 
-        net_payable = opening_balance + period_diesel - payments_total
+        financial = entity_period_financials(
+            "petrol_pump",
+            pump.id,
+            start_date=date_from,
+            end_date=date_to,
+            period_activity_total=period_diesel,
+            session=self.session,
+        )
 
         return {
             "petrol_pump": pump,
-            "order_diesel_rows": order_diesel_rows,
             "standalone_rows": standalone_rows,
             "payments": payments,
-            "opening_balance": opening_balance,
+            "financial": financial,
+            "opening_balance": financial["previous_balance"],
             "total_diesel": period_diesel,
-            "payments_total": payments_total,
-            "net_payable": net_payable,
+            "payments_total": financial["payments_total"],
+            "net_payable": financial["current_total"],
             "period": {
                 "date_from": date_from.strftime("%Y-%m-%d") if date_from else None,
                 "date_to": date_to.strftime("%Y-%m-%d") if date_to else None,

@@ -11,7 +11,7 @@
             <i class="bi bi-arrow-left"></i> Vehicle Owners
         </a>
         <div class="erp-top-bar-actions">
-            <a href="{{ url_for('vehicle_owners.print_statement', id=owner.id) }}" class="btn btn-sm btn-ui-midnight" target="_blank" rel="noopener">
+            <a href="{{ url_for('vehicle_owners.print_statement', id=owner.id, date_from=date_from.strftime('%Y-%m-%d') if date_from else '', date_to=date_to.strftime('%Y-%m-%d') if date_to else '') }}" class="btn btn-sm btn-ui-midnight" target="_blank" rel="noopener">
                 <i class="bi bi-printer"></i> Print Statement
             </a>
             {% if current_user.can('vehicle_owners.edit') %}
@@ -28,6 +28,24 @@
             {% endif %}
         </div>
     </div>
+
+    <form method="GET" class="detail-panel" style="margin-top:12px;">
+        <div class="filter-grid filter-grid-four">
+            <div class="form-field">
+                <label class="form-label" for="date_from">Statement From</label>
+                <input class="form-control" type="date" id="date_from" name="date_from" value="{{ date_from.strftime('%Y-%m-%d') if date_from else '' }}">
+            </div>
+            <div class="form-field">
+                <label class="form-label" for="date_to">Statement To</label>
+                <input class="form-control" type="date" id="date_to" name="date_to" value="{{ date_to.strftime('%Y-%m-%d') if date_to else '' }}">
+            </div>
+            <div class="filter-actions" style="align-self:end;">
+                <button type="submit" class="btn btn-ui-primary">Apply Period</button>
+                <a href="{{ url_for('vehicle_owners.view', id=owner.id) }}" class="btn btn-ui-neutral">Reset</a>
+            </div>
+        </div>
+        <small class="text-muted">The period drives the statement: activity before it becomes the Previous Balance.</small>
+    </form>
     <div class="detail-grid">
         <div class="detail-panel">
             <h3><i class="bi bi-person-vcard-fill"></i> Owner Information</h3>
@@ -129,9 +147,9 @@
         <h3><i class="bi bi-calculator"></i> Settlement Summary</h3>
         <div class="detail-list">
             {{ detail_value("Net Payable from Trips", "Rs. " ~ ("%.0f"|format(owner_summary.net_payable))) }}
-            {{ detail_value("Less: Fuel-Log Diesel", "− Rs. " ~ ("%.0f"|format(owner_summary.standalone_diesel))) }}
-            {{ detail_value("Less: Payments to Owner", "− Rs. " ~ ("%.0f"|format(owner_summary.payments))) }}
-            {{ detail_value("Less: Advances to Vehicles (ledger)", "− Rs. " ~ ("%.0f"|format(owner_summary.advances))) }}
+            {{ detail_value("− Fuel-Log Diesel", "− Rs. " ~ ("%.0f"|format(owner_summary.standalone_diesel))) }}
+            {{ detail_value("− Payment paid to " ~ owner.name, "− Rs. " ~ ("%.0f"|format(owner_summary.payments))) }}
+            {{ detail_value("− Advances to Vehicles (ledger)", "− Rs. " ~ ("%.0f"|format(owner_summary.advances))) }}
             {{ detail_value("Outstanding Payable", "Rs. " ~ ("%.0f"|format(owner_summary.outstanding))) }}
         </div>
         {% if standalone_diesel_rows %}
@@ -187,7 +205,7 @@
                     {% for transaction in related_transactions %}
                     <tr>
                         <td>{{ transaction.date.strftime('%Y-%m-%d') }}</td>
-                        <td>{{ transaction.type|replace('_', ' ')|title }}</td>
+                        <td>{{ transaction.type_label }}</td>
                         <td>Rs. {{ "%.2f"|format(transaction.amount or 0) }}</td>
                         <td>{{ transaction.reference or "-" }}</td>
                     </tr>

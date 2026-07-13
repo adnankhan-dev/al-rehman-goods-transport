@@ -276,7 +276,7 @@
                         {% for transaction in entity_transactions[:10] %}
                         <tr>
                             <td>{{ transaction.date.strftime('%Y-%m-%d') }}</td>
-                            <td>{{ transaction.type|replace('_', ' ')|title }}</td>
+                            <td>{{ transaction.type_label }}</td>
                             <td>Rs. {{ "%.2f"|format(transaction.amount or 0) }}</td>
                             <td>{{ transaction.reference or "-" }}</td>
                         </tr>

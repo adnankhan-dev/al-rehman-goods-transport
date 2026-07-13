@@ -243,6 +243,7 @@ class OrderService:
             order.completion_date = order.completion_date or order.order_date or utc_now()
             sync_order_financials(self.session, order)
             TransactionService(self.session).sync_order_advance_transaction(order)
+            self._recompute_attached_bill_totals(order)
             self.session.commit()
         except Exception:
             self.session.rollback()
@@ -262,12 +263,15 @@ class OrderService:
             self.session.rollback()
             raise
 
-    def update_order(self, order_id, order_input: OrderInput):
+    def update_order(self, order_id, order_input: OrderInput, allow_billed=False):
         order = self.get_order(order_id)
-        if order.is_billed:
-            raise ValidationError("This order is on a contractor bill and cannot be edited. Remove it from the bill first.")
-        if order.is_vehicle_owner_billed:
-            raise ValidationError("This order is on a vehicle owner bill and cannot be edited. Remove it from the bill first.")
+        if not allow_billed:
+            # Only bill administrators (ledger.admin) may edit an order that is
+            # already on a bill; the bill totals are recalculated below.
+            if order.is_billed:
+                raise ValidationError("This order is on a contractor bill and cannot be edited. Remove it from the bill first.")
+            if order.is_vehicle_owner_billed:
+                raise ValidationError("This order is on a vehicle owner bill and cannot be edited. Remove it from the bill first.")
 
         try:
             if order.approval_status == "approved":
@@ -283,11 +287,24 @@ class OrderService:
             order.status = "Pending Approval"
             order.approved_by_id = None
             order.approved_at = None
+            self._recompute_attached_bill_totals(order)
             self.session.commit()
         except Exception:
             self.session.rollback()
             raise
         return order
+
+    def _recompute_attached_bill_totals(self, order):
+        """Keep bill totals honest when a billed order is edited (admin flow)."""
+        from ..models import Bill
+        from .billing import BillingService
+
+        billing = BillingService(self.session)
+        for bill_id in {order.bill_id, order.vehicle_owner_bill_id}:
+            if bill_id:
+                bill = self.session.get(Bill, bill_id)
+                if bill:
+                    billing._recompute_bill_total(bill)
 
     def delete_order(self, order_id):
         order = self.get_order(order_id)
@@ -519,7 +536,9 @@ class OrderService:
         ) or "<tr><td colspan='4'>No contractors.</td></tr>"
         contractor_total = sum(c["amount"] for c in contractor_summary.values())
 
-        # ---- per-vehicle-owner net payable summary (advances + diesel deducted) ----
+        # ---- per-vehicle-owner net payable summary (fuel-log diesel deducted;
+        # order advances/diesel are retired — advances live in the ledger and
+        # fuel in the Fuel Log) ----
         billing_repo = BillingRepository(self.session)
         owner_summary = {}
         for order in orders:
@@ -529,11 +548,9 @@ class OrderService:
             entry = owner_summary.setdefault(key, {
                 "id": owner_id,
                 "name": owner.name if owner else (order.vehicle.owner_display_name if order.vehicle else "Unassigned"),
-                "gross": 0.0, "advance": 0.0, "order_diesel": 0.0,
+                "gross": 0.0,
             })
             entry["gross"] += float(order.total_vehicle_amount())
-            entry["advance"] += float(order.total_advance_amount())
-            entry["order_diesel"] += float(order.total_diesel_amount())
 
         owner_rows = ""
         owner_total_net = 0.0
@@ -544,17 +561,15 @@ class OrderService:
                     float(e.amount or 0)
                     for e in billing_repo.diesel_entries_for_vehicle_owner(entry["id"], diesel_from, diesel_to)
                 )
-            net = entry["gross"] - entry["advance"] - entry["order_diesel"] - standalone_diesel
+            net = entry["gross"] - standalone_diesel
             owner_total_net += net
             owner_rows += (
                 f"<tr><td>{escape(entry['name'])}</td>"
                 f"<td class='num'>{money(entry['gross'])}</td>"
-                f"<td class='num'>&minus; {money(entry['advance'])}</td>"
-                f"<td class='num'>&minus; {money(entry['order_diesel'])}</td>"
                 f"<td class='num'>&minus; {money(standalone_diesel)}</td>"
                 f"<td class='num'><strong>{money(net)}</strong></td></tr>"
             )
-        owner_rows = owner_rows or "<tr><td colspan='6'>No vehicle owners.</td></tr>"
+        owner_rows = owner_rows or "<tr><td colspan='4'>No vehicle owners.</td></tr>"
 
         # ---- per-plant payable summary (loading cost we pay the plant) ----
         plant_summary = {}
@@ -710,12 +725,12 @@ class OrderService:
                         <h2 class="section">Payment Summary &mdash; Vehicle Owners (Payable)</h2>
                         <table>
                             <thead><tr>
-                                <th>Vehicle Owner</th><th class="num">Gross Vehicle</th><th class="num">Advances</th>
-                                <th class="num">Order Diesel</th><th class="num">Owner Diesel</th><th class="num">Net Payable</th>
+                                <th>Vehicle Owner</th><th class="num">Gross Vehicle</th>
+                                <th class="num">Fuel-Log Diesel</th><th class="num">Net Payable</th>
                             </tr></thead>
                             <tbody>
                                 {owner_rows}
-                                <tr class="grand"><td>Grand Total</td><td class="num"></td><td class="num"></td><td class="num"></td><td class="num"></td><td class="num">{money(owner_total_net)}</td></tr>
+                                <tr class="grand"><td>Grand Total</td><td class="num"></td><td class="num"></td><td class="num">{money(owner_total_net)}</td></tr>
                             </tbody>
                         </table>
 

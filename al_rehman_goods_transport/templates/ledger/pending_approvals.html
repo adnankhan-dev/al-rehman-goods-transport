@@ -4,11 +4,11 @@
 {% block title %}Ledger Approvals - Al Rehman Goods Transport{% endblock %}
 
 {% block content %}
-{% call form_shell("Ledger Approvals", "Review pending transactions and bills. Approving a transaction posts its balances; approving a bill makes it visible and settleable. Rejecting discards it.", "Finance", url_for('ledger.index'), "Back to Ledger") %}
+{% call form_shell("Ledger Approvals", "Review pending transactions and bills. Approving a transaction posts its balances; approving a bill makes it visible on the ledger. Rejecting discards it.", "Finance", url_for('ledger.index'), "Back to Ledger") %}
 <section class="content-stack">
     <div class="collection-overview">
         {{ metric_tile("Pending Transactions", pending_transactions|length, "Not yet posted to balances", "primary", "bi bi-arrow-left-right") }}
-        {{ metric_tile("Pending Bills", pending_bills|length, "Not yet visible or settleable", "ocean", "bi bi-receipt") }}
+        {{ metric_tile("Pending Bills", pending_bills|length, "Not yet visible on the ledger", "ocean", "bi bi-receipt") }}
     </div>
 
     {% if not pending_transactions and not pending_bills %}
@@ -42,7 +42,7 @@
                         {% for tx in pending_transactions %}
                         <tr class="tx-approval-row" data-tx-id="{{ tx.id }}">
                             <td>{{ tx.date.strftime('%d %b %Y') if tx.date else '-' }}</td>
-                            <td>{{ tx.type|replace('_', ' ')|title }}</td>
+                            <td>{{ tx.type_label }}</td>
                             <td>{{ tx.entity_name }}</td>
                             <td class="text-end">Rs. {{ "%.2f"|format(tx.amount or 0) }}</td>
                             <td>{{ tx.reference or '-' }}</td>

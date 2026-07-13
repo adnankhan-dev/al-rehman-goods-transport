@@ -4,7 +4,7 @@
 {% block title %}ERP Ledger - Al Rehman Goods Transport{% endblock %}
 
 {% block content %}
-{% call form_shell("ERP Ledger", "Bills, settlements, and external finance movements in one chronological register.", "Finance", (url_for('ledger.create') if current_user.can('ledger.create') else None), "Create Entry", "btn btn-ui-midnight") %}
+{% call form_shell("ERP Ledger", "Bills, receipts, payments, and external finance movements in one chronological register.", "Finance", (url_for('ledger.create') if current_user.can('ledger.create') else None), "Create Entry", "btn btn-ui-midnight") %}
 <section class="content-stack">
 
     <div class="detail-actions">
@@ -24,8 +24,8 @@
 
     <div class="collection-overview">
         {{ metric_tile("Bills", bill_count, "Obligation documents issued", "primary", "bi bi-file-earmark-text-fill", url_for('ledger.create') ~ '?mode=bill') }}
-        {{ metric_tile("Transactions", transaction_count, "Settlements and external finance movements", "accent", "bi bi-arrow-left-right", url_for('ledger.create') ~ '?mode=transaction') }}
-        {{ metric_tile("Open Bill Amount", "Rs. " ~ ("%.2f"|format(open_bill_amount)), "Unsettled value awaiting payment", "ocean", "bi bi-hourglass-split") }}
+        {{ metric_tile("Transactions", transaction_count, "Receipts, payments, and external finance movements", "accent", "bi bi-arrow-left-right", url_for('ledger.create') ~ '?mode=transaction') }}
+        {{ metric_tile("Billed Amount", "Rs. " ~ ("%.2f"|format(open_bill_amount)), "Total value of bills raised", "ocean", "bi bi-receipt") }}
         {% if current_company_balance >= 0 %}
         {{ metric_tile("Company Balance", "Rs. " ~ ("%.2f"|format(current_company_balance)), "Net cash position — receipts minus payments", "accent", "bi bi-bank2") }}
         {% else %}

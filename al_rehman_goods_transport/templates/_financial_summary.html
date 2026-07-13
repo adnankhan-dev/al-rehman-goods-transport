@@ -1,0 +1,99 @@
+{# Shared "Account Summary" financial section for bills and statements.
+
+   fs = dict from services.financials.entity_period_financials
+   activity_label = wording for the accrued line (e.g. "Bill Amount", "Trips this period")
+   table_class / heading styles are passed in so the section matches both the
+   app pages and the standalone print letterheads. All math is shown with
+   signs (+ / −), never with words like "Less" or "Add". #}
+
+{% macro _money(value) -%}Rs. {{ "{:,.2f}".format(value or 0) }}{%- endmacro %}
+
+{% macro _signed(sign, value) -%}
+{%- if sign < 0 %}− {{ _money(value) }}{% else %}+ {{ _money(value) }}{% endif -%}
+{%- endmacro %}
+
+{% macro financial_section(fs, activity_label, table_class="statement-table", num_class="align-right", heading_style="margin:22px 0 8px;color:#0b2742;font-size:1rem;", subheading_style="margin:14px 0 6px;color:#475569;font-size:0.85rem;") %}
+<h3 style="{{ heading_style }}">Account Summary — {{ fs.entity_name }}</h3>
+<table class="{{ table_class }}">
+    <tbody>
+        <tr>
+            <td>Previous Balance{% if fs.previous_as_on %} (as on {{ fs.previous_as_on.strftime('%d-%m-%Y') }}){% endif %}</td>
+            <td class="{{ num_class }}">{{ _money(fs.previous_balance) }}</td>
+        </tr>
+        <tr>
+            <td>+ {{ activity_label }}{% if fs.start_date and fs.end_date %} ({{ fs.start_date.strftime('%d-%m-%Y') }} — {{ fs.end_date.strftime('%d-%m-%Y') }}){% endif %}</td>
+            <td class="{{ num_class }}">+ {{ _money(fs.period_activity) }}</td>
+        </tr>
+        {% if fs.receipts %}
+        <tr>
+            <td>{% if fs.receipt_sign < 0 %}−{% else %}+{% endif %} Received from {{ fs.entity_name }} ({{ fs.receipts|length }} receipt{% if fs.receipts|length != 1 %}s{% endif %})</td>
+            <td class="{{ num_class }}">{{ _signed(fs.receipt_sign, fs.receipts_total) }}</td>
+        </tr>
+        {% endif %}
+        {% if fs.payments %}
+        <tr>
+            <td>{% if fs.payment_sign < 0 %}−{% else %}+{% endif %} Payment paid to {{ fs.entity_name }} ({{ fs.payments|length }} payment{% if fs.payments|length != 1 %}s{% endif %})</td>
+            <td class="{{ num_class }}">{{ _signed(fs.payment_sign, fs.payments_total) }}</td>
+        </tr>
+        {% endif %}
+        {% if fs.adjustments %}
+        <tr>
+            <td>{% if fs.adjustments_total < 0 %}−{% else %}+{% endif %} Previous balance entries in period</td>
+            <td class="{{ num_class }}">{{ _signed(1 if fs.adjustments_total >= 0 else -1, fs.adjustments_total|abs) }}</td>
+        </tr>
+        {% endif %}
+        <tr style="font-weight:700;background:#0b2742;color:#ffffff;">
+            <td>= Current Balance{% if fs.end_date %} (as on {{ fs.end_date.strftime('%d-%m-%Y') }}){% endif %}</td>
+            <td class="{{ num_class }}">{{ _money(fs.current_total) }}</td>
+        </tr>
+    </tbody>
+</table>
+
+{% if fs.receipts %}
+<h4 style="{{ subheading_style }}">Received from {{ fs.entity_name }}</h4>
+<table class="{{ table_class }}">
+    <thead>
+        <tr><th>Date</th><th>Method</th><th>Reference</th><th>Description</th><th class="{{ num_class }}">Amount</th></tr>
+    </thead>
+    <tbody>
+        {% for txn in fs.receipts %}
+        <tr>
+            <td>{{ txn.date.strftime('%d-%m-%Y') }}</td>
+            <td>{{ (txn.payment_method or '-')|title }}</td>
+            <td>{{ txn.reference or '-' }}</td>
+            <td>{{ txn.description or '-' }}</td>
+            <td class="{{ num_class }}">{{ _signed(fs.receipt_sign, txn.amount) }}</td>
+        </tr>
+        {% endfor %}
+        <tr style="font-weight:700;background:#f1f5f9;">
+            <td colspan="4">Total Received from {{ fs.entity_name }}</td>
+            <td class="{{ num_class }}">{{ _signed(fs.receipt_sign, fs.receipts_total) }}</td>
+        </tr>
+    </tbody>
+</table>
+{% endif %}
+
+{% if fs.payments %}
+<h4 style="{{ subheading_style }}">Payment paid to {{ fs.entity_name }}</h4>
+<table class="{{ table_class }}">
+    <thead>
+        <tr><th>Date</th><th>Detail</th><th>Method</th><th>Reference</th><th class="{{ num_class }}">Amount</th></tr>
+    </thead>
+    <tbody>
+        {% for txn in fs.payments %}
+        <tr>
+            <td>{{ txn.date.strftime('%d-%m-%Y') }}</td>
+            <td>{{ txn.type_label }}</td>
+            <td>{{ (txn.payment_method or '-')|title }}</td>
+            <td>{{ txn.reference or '-' }}</td>
+            <td class="{{ num_class }}">{{ _signed(fs.payment_sign, txn.amount) }}</td>
+        </tr>
+        {% endfor %}
+        <tr style="font-weight:700;background:#f1f5f9;">
+            <td colspan="4">Total Payment paid to {{ fs.entity_name }}</td>
+            <td class="{{ num_class }}">{{ _signed(fs.payment_sign, fs.payments_total) }}</td>
+        </tr>
+    </tbody>
+</table>
+{% endif %}
+{% endmacro %}

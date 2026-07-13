@@ -10,7 +10,6 @@
     <div class="form-grid-two">
         {{ render_field(form.name, placeholder="Owner name") }}
         {{ render_field(form.phone, placeholder="Phone number") }}
-        {{ render_field(form.opening_balance, placeholder="e.g. 50000", help_text="Pre-ERP amount carried forward. Shown as 'Previous Balance' on statements and bills.") }}
     </div>
     {{ render_field(form.address, rows=3, placeholder="Address") }}
     {{ form_actions("Update Vehicle Owner", url_for('vehicle_owners.view', id=owner.id)) }}

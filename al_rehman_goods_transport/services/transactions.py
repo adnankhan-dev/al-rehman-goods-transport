@@ -17,8 +17,8 @@ def _utc_now():
     return datetime.now(UTC).replace(tzinfo=None)
 
 
-# Transaction types created by BillingService.settle_bill; when such a
-# transaction carries a reference_id it points at the settled Bill.
+# Legacy settlement transaction types (the settle-bill flow is retired);
+# when such a transaction carries a reference_id it points at a Bill.
 _SETTLEMENT_TYPES = {"contractor_receipt", "plant_payment", "petrol_pump_payment", "vehicle_owner_payment"}
 
 
@@ -249,6 +249,23 @@ class TransactionService:
 
     def _validate_transaction_input(self, transaction_input: TransactionInput):
         amount = _safe_amount(transaction_input.amount)
+        if transaction_input.type == "previous_balance":
+            # Pre-ERP balances may be negative (the account owed us), but must
+            # be non-zero and linked to an account.
+            if amount == 0:
+                raise ValidationError("Previous balance amount cannot be zero.")
+            if not any(
+                (
+                    transaction_input.contractor_id,
+                    transaction_input.vehicle_owner_id,
+                    transaction_input.plant_id,
+                    transaction_input.petrol_pump_id,
+                    transaction_input.vehicle_id,
+                    transaction_input.entity_id,
+                )
+            ):
+                raise ValidationError("Select the account this previous balance belongs to.")
+            return
         if amount <= 0:
             raise ValidationError("Transaction amount must be greater than zero.")
 
@@ -278,6 +295,28 @@ class TransactionService:
 
         if transaction.type == "initial_balance":
             company.balance = _safe_amount(company.balance) + amount
+            return
+
+        if transaction.type == "previous_balance":
+            # Pre-ERP balance marker: adjusts only the linked account's balance
+            # (in that account's own convention), never company cash.
+            applied = False
+            for entity_type, fk in (
+                ("contractor", transaction.contractor_id),
+                ("vehicle_owner", transaction.vehicle_owner_id),
+                ("plant", transaction.plant_id),
+                ("petrol_pump", transaction.petrol_pump_id),
+                ("vehicle", transaction.vehicle_id),
+            ):
+                if fk:
+                    self._update_entity_balance(entity_type, fk, amount)
+                    applied = True
+            if transaction.vehicle_id and not transaction.vehicle_owner_id:
+                vehicle = self.session.get(Vehicle, transaction.vehicle_id)
+                if vehicle and vehicle.owner_id:
+                    self._update_entity_balance("vehicle_owner", vehicle.owner_id, amount)
+            if not applied and transaction.entity_type and transaction.entity_id:
+                self._update_entity_balance(transaction.entity_type, transaction.entity_id, amount)
             return
 
         if transaction.type == "contractor_receipt":
@@ -353,7 +392,8 @@ class TransactionService:
 
         Bill settlements are the only transactions of these types that carry a
         reference_id, so this is a no-op for manually posted payments/receipts.
-        Creation is excluded on purpose: settle_bill already bumps settled_amount.
+        Only legacy settlement rows carry a bill reference_id; new money
+        movement never links to bills.
         """
         if tx_type not in _SETTLEMENT_TYPES or not bill_id:
             return

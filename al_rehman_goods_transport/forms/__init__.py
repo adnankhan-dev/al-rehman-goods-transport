@@ -39,7 +39,6 @@ class VehicleOwnerForm(BaseForm):
     name = StringField('Owner Name', validators=[DataRequired()])
     phone = StringField('Phone', validators=[Optional()])
     address = TextAreaField('Address', validators=[Optional()])
-    opening_balance = FloatField('Previous / Opening Balance (pre-ERP, Rs.)', default=0.0, validators=[Optional()])
     submit = SubmitField('Save Vehicle Owner')
 
 class ContractorForm(BaseForm):
@@ -50,7 +49,6 @@ class ContractorForm(BaseForm):
     address = TextAreaField('Address', validators=[Optional()])
     payment_terms = StringField('Payment Terms', validators=[Optional()])
     balance = FloatField('Initial Balance', default=0.0, validators=[Optional()])  # Add this field
-    opening_balance = FloatField('Previous / Opening Balance (pre-ERP, Rs.)', default=0.0, validators=[Optional()])
     submit = SubmitField('Save Contractor')
 class VehicleForm(BaseForm):
     vehicle_number = StringField('Vehicle Number', validators=[DataRequired()])
@@ -60,7 +58,6 @@ class VehicleForm(BaseForm):
     insurance_details = TextAreaField('Insurance Details', validators=[Optional()])
     fitness_certificate = StringField('Fitness Certificate', validators=[Optional()])
     balance = FloatField('Initial Balance', default=0.0, validators=[Optional()])  # Add this field
-    opening_balance = FloatField('Previous / Opening Balance (pre-ERP, Rs.)', default=0.0, validators=[Optional()])
     submit = SubmitField('Save Vehicle')
 class PlantForm(BaseForm):
     name = StringField('Name', validators=[DataRequired()])
@@ -69,7 +66,6 @@ class PlantForm(BaseForm):
     phone = StringField('Phone', validators=[Optional()])
     payment_terms = StringField('Payment Terms', validators=[Optional()])
     balance = FloatField('Initial Balance', default=0.0, validators=[Optional()])  # Add this field
-    opening_balance = FloatField('Previous / Opening Balance (pre-ERP, Rs.)', default=0.0, validators=[Optional()])
     submit = SubmitField('Save Plant')
 class MaterialForm(BaseForm):
     name = StringField('Material Name', validators=[DataRequired()])
@@ -77,7 +73,6 @@ class MaterialForm(BaseForm):
     submit = SubmitField('Save Material')
 class PetrolPumpForm(BaseForm):
     name = StringField('Petrol Pump Name', validators=[DataRequired()])
-    opening_balance = FloatField('Opening / Previous Balance (Rs.)', validators=[Optional()])
     submit = SubmitField('Save Petrol Pump')
 class SiteForm(BaseForm):
     name = StringField('Name', validators=[DataRequired()])
@@ -97,6 +92,7 @@ class TransactionForm(BaseForm):
         ('receipt', 'Receipt From'),
         ('other_expense', 'Other Expense'),
         ('initial_balance', 'Initial Balance'),
+        ('previous_balance', 'Previous Balance (before ERP)'),
     ], validators=[DataRequired()])
     entity_type = SelectField('Entity Type', choices=[
         ('contractor', 'Contractor'),

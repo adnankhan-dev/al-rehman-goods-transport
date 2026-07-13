@@ -111,21 +111,29 @@ class PlantService:
         loadings = [l for l in loadings_all if in_period(load_date(l))]
         payments = [t for t in payments_all if in_period(_as_date(t.date))]
         total_charges = sum(float(l.plant_amount or 0) for l in loadings)
-        payments_total = sum(float(t.amount or 0) for t in payments)
 
-        prior_charges = sum(float(l.plant_amount or 0) for l in loadings_all if before_period(load_date(l)))
-        prior_payments = sum(float(t.amount or 0) for t in payments_all if before_period(_as_date(t.date)))
-        opening_balance = prior_charges - prior_payments
-        net_payable = opening_balance + total_charges - payments_total
+        # Previous balance and period receipts/payments from the shared
+        # financials engine (history + backdated previous-balance entries).
+        from .financials import entity_period_financials
+
+        financial = entity_period_financials(
+            "plant",
+            plant.id,
+            start_date=date_from,
+            end_date=date_to,
+            period_activity_total=total_charges,
+            session=self.session,
+        )
 
         return {
             "plant": plant,
             "loadings": loadings,
             "payments": payments,
-            "opening_balance": opening_balance,
+            "financial": financial,
+            "opening_balance": financial["previous_balance"],
             "total_charges": total_charges,
-            "payments_total": payments_total,
-            "net_payable": net_payable,
+            "payments_total": financial["payments_total"],
+            "net_payable": financial["current_total"],
             "period": {
                 "date_from": date_from.strftime("%Y-%m-%d") if date_from else None,
                 "date_to": date_to.strftime("%Y-%m-%d") if date_to else None,

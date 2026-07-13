@@ -12,7 +12,6 @@
         {{ render_field(form.contact_person, placeholder="Contact person") }}
         {{ render_field(form.phone, placeholder="Phone number") }}
         {{ render_field(form.payment_terms, placeholder="Payment terms") }}
-        {{ render_field(form.opening_balance, placeholder="e.g. 50000", help_text="Pre-ERP amount carried forward. Shown as 'Previous Balance' on statements and bills.") }}
     </div>
     {{ render_field(form.address, rows=3, placeholder="Address") }}
     {{ form_actions("Update Plant", url_for('plants.plants')) }}

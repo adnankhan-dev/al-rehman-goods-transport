@@ -98,6 +98,8 @@ class RouteTests(unittest.TestCase):
                 "site_ids": [str(site.id)],
                 "material_type": "Sand",
                 "order_ids": [str(order.id)],
+                "start_date": "2026-04-01",
+                "end_date": "2026-04-30",
             },
             follow_redirects=True,
         )
@@ -192,6 +194,8 @@ class RouteTests(unittest.TestCase):
                 "site_ids": [str(site.id)],
                 "material_type": "Sand",
                 "order_ids": [str(order.id)],
+                "start_date": "2026-04-01",
+                "end_date": "2026-04-30",
             },
             follow_redirects=False,
         )

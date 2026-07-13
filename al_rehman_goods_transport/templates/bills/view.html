@@ -1,10 +1,11 @@
 {% extends "base.html" %}
 {% from "_formhelpers.html" import detail_value, form_shell, metric_tile %}
+{% from "_financial_summary.html" import financial_section %}
 
 {% block title %}{{ bill.bill_number }} - Al Rehman Goods Transport{% endblock %}
 
 {% block content %}
-{% call form_shell("Bill " ~ bill.bill_number, "Review the account, linked trips, related transactions, and settlement progress for this bill.", "Finance") %}
+{% call form_shell("Bill " ~ bill.bill_number, "Review the linked trips and the account summary for this bill period.", "Finance") %}
 <section class="detail-shell">
     <div class="erp-top-bar">
         <a href="{{ url_for('ledger.index') }}" class="erp-top-bar-back">
@@ -43,7 +44,7 @@
     {% endif %}
     {% if bill.approval_status == 'pending' %}
     <div class="alert alert-warning d-flex justify-content-between align-items-center flex-wrap gap-2">
-        <span><i class="bi bi-hourglass-split"></i> This bill is <strong>awaiting approval</strong>. It is hidden from the ledger and cannot be settled until approved.</span>
+        <span><i class="bi bi-hourglass-split"></i> This bill is <strong>awaiting approval</strong>. It stays hidden from the ledger until approved.</span>
         {% if current_user.can('ledger.approve') %}
         <span class="d-flex gap-2">
             <form method="POST" action="{{ url_for('bills.approve_bill', id=bill.id) }}" class="d-inline">
@@ -57,7 +58,7 @@
     </div>
     {% endif %}
     <div class="collection-overview">
-        {{ metric_tile("Net Payable", "Rs. " ~ ("%.2f"|format(financial_summary.net_payable)), "Previous balance + this bill − payments in period", "primary", "bi bi-cash-stack", entity_href) }}
+        {{ metric_tile("Current Balance", "Rs. " ~ ("%.2f"|format(financial_summary.current_total)), "As per the account summary for this bill period", "primary", "bi bi-cash-stack", entity_href) }}
     </div>
 
     <div class="detail-grid">
@@ -71,11 +72,11 @@
             </div>
         </div>
         <div class="detail-panel">
-            <h3><i class="bi bi-check2-circle"></i> Settlement Overview</h3>
+            <h3><i class="bi bi-calendar-range"></i> Bill Timeframe</h3>
             <div class="detail-list">
-                {{ detail_value("Settled Amount", "Rs. " ~ ("%.2f"|format(bill.settled_amount or 0))) }}
-                {{ detail_value("Outstanding Amount", "Rs. " ~ ("%.2f"|format(bill.outstanding_amount))) }}
-                {{ detail_value("Balance Position", balance_summary.label ~ " - Rs. " ~ ("%.2f"|format(balance_summary.amount))) }}
+                {{ detail_value("Period Start", bill.start_date.strftime('%Y-%m-%d') if bill.start_date else "—") }}
+                {{ detail_value("Period End", bill.end_date.strftime('%Y-%m-%d') if bill.end_date else "—") }}
+                {{ detail_value("Bill Amount", "Rs. " ~ ("%.2f"|format(bill.total_amount or 0))) }}
             </div>
         </div>
     </div>
@@ -117,29 +118,22 @@
                         <td>{{ entry.receipt_number or '-' }}</td>
                         <td>{{ "%.2f"|format(entry.litres) if entry.litres else '-' }}</td>
                         <td>Rs. {{ "%.2f"|format(entry.amount or 0) }}</td>
-                        <td><a href="{{ url_for('diesel.view', id=entry.id) }}" class="btn btn-sm btn-ui-ghost"><i class="bi bi-eye"></i></a></td>
+                        <td>
+                            <a href="{{ url_for('diesel.view', id=entry.id) }}" class="btn btn-sm btn-ui-ghost"><i class="bi bi-eye"></i></a>
+                            {% if current_user.can('ledger.admin') %}
+                            <form method="POST" action="{{ url_for('bills.remove_order', id=bill.id, order_id=entry.id) }}" class="d-inline"
+                                  onsubmit="return confirm('Remove this diesel entry from the bill? The total will recalculate.');">
+                                <button type="submit" class="btn btn-sm btn-ui-danger" title="Remove from bill"><i class="bi bi-x-lg"></i></button>
+                            </form>
+                            {% endif %}
+                        </td>
                     </tr>
                     {% endfor %}
                 </tbody>
                 <tfoot>
-                    <tr>
-                        <td colspan="5" class="text-end">Previous Balance</td>
-                        <td>Rs. {{ "%.2f"|format(pump_opening_balance) }}</td>
-                        <td></td>
-                    </tr>
-                    <tr class="material-subtotal-row">
-                        <td colspan="5"><strong>Add: Diesel this bill</strong></td>
-                        <td><strong>+ Rs. {{ "%.2f"|format(standalone_diesel_rows | sum(attribute='amount')) }}</strong></td>
-                        <td></td>
-                    </tr>
-                    <tr>
-                        <td colspan="5" class="text-end">Less: Payments Made (this period)</td>
-                        <td>− Rs. {{ "%.2f"|format(pump_period_payments) }}</td>
-                        <td></td>
-                    </tr>
                     <tr class="bill-grand-total-row">
-                        <td colspan="5"><strong>Net Payable</strong></td>
-                        <td><strong>Rs. {{ "%.2f"|format(pump_net_payable) }}</strong></td>
+                        <td colspan="5"><strong>Diesel Total (this bill)</strong></td>
+                        <td><strong>Rs. {{ "%.2f"|format(standalone_diesel_rows | sum(attribute='amount')) }}</strong></td>
                         <td></td>
                     </tr>
                 </tfoot>
@@ -180,6 +174,7 @@
                                     <th>Receipt</th>
                                     <th>Delivered</th>
                                     <th>Amount</th>
+                                    {% if current_user.can('ledger.admin') %}<th></th>{% endif %}
                                 </tr>
                             </thead>
                             <tbody>
@@ -190,16 +185,25 @@
                                     <td>{{ order.receipt_number or '-' }}</td>
                                     <td>{{ "%.2f"|format(order.delivered_quantity or order.quantity or 0) }} {{ order.unit|upper }}</td>
                                     <td>Rs. {{ "%.2f"|format(order.billable_amount) }}</td>
+                                    {% if current_user.can('ledger.admin') %}
+                                    <td>
+                                        <form method="POST" action="{{ url_for('bills.remove_order', id=bill.id, order_id=order.id) }}" class="d-inline"
+                                              onsubmit="return confirm('Remove this trip from the bill? The total will recalculate.');">
+                                            <button type="submit" class="btn btn-sm btn-ui-danger" title="Remove from bill"><i class="bi bi-x-lg"></i></button>
+                                        </form>
+                                    </td>
+                                    {% endif %}
                                 </tr>
                                 {% endfor %}
                                 <tr class="material-subtotal-row">
                                     <td colspan="3"><strong>{{ group.material }} Subtotal</strong></td>
                                     <td><strong>{{ "%.2f"|format(group.total_quantity) }} {{ group.unit }}</strong></td>
                                     <td><strong>Rs. {{ "%.2f"|format(group.total_amount) }}</strong></td>
+                                    {% if current_user.can('ledger.admin') %}<td></td>{% endif %}
                                 </tr>
                                 {% if group.contractor_rate %}
                                 <tr>
-                                    <td colspan="5" class="text-end text-muted" style="font-size:0.8125rem;padding-top:4px;padding-bottom:6px;">
+                                    <td colspan="{{ 6 if current_user.can('ledger.admin') else 5 }}" class="text-end text-muted" style="font-size:0.8125rem;padding-top:4px;padding-bottom:6px;">
                                         @ Rs. {{ "%.2f"|format(group.contractor_rate) }}/{{ group.unit }} &times; {{ "%.2f"|format(group.total_quantity) }} {{ group.unit }} = Rs. {{ "%.2f"|format(group.total_amount) }}
                                     </td>
                                 </tr>
@@ -332,6 +336,12 @@
                             {% else %}
                             -
                             {% endif %}
+                            {% if current_user.can('ledger.admin') and bill.entity_type == 'plant' %}
+                            <form method="POST" action="{{ url_for('bills.remove_order', id=bill.id, order_id=loading.id) }}" class="d-inline"
+                                  onsubmit="return confirm('Remove this loading from the bill? The total will recalculate.');">
+                                <button type="submit" class="btn btn-sm btn-ui-danger" title="Remove from bill"><i class="bi bi-x-lg"></i></button>
+                            </form>
+                            {% endif %}
                         </td>
                     </tr>
                     {% endfor %}
@@ -354,6 +364,12 @@
         <div class="bill-site-block">
             <div class="bill-site-head">Vehicle: {{ vg.vehicle_number }}
                 <span class="badge bg-secondary">{{ vg.trip_count }} trip{% if vg.trip_count != 1 %}s{% endif %}</span>
+                {% if current_user.can('ledger.admin') and vg.vehicle %}
+                <form method="POST" action="{{ url_for('bills.remove_vehicle', id=bill.id, vehicle_id=vg.vehicle.id) }}" class="d-inline float-end"
+                      onsubmit="return confirm('Remove ALL records of vehicle {{ vg.vehicle_number }} from this bill? The total will recalculate.');">
+                    <button type="submit" class="btn btn-sm btn-ui-danger"><i class="bi bi-x-circle"></i> Remove Vehicle</button>
+                </form>
+                {% endif %}
             </div>
             <div class="table-responsive">
                 <table class="table detail-table">
@@ -368,6 +384,7 @@
                             <th>Delivery Receipt</th>
                             <th>Receipt Image</th>
                             <th class="text-end">Payable</th>
+                            {% if current_user.can('ledger.admin') %}<th></th>{% endif %}
                         </tr>
                     </thead>
                     <tbody>
@@ -386,6 +403,14 @@
                                 {% else %}-{% endif %}
                             </td>
                             <td class="text-end">Rs. {{ "%.2f"|format(order.remaining_vehicle_payment()) }}</td>
+                            {% if current_user.can('ledger.admin') %}
+                            <td>
+                                <form method="POST" action="{{ url_for('bills.remove_order', id=bill.id, order_id=order.id) }}" class="d-inline"
+                                      onsubmit="return confirm('Remove this trip from the bill? The total will recalculate.');">
+                                    <button type="submit" class="btn btn-sm btn-ui-danger" title="Remove from bill"><i class="bi bi-x-lg"></i></button>
+                                </form>
+                            </td>
+                            {% endif %}
                         </tr>
                         {% endfor %}
                         {% for entry in vg.diesel_rows %}
@@ -397,13 +422,23 @@
                             <td>{{ entry.receipt_number or '-' }}</td>
                             <td></td>
                             <td class="text-end" style="color:#dc2626;">− Rs. {{ "%.2f"|format(entry.amount or 0) }}</td>
+                            {% if current_user.can('ledger.admin') %}
+                            <td>
+                                <form method="POST" action="{{ url_for('bills.remove_order', id=bill.id, order_id=entry.id) }}" class="d-inline"
+                                      onsubmit="return confirm('Remove this diesel entry from the bill? The total will recalculate.');">
+                                    <input type="hidden" name="kind" value="diesel">
+                                    <button type="submit" class="btn btn-sm btn-ui-danger" title="Remove from bill"><i class="bi bi-x-lg"></i></button>
+                                </form>
+                            </td>
+                            {% endif %}
                         </tr>
                         {% endfor %}
                         <tr class="material-subtotal-row">
                             <td colspan="4"><strong>Vehicle {{ vg.vehicle_number }} Subtotal</strong></td>
                             <td><strong>{{ "%.2f"|format(vg.total_delivered) }}</strong></td>
-                            <td colspan="3" class="text-end"><strong>Gross Rs. {{ "%.2f"|format(vg.gross) }} · Diesel − Rs. {{ "%.2f"|format(vg.order_diesel + vg.standalone_diesel) }}</strong></td>
+                            <td colspan="3" class="text-end"><strong>Gross Rs. {{ "%.2f"|format(vg.gross) }}{% if vg.standalone_diesel %} · Fuel-Log Diesel − Rs. {{ "%.2f"|format(vg.standalone_diesel) }}{% endif %}</strong></td>
                             <td class="text-end"><strong>Rs. {{ "%.2f"|format(vg.vehicle_payable) }}</strong></td>
+                            {% if current_user.can('ledger.admin') %}<td></td>{% endif %}
                         </tr>
                     </tbody>
                 </table>
@@ -421,7 +456,6 @@
                             <th>Trips</th>
                             <th>Delivered</th>
                             <th>Gross Amt</th>
-                            <th>Order Diesel</th>
                             <th>Fuel-Log Diesel</th>
                             <th class="text-end">Net Payable</th>
                         </tr>
@@ -433,7 +467,6 @@
                             <td>{{ vg.trip_count }}</td>
                             <td>{{ "%.2f"|format(vg.total_delivered) }}</td>
                             <td>Rs. {{ "%.2f"|format(vg.gross) }}</td>
-                            <td>{% if vg.order_diesel %}− Rs. {{ "%.2f"|format(vg.order_diesel) }}{% else %}—{% endif %}</td>
                             <td>{% if vg.standalone_diesel %}− Rs. {{ "%.2f"|format(vg.standalone_diesel) }}{% else %}—{% endif %}</td>
                             <td class="text-end">Rs. {{ "%.2f"|format(vg.vehicle_payable) }}</td>
                         </tr>
@@ -443,7 +476,6 @@
                             <td><strong>{{ owner_vehicle_groups|sum(attribute='trip_count') }}</strong></td>
                             <td><strong>{{ "%.2f"|format(owner_vehicle_groups|sum(attribute='total_delivered')) }}</strong></td>
                             <td><strong>Rs. {{ "%.2f"|format(owner_vehicle_groups|sum(attribute='gross')) }}</strong></td>
-                            <td><strong>− Rs. {{ "%.2f"|format(owner_vehicle_groups|sum(attribute='order_diesel')) }}</strong></td>
                             <td><strong>− Rs. {{ "%.2f"|format(diesel_deduction_total) }}</strong></td>
                             <td class="text-end"><strong>Rs. {{ "%.2f"|format(trips_gross - diesel_deduction_total) }}</strong></td>
                         </tr>
@@ -454,95 +486,51 @@
     </div>
     {% endif %}
 
+    {% if current_user.can('ledger.admin') and addable_candidates %}
     <div class="detail-panel">
-        <h3><i class="bi bi-calculator"></i> Financial Summary</h3>
-        <div class="table-responsive">
-            <table class="table detail-table">
-                <tbody>
-                    <tr>
-                        <td>Previous Balance (carried forward)</td>
-                        <td class="text-end">Rs. {{ "%.2f"|format(financial_summary.previous_balance) }}</td>
-                    </tr>
-                    <tr>
-                        <td>Add: This Bill ({{ bill.bill_number }})</td>
-                        <td class="text-end">+ Rs. {{ "%.2f"|format(financial_summary.bill_amount) }}</td>
-                    </tr>
-                    {% for txn in financial_summary.period_transactions %}
-                    <tr class="text-muted">
-                        <td style="padding-left:1.5rem;">
-                            {{ txn.date.strftime('%d %b %Y') if txn.date else '-' }} —
-                            {{ txn.type|replace('_', ' ')|title }}{% if txn.reference %} ({{ txn.reference }}){% endif %}
-                        </td>
-                        <td class="text-end">− Rs. {{ "%.2f"|format(txn.amount or 0) }}</td>
-                    </tr>
-                    {% endfor %}
-                    <tr>
-                        <td>Less: Payments / Receipts in bill period</td>
-                        <td class="text-end">− Rs. {{ "%.2f"|format(financial_summary.payments_total) }}</td>
-                    </tr>
-                    <tr class="bill-grand-total-row">
-                        <td><strong>Net Payable</strong></td>
-                        <td class="text-end"><strong>Rs. {{ "%.2f"|format(financial_summary.net_payable) }}</strong></td>
-                    </tr>
-                </tbody>
-            </table>
-        </div>
-    </div>
-
-    <div class="detail-panel">
-        <h3><i class="bi bi-arrow-left-right"></i> Related Transactions</h3>
-        <div class="table-responsive">
-            <table class="table table-striped detail-table">
-                <thead>
-                    <tr>
-                        <th>Date</th>
-                        <th>Type</th>
-                        <th>Amount</th>
-                        <th>Reference</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for transaction in related_transactions %}
-                    <tr>
-                        <td>{{ transaction.date.strftime('%Y-%m-%d') }}</td>
-                        <td>{{ transaction.type|replace('_', ' ')|title }}</td>
-                        <td>Rs. {{ "%.2f"|format(transaction.amount or 0) }}</td>
-                        <td>{{ transaction.reference or "-" }}</td>
-                    </tr>
-                    {% else %}
-                    <tr><td colspan="4" class="text-center">No related transactions found.</td></tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-        </div>
-    </div>
-
-    {% if bill.outstanding_amount > 0 and bill.approval_status == 'approved' %}
-    <div class="detail-panel">
-        <h3><i class="bi bi-cash-coin"></i> Settle Bill</h3>
-        <form method="POST" action="{{ url_for('bills.settle_bill', id=bill.id) }}" class="filter-grid">
-            <div class="form-field">
-                <label class="form-label" for="amount">Amount</label>
-                <input class="form-control" type="number" step="0.01" id="amount" name="amount" value="{{ "%.2f"|format(bill.outstanding_amount) }}">
+        <h3><i class="bi bi-plus-circle"></i> Add Records to this Bill <span class="badge bg-secondary">Admin</span></h3>
+        <p class="text-muted" style="font-size:0.85rem;">Unbilled records for {{ bill.entity_name }}. Select and add — the bill total recalculates.</p>
+        <form method="POST" action="{{ url_for('bills.add_orders', id=bill.id) }}">
+            <div class="table-responsive" style="max-height:320px;overflow-y:auto;">
+                <table class="table detail-table">
+                    <thead>
+                        <tr>
+                            <th></th>
+                            <th>Date</th>
+                            <th>Detail</th>
+                            <th class="text-end">Amount</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for record in addable_candidates %}
+                        <tr>
+                            <td><input type="checkbox" name="order_ids" value="{{ record.id }}"></td>
+                            {% if bill.entity_type in ('contractor', 'vehicle_owner') %}
+                            <td>{{ (record.completion_date or record.order_date).strftime('%Y-%m-%d') }}</td>
+                            <td>{{ record.vehicle.vehicle_number if record.vehicle else '-' }} — {{ record.material_name }} — {{ record.site.name if record.site else '-' }}</td>
+                            <td class="text-end">Rs. {{ "%.2f"|format(record.billable_amount if bill.entity_type == 'contractor' else record.remaining_vehicle_payment()) }}</td>
+                            {% elif bill.entity_type == 'petrol_pump' %}
+                            <td>{{ record.date.strftime('%Y-%m-%d') }}</td>
+                            <td>{{ record.vehicle.vehicle_number if record.vehicle else '-' }} — Receipt {{ record.receipt_number or '-' }}</td>
+                            <td class="text-end">Rs. {{ "%.2f"|format(record.amount or 0) }}</td>
+                            {% else %}
+                            <td>{{ (record.order.completion_date or record.order.order_date).strftime('%Y-%m-%d') if record.order else '-' }}</td>
+                            <td>{{ record.order.vehicle.vehicle_number if record.order and record.order.vehicle else '-' }} — {{ record.order.material_name if record.order else '-' }}</td>
+                            <td class="text-end">Rs. {{ "%.2f"|format(record.plant_amount or 0) }}</td>
+                            {% endif %}
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
             </div>
-            <div class="form-field">
-                <label class="form-label" for="payment_method">Payment Method</label>
-                <select class="form-select" id="payment_method" name="payment_method">
-                    <option value="cash">Cash</option>
-                    <option value="cheque">Cheque</option>
-                    <option value="account">Account Transfer</option>
-                </select>
-            </div>
-            <div class="form-field">
-                <label class="form-label" for="reference">Reference</label>
-                <input class="form-control" type="text" id="reference" name="reference" placeholder="Voucher, cheque, or transfer reference">
-            </div>
-            <div class="filter-actions">
-                <button type="submit" class="btn btn-ui-primary" onclick="return confirm('Record this settlement?')">Settle Bill</button>
-            </div>
+            <button type="submit" class="btn btn-ui-primary mt-2" onclick="return confirm('Add the selected records to this bill?')"><i class="bi bi-plus-lg"></i> Add Selected to Bill</button>
         </form>
     </div>
     {% endif %}
+
+    <div class="detail-panel">
+        {{ financial_section(financial_summary, "Bill Amount (" ~ bill.bill_number ~ ")", table_class="table detail-table", num_class="text-end", heading_style="margin:0 0 10px;color:var(--brand, #0b2742);font-size:1.05rem;", subheading_style="margin:16px 0 6px;color:#475569;font-size:0.9rem;") }}
+    </div>
 </section>
 {% endcall %}
 {% endblock %}

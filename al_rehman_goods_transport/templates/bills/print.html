@@ -1,3 +1,4 @@
+{% from "_financial_summary.html" import financial_section %}
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -439,25 +440,25 @@
                         <span class="meta-label">Entity Type</span>
                         <span class="meta-value">{{ bill.entity_type|replace('_', ' ')|title }}</span>
                     </div>
+                    <div class="meta-row">
+                        <span class="meta-label">Period</span>
+                        <span class="meta-value">{{ bill.start_date.strftime('%d-%m-%Y') if bill.start_date else '—' }} — {{ bill.end_date.strftime('%d-%m-%Y') if bill.end_date else '—' }}</span>
+                    </div>
                 </div>
             </header>
 
             <section class="summary-grid">
                 <div class="summary-card">
-                    <span>Total Amount</span>
+                    <span>Bill Amount</span>
                     <strong>Rs. {{ "%.2f"|format(bill.total_amount) }}</strong>
                 </div>
                 <div class="summary-card">
-                    <span>Settled Amount</span>
-                    <strong>Rs. {{ "%.2f"|format(bill.settled_amount or 0) }}</strong>
+                    <span>Previous Balance</span>
+                    <strong>Rs. {{ "%.2f"|format(financial_summary.previous_balance) }}</strong>
                 </div>
                 <div class="summary-card">
-                    <span>Outstanding</span>
-                    <strong>Rs. {{ "%.2f"|format(bill.outstanding_amount) }}</strong>
-                </div>
-                <div class="summary-card">
-                    <span>Balance Position</span>
-                    <strong>{{ balance_summary.label }} Rs. {{ "%.2f"|format(balance_summary.amount) }}</strong>
+                    <span>Current Balance</span>
+                    <strong>Rs. {{ "%.2f"|format(financial_summary.current_total) }}</strong>
                 </div>
             </section>
 
@@ -465,23 +466,6 @@
             <section class="statement-section">
                 <h3>Notes</h3>
                 <p class="statement-note">{{ bill.notes }}</p>
-            </section>
-            {% endif %}
-
-            {% if bill.entity_type != 'petrol_pump' and financial_summary %}
-            <section class="statement-section">
-                <h3>Financial Summary</h3>
-                <table class="statement-table">
-                    <tbody>
-                        <tr><td>Previous Balance (carried forward)</td><td class="align-right">Rs. {{ "%.2f"|format(financial_summary.previous_balance) }}</td></tr>
-                        <tr><td>Add: This Bill ({{ bill.bill_number }})</td><td class="align-right">+ Rs. {{ "%.2f"|format(financial_summary.bill_amount) }}</td></tr>
-                        {% for txn in financial_summary.period_transactions %}
-                        <tr style="color:#64748b;"><td style="padding-left:1.5rem;">{{ txn.date.strftime('%Y-%m-%d') if txn.date else '-' }} — {{ txn.type|replace('_', ' ')|title }}{% if txn.reference %} ({{ txn.reference }}){% endif %}</td><td class="align-right">− Rs. {{ "%.2f"|format(txn.amount or 0) }}</td></tr>
-                        {% endfor %}
-                        <tr><td>Less: Payments / Receipts in bill period</td><td class="align-right">− Rs. {{ "%.2f"|format(financial_summary.payments_total) }}</td></tr>
-                        <tr class="grand-total-row"><td><strong>Net Payable</strong></td><td class="align-right"><strong>Rs. {{ "%.2f"|format(financial_summary.net_payable) }}</strong></td></tr>
-                    </tbody>
-                </table>
             </section>
             {% endif %}
 
@@ -513,17 +497,11 @@
                         {% endfor %}
                     </tbody>
                 </table>
-                <div class="material-summary-section">
-                    <h4 class="material-summary-heading">Summary</h4>
-                    <table class="statement-table">
-                        <tbody>
-                            <tr><td>Previous Balance</td><td class="align-right">Rs. {{ "%.2f"|format(pump_opening_balance) }}</td></tr>
-                            <tr><td>Add: Diesel this bill ({{ standalone_diesel_rows|length }} entries)</td><td class="align-right">+ Rs. {{ "%.2f"|format(bill.total_amount) }}</td></tr>
-                            <tr><td>Less: Payments Made</td><td class="align-right">− Rs. {{ "%.2f"|format(pump_period_payments) }}</td></tr>
-                            <tr class="grand-total-row"><td><strong>Net Payable</strong></td><td class="align-right"><strong>Rs. {{ "%.2f"|format(pump_net_payable) }}</strong></td></tr>
-                        </tbody>
-                    </table>
-                </div>
+                <table class="statement-table" style="margin-top:8px;">
+                    <tbody>
+                        <tr class="grand-total-row"><td><strong>Diesel Total — this bill ({{ standalone_diesel_rows|length }} entries)</strong></td><td class="align-right"><strong>Rs. {{ "%.2f"|format(bill.total_amount) }}</strong></td></tr>
+                    </tbody>
+                </table>
                 {% else %}
                 <p style="color:var(--muted)">No diesel entries found for this bill.</p>
                 {% endif %}
@@ -547,9 +525,7 @@
                                 <th>Material</th>
                                 <th>Quantity</th>
                                 <th class="align-right">Rate</th>
-                                <th class="align-right">Gross Amt</th>
-                                <th class="align-right">Diesel</th>
-                                <th class="align-right">Net Payable</th>
+                                <th class="align-right">Amount</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -561,9 +537,7 @@
                                 <td>{{ order.material_name }}</td>
                                 <td>{{ "%.2f"|format(order.delivered_quantity or order.quantity or 0) }} {{ order.unit|upper }}</td>
                                 <td class="align-right">Rs. {{ "%.2f"|format(order.vehicle_rate or 0) }}</td>
-                                <td class="align-right">Rs. {{ "%.2f"|format(order.total_vehicle_amount()) }}</td>
-                                <td class="align-right">{% if order.total_diesel_amount() %}- Rs. {{ "%.2f"|format(order.total_diesel_amount()) }}{% else %}—{% endif %}</td>
-                                <td class="align-right"><strong>Rs. {{ "%.2f"|format(order.remaining_vehicle_payment()) }}</strong></td>
+                                <td class="align-right"><strong>Rs. {{ "%.2f"|format(order.total_vehicle_amount()) }}</strong></td>
                             </tr>
                             {% endfor %}
                             {% for entry in vg.diesel_rows %}
@@ -572,16 +546,14 @@
                                 <td colspan="2">Fuel-Log Diesel — {{ entry.petrol_pump.name if entry.petrol_pump else '-' }}</td>
                                 <td>{{ entry.receipt_number or '-' }}</td>
                                 <td>{{ "%.2f"|format(entry.litres or 0) }} L</td>
-                                <td colspan="3"></td>
+                                <td></td>
                                 <td class="align-right" style="color:#dc2626;">− Rs. {{ "%.2f"|format(entry.amount or 0) }}</td>
                             </tr>
                             {% endfor %}
                             <tr class="subtotal-row">
                                 <td colspan="4"><strong>Vehicle {{ vg.vehicle_number }} Subtotal</strong></td>
                                 <td><strong>{{ "%.2f"|format(vg.total_delivered) }}</strong></td>
-                                <td></td>
-                                <td class="align-right"><strong>Rs. {{ "%.2f"|format(vg.gross) }}</strong></td>
-                                <td class="align-right"><strong>- Rs. {{ "%.2f"|format(vg.order_diesel + vg.standalone_diesel) }}</strong></td>
+                                <td class="align-right">{% if vg.standalone_diesel %}<strong>Diesel − Rs. {{ "%.2f"|format(vg.standalone_diesel) }}</strong>{% endif %}</td>
                                 <td class="align-right"><strong>Rs. {{ "%.2f"|format(vg.vehicle_payable) }}</strong></td>
                             </tr>
                         </tbody>
@@ -709,7 +681,6 @@
                                 <th>Trips</th>
                                 <th>Delivered</th>
                                 <th class="align-right">Gross Amt</th>
-                                <th class="align-right">Order Diesel</th>
                                 <th class="align-right">Fuel-Log Diesel</th>
                                 <th class="align-right">Net Payable</th>
                             </tr>
@@ -721,7 +692,6 @@
                                 <td>{{ vg.trip_count }}</td>
                                 <td>{{ "%.2f"|format(vg.total_delivered) }}</td>
                                 <td class="align-right">Rs. {{ "%.2f"|format(vg.gross) }}</td>
-                                <td class="align-right">{% if vg.order_diesel %}- Rs. {{ "%.2f"|format(vg.order_diesel) }}{% else %}—{% endif %}</td>
                                 <td class="align-right">{% if vg.standalone_diesel %}- Rs. {{ "%.2f"|format(vg.standalone_diesel) }}{% else %}—{% endif %}</td>
                                 <td class="align-right">Rs. {{ "%.2f"|format(vg.vehicle_payable) }}</td>
                             </tr>
@@ -731,7 +701,6 @@
                                 <td><strong>{{ owner_vehicle_groups|sum(attribute='trip_count') }}</strong></td>
                                 <td><strong>{{ "%.2f"|format(owner_vehicle_groups|sum(attribute='total_delivered')) }}</strong></td>
                                 <td class="align-right"><strong>Rs. {{ "%.2f"|format(owner_vehicle_groups|sum(attribute='gross')) }}</strong></td>
-                                <td class="align-right"><strong>- Rs. {{ "%.2f"|format(owner_vehicle_groups|sum(attribute='order_diesel')) }}</strong></td>
                                 <td class="align-right"><strong>- Rs. {{ "%.2f"|format(diesel_deduction_total) }}</strong></td>
                                 <td class="align-right"><strong>Rs. {{ "%.2f"|format(trips_gross - diesel_deduction_total) }}</strong></td>
                             </tr>
@@ -832,35 +801,11 @@
             {% endif %}
 
             <section class="statement-section">
-                <h3>Related Transactions</h3>
-                <table class="statement-table">
-                    <thead>
-                        <tr>
-                            <th>Date</th>
-                            <th>Type</th>
-                            <th class="align-right">Amount</th>
-                            <th>Reference</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for transaction in related_transactions %}
-                        <tr>
-                            <td>{{ transaction.date.strftime('%Y-%m-%d') }}</td>
-                            <td>{{ transaction.type|replace('_', ' ')|title }}</td>
-                            <td class="align-right">Rs. {{ "%.2f"|format(transaction.amount or 0) }}</td>
-                            <td>{{ transaction.reference or "-" }}</td>
-                        </tr>
-                        {% else %}
-                        <tr>
-                            <td colspan="4">No related transactions found.</td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
+                {{ financial_section(financial_summary, "Bill Amount (" ~ bill.bill_number ~ ")") }}
             </section>
 
             <footer class="statement-footer">
-                This statement is issued by Al Rehman Goods Transport for operational and settlement review. Please verify the bill number, date range, and supporting activity rows before payment processing.
+                This bill is issued by Al Rehman Goods Transport for the period shown above. Please verify the bill number, the timeframe, and the supporting activity rows before payment processing.
             </footer>
         </div>
     </div>

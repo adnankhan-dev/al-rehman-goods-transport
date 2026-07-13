@@ -27,7 +27,6 @@ async def create_plant(request: Request, _current_user=Depends(require_permissio
             phone=form.phone.data,
             payment_terms=form.payment_terms.data,
             balance=form.balance.data or 0.0,
-            opening_balance=form.opening_balance.data or 0.0,
         )
         flash(request, "Plant created successfully!", "success")
         return RedirectResponse(url=str(request.url_for("plants.plants")), status_code=303)
@@ -88,7 +87,6 @@ async def edit_plant(id: int, request: Request, _current_user=Depends(require_pe
             contact_person=form.contact_person.data,
             phone=form.phone.data,
             payment_terms=form.payment_terms.data,
-            opening_balance=form.opening_balance.data or 0.0,
         )
         flash(request, "Plant updated successfully!", "success")
         return RedirectResponse(url=str(request.url_for("plants.plants")), status_code=303)

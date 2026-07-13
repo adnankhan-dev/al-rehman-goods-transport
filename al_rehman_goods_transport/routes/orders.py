@@ -343,7 +343,11 @@ async def edit_order(id: int, request: Request, current_user=Depends(require_per
 
     if request.method == "POST" and form.validate():
         try:
-            updated = service.update_order(id, service.input_from_form(form, form_data))
+            updated = service.update_order(
+                id,
+                service.input_from_form(form, form_data),
+                allow_billed=current_user.can("ledger.admin"),
+            )
             record_audit(current_user, "update", "order", id, f"Order #{id} updated")
             flash(request, "Order updated successfully!", "success")
             # A still-pending order isn't in the main register, so send the

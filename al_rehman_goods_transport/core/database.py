@@ -70,6 +70,7 @@ def init_db():
     _add_entity_opening_balances()
     _add_transaction_approval_columns()
     _add_bill_approval_columns()
+    _convert_opening_balances_to_transactions()
     _run_one_time_backfills()
 
 
@@ -109,6 +110,73 @@ def _add_entity_opening_balances():
         if "opening_balance" not in columns:
             with engine.begin() as connection:
                 connection.execute(text(f"ALTER TABLE {table} ADD COLUMN opening_balance FLOAT DEFAULT 0"))
+
+
+def _convert_opening_balances_to_transactions():
+    """Retire manually-set opening balances: convert each saved value into a
+    backdated 'previous_balance' ledger transaction so statements and bills
+    compute the previous balance purely from history.
+
+    Idempotent — only non-zero opening_balance rows are converted, and the
+    column is zeroed afterwards. For petrol pumps the running balance already
+    includes the opening (it was folded in on create/update), so only the
+    marker transaction is inserted; for the other entities the opening was a
+    separate display add-on (effective_balance), so it is folded into the
+    stored balance here to keep totals identical."""
+    inspector = inspect(engine)
+    tables = {
+        "contractor": ("contractor_id", True),
+        "vehicle_owner": ("vehicle_owner_id", True),
+        "plant": ("plant_id", True),
+        "vehicle": ("vehicle_id", True),
+        "petrol_pump": ("petrol_pump_id", False),
+    }
+    existing_tables = set(inspector.get_table_names())
+    if "transaction" not in existing_tables:
+        return
+
+    with engine.begin() as connection:
+        for table, (fk_column, fold_into_balance) in tables.items():
+            if table not in existing_tables:
+                continue
+            columns = {column["name"] for column in inspector.get_columns(table)}
+            if "opening_balance" not in columns:
+                continue
+            rows = connection.execute(
+                text(f"SELECT id, opening_balance FROM {table} WHERE COALESCE(opening_balance, 0) <> 0")
+            ).fetchall()
+            for row_id, opening in rows:
+                connection.execute(
+                    text(
+                        f"""
+                        INSERT INTO "transaction"
+                            (date, type, entity_type, entity_id, amount, description,
+                             is_system_generated, approval_status, {fk_column})
+                        VALUES
+                            (:date, 'previous_balance', :entity_type, :entity_id, :amount,
+                             :description, :system, 'approved', :fk_id)
+                        """
+                    ),
+                    {
+                        "date": "2020-01-01 00:00:00",
+                        "entity_type": table,
+                        "entity_id": row_id,
+                        "amount": float(opening),
+                        "description": "Previous balance before ERP",
+                        "system": True,
+                        "fk_id": row_id,
+                    },
+                )
+                if fold_into_balance:
+                    connection.execute(
+                        text(f"UPDATE {table} SET balance = COALESCE(balance, 0) + :amount, opening_balance = 0 WHERE id = :id"),
+                        {"amount": float(opening), "id": row_id},
+                    )
+                else:
+                    connection.execute(
+                        text(f"UPDATE {table} SET opening_balance = 0 WHERE id = :id"),
+                        {"id": row_id},
+                    )
 
 
 def _add_transaction_approval_columns():
@@ -601,8 +669,16 @@ def _backfill_financial_entities():
         pump_payment_exists = session.query(Transaction).filter(Transaction.type == "petrol_pump_payment").first() is not None
         standalone_diesel_exists = session.query(DieselEntry).first() is not None
         if not pump_payment_exists and not standalone_diesel_exists:
+            # Keep any pre-ERP 'previous_balance' postings in the recomputed figure.
             for pump in session.query(PetrolPump).all():
-                pump.balance = sum((entry.amount or 0) for entry in pump.diesel_entries)
+                previous = sum(
+                    (txn.amount or 0)
+                    for txn in session.query(Transaction).filter(
+                        Transaction.type == "previous_balance",
+                        Transaction.petrol_pump_id == pump.id,
+                    ).all()
+                )
+                pump.balance = previous + sum((entry.amount or 0) for entry in pump.diesel_entries)
 
         for transaction in session.query(Transaction).all():
             if transaction.entity_type:

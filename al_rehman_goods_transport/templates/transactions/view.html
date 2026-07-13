@@ -4,18 +4,7 @@
 {% block title %}View Transaction - Al Rehman Goods Transport{% endblock %}
 
 {% block content %}
-{% set transaction_type_label %}
-    {% if transaction.type == 'vehicle_payment' %}Payment to Vehicle
-    {% elif transaction.type == 'vehicle_owner_payment' %}Payment to Vehicle Owner
-    {% elif transaction.type == 'vehicle_owner_receipt' %}Receipt from Vehicle Owner
-    {% elif transaction.type == 'contractor_receipt' %}Receipt from Contractor
-    {% elif transaction.type == 'plant_payment' %}Payment to Plant
-    {% elif transaction.type == 'petrol_pump_payment' %}Payment to Petrol Pump
-    {% elif transaction.type == 'vehicle_advance' %}Vehicle Advance
-    {% elif transaction.type == 'other_expense' %}Other Expense
-    {% elif transaction.type == 'initial_balance' %}Initial Balance
-    {% else %}{{ transaction.type }}{% endif %}
-{% endset %}
+{% set transaction_type_label = transaction.type_label %}
 {% call form_shell("Transaction Details", "Review the source, amount, and linked entity behind this financial movement.", "Finance") %}
 <section class="detail-shell">
     <div class="erp-top-bar">

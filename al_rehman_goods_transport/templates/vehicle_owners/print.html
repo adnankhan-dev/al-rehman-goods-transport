@@ -1,3 +1,4 @@
+{% from "_financial_summary.html" import financial_section %}
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -65,14 +66,17 @@
                     <div class="company-line"><strong style="font-size:1.05rem;color:var(--ink);">{{ owner.name }}</strong></div>
                     {% if owner.phone %}<div class="company-line">{{ owner.phone }}</div>{% endif %}
                     <div class="company-line">Printed: {{ now.strftime('%d %b %Y') }}</div>
+                    {% if date_from or date_to %}
+                    <div class="company-line"><strong>Period: {{ date_from.strftime('%d-%m-%Y') if date_from else 'Start' }} — {{ date_to.strftime('%d-%m-%Y') if date_to else 'To date' }}</strong></div>
+                    {% endif %}
                 </div>
             </header>
 
             <section class="meta">
-                <div class="meta-card"><span>Trips</span><strong>{{ owner_summary.trips }}</strong></div>
-                <div class="meta-card"><span>Gross Amount</span><strong>Rs. {{ "{:,.0f}".format(owner_summary.gross) }}</strong></div>
-                <div class="meta-card"><span>Diesel Deductions</span><strong>Rs. {{ "{:,.0f}".format(owner_summary.diesel + owner_summary.standalone_diesel) }}</strong></div>
-                <div class="meta-card"><span>Outstanding</span><strong>Rs. {{ "{:,.0f}".format(owner_summary.outstanding) }}</strong></div>
+                <div class="meta-card"><span>Previous Balance</span><strong>Rs. {{ "{:,.0f}".format(financial.previous_balance) }}</strong></div>
+                <div class="meta-card"><span>Trips ({{ owner_summary.trips }})</span><strong>Rs. {{ "{:,.0f}".format(owner_summary.gross) }}</strong></div>
+                <div class="meta-card"><span>Fuel-Log Diesel</span><strong>Rs. {{ "{:,.0f}".format(owner_summary.standalone_diesel) }}</strong></div>
+                <div class="meta-card"><span>Current Balance</span><strong>Rs. {{ "{:,.0f}".format(financial.current_total) }}</strong></div>
             </section>
 
             {% for vg in vehicle_groups %}
@@ -91,9 +95,7 @@
                             <th>Material</th>
                             <th class="num">Delivered</th>
                             <th class="num">Rate</th>
-                            <th class="num">Gross Amt</th>
-                            <th class="num">Diesel</th>
-                            <th class="num">Net Payable</th>
+                            <th class="num">Amount</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -106,8 +108,6 @@
                             <td class="num">{{ "%.2f"|format(order.delivered_quantity or order.quantity or 0) }} {{ (order.unit or 'cft')|upper }}</td>
                             <td class="num">{{ "%.2f"|format(order.vehicle_rate or 0) }}</td>
                             <td class="num">{{ "{:,.0f}".format(order.total_vehicle_amount()) }}</td>
-                            <td class="num">{% if order.total_diesel_amount() %}-{{ "{:,.0f}".format(order.total_diesel_amount()) }}{% else %}—{% endif %}</td>
-                            <td class="num">{{ "{:,.0f}".format(order.remaining_vehicle_payment()) }}</td>
                         </tr>
                         {% endfor %}
                         <tr class="subtotal">
@@ -115,8 +115,6 @@
                             <td class="num">{{ "%.2f"|format(vg.total_delivered) }}</td>
                             <td></td>
                             <td class="num">{{ "{:,.0f}".format(vg.gross) }}</td>
-                            <td class="num">-{{ "{:,.0f}".format(vg.order_diesel) }}</td>
-                            <td class="num">{{ "{:,.0f}".format(vg.net_payable) }}</td>
                         </tr>
                     </tbody>
                 </table>
@@ -144,10 +142,10 @@
                 {% endif %}
 
                 <div style="margin:8px 0 4px;text-align:right;font-size:0.85rem;color:var(--ink);">
-                    <strong>Vehicle {{ vg.vehicle_number }} Net:</strong>
-                    Rs. {{ "{:,.0f}".format(vg.net_payable) }}
-                    {% if vg.standalone_diesel %}− Fuel-Log diesel Rs. {{ "{:,.0f}".format(vg.standalone_diesel) }}{% endif %}
-                    {% if vg.advances %}− Advances Rs. {{ "{:,.0f}".format(vg.advances) }}{% endif %}
+                    <strong>Vehicle {{ vg.vehicle_number }}:</strong>
+                    Rs. {{ "{:,.0f}".format(vg.gross) }}
+                    {% if vg.standalone_diesel %}− Rs. {{ "{:,.0f}".format(vg.standalone_diesel) }} (Fuel-Log diesel){% endif %}
+                    {% if vg.advances %}− Rs. {{ "{:,.0f}".format(vg.advances) }} (advances){% endif %}
                     = <strong>Rs. {{ "{:,.0f}".format(vg.vehicle_payable) }}</strong>
                 </div>
             </div>
@@ -166,7 +164,6 @@
                         <th class="num">Trips</th>
                         <th class="num">Delivered</th>
                         <th class="num">Gross Amt</th>
-                        <th class="num">Order Diesel</th>
                         <th class="num">Fuel-Log Diesel</th>
                         <th class="num">Advances</th>
                         <th class="num">Net Payable</th>
@@ -179,7 +176,6 @@
                         <td class="num">{{ vg.trip_count }}</td>
                         <td class="num">{{ "%.2f"|format(vg.total_delivered) }}</td>
                         <td class="num">{{ "{:,.0f}".format(vg.gross) }}</td>
-                        <td class="num">{% if vg.order_diesel %}− {{ "{:,.0f}".format(vg.order_diesel) }}{% else %}—{% endif %}</td>
                         <td class="num">{% if vg.standalone_diesel %}− {{ "{:,.0f}".format(vg.standalone_diesel) }}{% else %}—{% endif %}</td>
                         <td class="num">{% if vg.advances %}− {{ "{:,.0f}".format(vg.advances) }}{% else %}—{% endif %}</td>
                         <td class="num">{{ "{:,.0f}".format(vg.vehicle_payable) }}</td>
@@ -190,7 +186,6 @@
                         <td class="num">{{ vehicle_groups|sum(attribute='trip_count') }}</td>
                         <td class="num">{{ "%.2f"|format(vehicle_groups|sum(attribute='total_delivered')) }}</td>
                         <td class="num">{{ "{:,.0f}".format(vehicle_groups|sum(attribute='gross')) }}</td>
-                        <td class="num">− {{ "{:,.0f}".format(vehicle_groups|sum(attribute='order_diesel')) }}</td>
                         <td class="num">− {{ "{:,.0f}".format(vehicle_groups|sum(attribute='standalone_diesel')) }}</td>
                         <td class="num">− {{ "{:,.0f}".format(vehicle_groups|sum(attribute='advances')) }}</td>
                         <td class="num">{{ "{:,.0f}".format(vehicle_groups|sum(attribute='vehicle_payable')) }}</td>
@@ -209,7 +204,7 @@
                     {% for t in payments %}
                     <tr>
                         <td>{{ t.date.strftime('%d-%m-%Y') }}</td>
-                        <td>Payment to Owner</td>
+                        <td>{{ t.type_label }}</td>
                         <td>{{ (t.payment_method or '-')|title }}</td>
                         <td>{{ t.reference or '-' }}</td>
                         <td class="num">− {{ "{:,.0f}".format(t.amount or 0) }}</td>
@@ -218,7 +213,7 @@
                     {% for t in advances %}
                     <tr>
                         <td>{{ t.date.strftime('%d-%m-%Y') }}</td>
-                        <td>Advance to Vehicle</td>
+                        <td>{{ t.type_label }}</td>
                         <td>{{ (t.payment_method or '-')|title }}</td>
                         <td>{{ t.reference or '-' }}</td>
                         <td class="num">− {{ "{:,.0f}".format(t.amount or 0) }}</td>
@@ -229,19 +224,10 @@
             </table>
             {% endif %}
 
-            <h3 style="margin:22px 0 8px;color:var(--brand);font-size:1rem;">Settlement</h3>
-            <table>
-                <tbody>
-                    <tr><td>Net payable from trips (gross − order diesel)</td><td class="num">Rs. {{ "{:,.0f}".format(owner_summary.net_payable) }}</td></tr>
-                    <tr><td>Less: Fuel-Log diesel</td><td class="num">− Rs. {{ "{:,.0f}".format(owner_summary.standalone_diesel) }}</td></tr>
-                    <tr><td>Less: payments made to owner</td><td class="num">− Rs. {{ "{:,.0f}".format(owner_summary.payments) }}</td></tr>
-                    <tr><td>Less: advances to vehicles (ledger)</td><td class="num">− Rs. {{ "{:,.0f}".format(owner_summary.advances) }}</td></tr>
-                    <tr class="grand"><td>Outstanding payable to {{ owner.name }}</td><td class="num">Rs. {{ "{:,.0f}".format(owner_summary.outstanding) }}</td></tr>
-                </tbody>
-            </table>
+            {{ financial_section(financial, "Trips − Fuel-Log Diesel (this period)", table_class="", num_class="num") }}
 
             <footer class="footer">
-                This statement reflects completed trips for the owner's vehicles. Outstanding = gross vehicle amount − order diesel − advances − Fuel-Log diesel − payments already made.
+                This statement reflects completed trips for the owner's vehicles for the selected period. The Account Summary above shows the previous balance, the period activity, and every receipt and payment with signs.
             </footer>
         </div>
     </div>

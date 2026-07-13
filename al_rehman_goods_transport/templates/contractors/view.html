@@ -11,6 +11,9 @@
             <i class="bi bi-arrow-left"></i> Contractors
         </a>
         <div class="erp-top-bar-actions">
+            <a href="{{ url_for('contractors.print_statement', id=contractor.id, date_from=date_from.strftime('%Y-%m-%d') if date_from else '', date_to=date_to.strftime('%Y-%m-%d') if date_to else '') }}" class="btn btn-sm btn-ui-primary" target="_blank" rel="noopener">
+                <i class="bi bi-printer"></i> Print Statement
+            </a>
             {% if current_user.can('contractors.edit') %}
             <a href="{{ url_for('contractors.edit_contractor', id=contractor.id) }}" class="btn btn-sm btn-ui-edit">
                 <i class="bi bi-pencil"></i> Edit
@@ -23,6 +26,25 @@
             {% endif %}
         </div>
     </div>
+
+    <form method="GET" class="detail-panel" style="margin-top:12px;">
+        <div class="filter-grid filter-grid-four">
+            <div class="form-field">
+                <label class="form-label" for="date_from">Statement From</label>
+                <input class="form-control" type="date" id="date_from" name="date_from" value="{{ date_from.strftime('%Y-%m-%d') if date_from else '' }}">
+            </div>
+            <div class="form-field">
+                <label class="form-label" for="date_to">Statement To</label>
+                <input class="form-control" type="date" id="date_to" name="date_to" value="{{ date_to.strftime('%Y-%m-%d') if date_to else '' }}">
+            </div>
+            <div class="filter-actions" style="align-self:end;">
+                <button type="submit" class="btn btn-ui-primary">Apply Period</button>
+                <a href="{{ url_for('contractors.view_contractor', id=contractor.id) }}" class="btn btn-ui-neutral">Reset</a>
+            </div>
+        </div>
+        <small class="text-muted">The period drives the statement and print: activity before it becomes the Previous Balance.</small>
+    </form>
+
     <div class="collection-overview">
         {{ metric_tile("Current Balance", "Rs. " ~ ("%.2f"|format(contractor.balance)), "Live receivable position after settlements", "primary", "bi bi-cash-coin") }}
         {{ metric_tile("Total Delivered", "Rs. " ~ ("%.2f"|format(total_owed)), "Value of all completed trips on record", "ocean", "bi bi-truck-fill") }}
@@ -87,7 +109,7 @@
                         {% for transaction in related_transactions[:10] %}
                         <tr>
                             <td>{{ transaction.date.strftime('%Y-%m-%d') }}</td>
-                            <td>{{ transaction.type|replace('_', ' ')|title }}</td>
+                            <td>{{ transaction.type_label }}</td>
                             <td>Rs. {{ "%.2f"|format(transaction.amount or 0) }}</td>
                             <td>{{ transaction.reference or "-" }}</td>
                         </tr>

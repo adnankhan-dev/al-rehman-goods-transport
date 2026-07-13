@@ -77,7 +77,7 @@ class LedgerService:
                 entity_name=bill.entity_name,
                 entity_type=bill.entity_type,
                 amount=bill.total_amount or 0.0,
-                status="Settled" if (bill.outstanding_amount or 0) <= 0 else "Open",
+                status="Pending" if bill.approval_status == "pending" else "Posted",
                 reference=bill.bill_number,
                 detail_route="bills.view_bill",
                 balance_delta=0.0,
@@ -92,7 +92,7 @@ class LedgerService:
                 entity_type=transaction.entity_type or "-",
                 amount=transaction.amount or 0.0,
                 status="System" if transaction.is_system_generated else "Posted",
-                reference=transaction.reference or transaction.type,
+                reference=transaction.reference or transaction.type_label,
                 detail_route="transactions.view_transaction",
                 balance_delta=_transaction_delta(transaction.type, transaction.amount or 0.0),
             )
@@ -154,11 +154,12 @@ class LedgerService:
         ledger_entries.sort(key=lambda x: (x.date, x.id), reverse=True)
         pagination = paginate_list(ledger_entries, page, per_page)
 
-        # Balance summary (always from unfiltered bills)
-        contractor_receivables = sum(b.outstanding_amount for b in bills if b.entity_type == "contractor")
-        owner_payables = sum(b.outstanding_amount for b in bills if b.entity_type == "vehicle_owner")
-        plant_payables = sum(b.outstanding_amount for b in bills if b.entity_type == "plant")
-        pump_payables = sum(b.outstanding_amount for b in bills if b.entity_type == "petrol_pump")
+        # Balance position straight from the maintained entity balances (the
+        # ledger is the single money record now that bill settlement is retired).
+        contractor_receivables = sum(float(c.balance or 0) for c in Contractor.query.all())
+        owner_payables = sum(float(o.balance or 0) for o in VehicleOwner.query.all())
+        plant_payables = sum(float(p.balance or 0) for p in Plant.query.all())
+        pump_payables = sum(float(p.balance or 0) for p in PetrolPump.query.all())
         net_position = contractor_receivables - owner_payables - plant_payables - pump_payables
 
         fe_tx_count = len(fe_transactions)
@@ -169,7 +170,7 @@ class LedgerService:
             "ledger_pagination": pagination,
             "bill_count": len(bills),
             "transaction_count": len(transactions) + fe_tx_count,
-            "open_bill_amount": sum(b.outstanding_amount for b in bills),
+            "open_bill_amount": sum(float(b.total_amount or 0) for b in bills),
             "posted_transaction_amount": sum(t.amount or 0.0 for t in transactions) + fe_tx_amount,
             "current_company_balance": company_balance,
             "balance_summary_panel": {

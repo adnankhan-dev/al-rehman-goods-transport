@@ -222,21 +222,53 @@ async def reject_bill(id: int, request: Request, current_user=Depends(require_pe
     return RedirectResponse(url=str(request.url_for("ledger.pending_approvals")), status_code=303)
 
 
-@router.post("/bills/{id}/settle", name="bills.settle_bill")
-async def settle_bill(id: int, request: Request, current_user=Depends(require_permission("ledger.edit"))):
+# The settle-bill flow was retired: bills are period documents; payments and
+# receipts live only in the ledger and reflect in each bill's Account Summary.
+
+
+@router.post("/bills/{id}/remove-order/{order_id}", name="bills.remove_order")
+async def remove_order_from_bill(id: int, order_id: int, request: Request, current_user=Depends(require_permission("ledger.admin"))):
     form_data = await request.form()
-    amount = form_data.get("amount")
-    payment_method = form_data.get("payment_method")
-    reference = form_data.get("reference")
     service = BillingService()
     try:
-        bill = service.settle_bill(id, amount, payment_method=payment_method, reference=reference)
+        bill = service.remove_order_from_bill(id, order_id, kind=(form_data.get("kind") or None))
     except NotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except ValidationError as exc:
         flash(request, str(exc), "warning")
         return RedirectResponse(url=str(request.url_for("bills.view_bill", id=id)), status_code=303)
+    record_audit(current_user, "update", "bill", bill.id, f"Removed record #{order_id} from bill {bill.bill_number}; new total Rs. {bill.total_amount:,.2f}")
+    flash(request, f"Record removed from bill {bill.bill_number}. Bill total recalculated.", "success")
+    return RedirectResponse(url=str(request.url_for("bills.view_bill", id=id)), status_code=303)
 
-    record_audit(current_user, "settle", "bill", bill.id, f"Bill {bill.bill_number} settled Rs. {float(amount or 0):,.2f}")
-    flash(request, f"Recorded settlement for bill {bill.bill_number}.", "success")
+
+@router.post("/bills/{id}/remove-vehicle/{vehicle_id}", name="bills.remove_vehicle")
+async def remove_vehicle_from_bill(id: int, vehicle_id: int, request: Request, current_user=Depends(require_permission("ledger.admin"))):
+    service = BillingService()
+    try:
+        bill, removed = service.remove_vehicle_from_bill(id, vehicle_id)
+    except NotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValidationError as exc:
+        flash(request, str(exc), "warning")
+        return RedirectResponse(url=str(request.url_for("bills.view_bill", id=id)), status_code=303)
+    record_audit(current_user, "update", "bill", bill.id, f"Removed vehicle #{vehicle_id} ({removed} records) from bill {bill.bill_number}")
+    flash(request, f"Removed {removed} record(s) of the vehicle from bill {bill.bill_number}.", "success")
+    return RedirectResponse(url=str(request.url_for("bills.view_bill", id=id)), status_code=303)
+
+
+@router.post("/bills/{id}/add-orders", name="bills.add_orders")
+async def add_orders_to_bill(id: int, request: Request, current_user=Depends(require_permission("ledger.admin"))):
+    form_data = await request.form()
+    order_ids = _parse_int_list(form_data.getlist("order_ids"))
+    service = BillingService()
+    try:
+        bill, added = service.add_orders_to_bill(id, order_ids)
+    except NotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValidationError as exc:
+        flash(request, str(exc), "warning")
+        return RedirectResponse(url=str(request.url_for("bills.view_bill", id=id)), status_code=303)
+    record_audit(current_user, "update", "bill", bill.id, f"Added {added} trip(s) to bill {bill.bill_number}; new total Rs. {bill.total_amount:,.2f}")
+    flash(request, f"Added {added} trip(s) to bill {bill.bill_number}. Bill total recalculated.", "success")
     return RedirectResponse(url=str(request.url_for("bills.view_bill", id=id)), status_code=303)

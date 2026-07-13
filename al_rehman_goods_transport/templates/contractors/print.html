@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Plant Statement — {{ plant.name }}</title>
+    <title>Contractor Statement — {{ contractor.name }}</title>
     <style>
         :root { --ink:#0f172a; --muted:#475569; --soft:#e2e8f0; --panel:#f8fafc; --brand:#0b2742; --accent:#d97706; }
         * { box-sizing: border-box; }
@@ -17,17 +17,15 @@
         .company-name { font-size:1.5rem; font-weight:800; color:var(--brand); }
         .company-line { color:var(--muted); font-size:0.82rem; line-height:1.6; }
         .kicker { text-transform:uppercase; letter-spacing:0.14em; color:var(--accent); font-size:0.74rem; font-weight:700; }
-        .meta { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:12px; margin:14px 0; }
+        .meta { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:12px; margin:18px 0; }
         .meta-card { border:1px solid var(--soft); border-radius:14px; background:var(--panel); padding:12px 14px; }
         .meta-card span { display:block; color:var(--muted); font-size:0.78rem; margin-bottom:4px; }
         .meta-card strong { font-size:1.05rem; }
-        h3.section { font-size:1rem; color:var(--brand); margin:22px 0 8px; }
         table { width:100%; border-collapse:collapse; border:1px solid var(--soft); }
-        th, td { border-bottom:1px solid var(--soft); padding:6px 8px; text-align:left; font-size:0.8rem; }
+        th, td { border-bottom:1px solid var(--soft); padding:6px 8px; text-align:left; font-size:0.78rem; }
         th { background:#f1f5f9; color:var(--brand); }
         td.num, th.num { text-align:right; }
         .subtotal td { background:#f1f5f9; font-weight:700; }
-        .grand td { background:var(--brand); color:#fff; font-weight:700; }
         .footer { margin-top:24px; padding-top:16px; border-top:1px solid var(--soft); color:var(--muted); font-size:0.85rem; }
         @media print {
             @page { size:A4; margin:12mm 10mm; }
@@ -35,6 +33,7 @@
             .shell { box-shadow:none; border-radius:0; max-width:none; }
             .actions { display:none; }
             .body { padding:0; }
+            th, td { font-size:0.64rem; padding:3px 5px; }
             thead { display:table-header-group; }
             tr { break-inside:avoid; }
         }
@@ -48,76 +47,75 @@
         <div class="body">
             <header class="letterhead">
                 <div>
-                    <div class="kicker">Plant Statement</div>
+                    <div class="kicker">Contractor Statement</div>
                     <div class="company-name">{{ letterhead.name if letterhead else 'Al Rehman Goods Transport' }}</div>
                     <div class="company-line">{{ letterhead.address if letterhead else 'Bahtr Mor Wah Cantt' }}</div>
                     <div class="company-line">{{ letterhead.contact1 if letterhead else 'Contact No. Ahsan Niazi 0307-2342827' }}</div>
                     <div class="company-line">{{ letterhead.contact2 if letterhead else 'Inam Khan - 0301-5749086' }}</div>
                 </div>
                 <div style="text-align:right;">
-                    <div class="company-line"><strong style="font-size:1.05rem;color:var(--ink);">{{ plant.name }}</strong></div>
-                    {% if period and (period.date_from or period.date_to) %}
-                    <div class="company-line">Period: {{ period.date_from or 'start' }} to {{ period.date_to or 'date' }}</div>
-                    {% endif %}
+                    <div class="company-line"><strong style="font-size:1.05rem;color:var(--ink);">{{ contractor.name }}</strong></div>
+                    {% if contractor.phone %}<div class="company-line">{{ contractor.phone }}</div>{% endif %}
                     <div class="company-line">Printed: {{ now.strftime('%d %b %Y') }}</div>
+                    {% if date_from or date_to %}
+                    <div class="company-line"><strong>Period: {{ date_from.strftime('%d-%m-%Y') if date_from else 'Start' }} — {{ date_to.strftime('%d-%m-%Y') if date_to else 'To date' }}</strong></div>
+                    {% endif %}
                 </div>
             </header>
 
             <section class="meta">
-                <div class="meta-card"><span>Previous Balance</span><strong>Rs. {{ "{:,.0f}".format(opening_balance) }}</strong></div>
-                <div class="meta-card"><span>Plant Charges</span><strong>Rs. {{ "{:,.0f}".format(total_charges) }}</strong></div>
-                <div class="meta-card"><span>Payments Made</span><strong>Rs. {{ "{:,.0f}".format(payments_total) }}</strong></div>
-                <div class="meta-card"><span>Net Payable</span><strong>Rs. {{ "{:,.0f}".format(net_payable) }}</strong></div>
+                <div class="meta-card"><span>Previous Balance</span><strong>Rs. {{ "{:,.0f}".format(financial.previous_balance) }}</strong></div>
+                <div class="meta-card"><span>Trips ({{ completed_orders|length }})</span><strong>Rs. {{ "{:,.0f}".format(period_amount) }}</strong></div>
+                <div class="meta-card"><span>Received in Period</span><strong>Rs. {{ "{:,.0f}".format(financial.receipts_total) }}</strong></div>
+                <div class="meta-card"><span>Current Balance</span><strong>Rs. {{ "{:,.0f}".format(financial.current_total) }}</strong></div>
             </section>
 
-            <h3 class="section">Loadings</h3>
+            <h3 style="margin:4px 0 8px;color:var(--brand);font-size:1rem;">Delivered Trips</h3>
             <table>
                 <thead>
                     <tr>
-                        <th>Date</th><th>Order</th><th>Vehicle</th><th>Material</th><th class="num">Load Qty</th><th class="num">Plant Amount</th>
+                        <th>Date</th>
+                        <th>Vehicle</th>
+                        <th>From Site</th>
+                        <th>To Site</th>
+                        <th>Material</th>
+                        <th>Receipt</th>
+                        <th class="num">Delivered</th>
+                        <th class="num">Rate</th>
+                        <th class="num">Amount</th>
                     </tr>
                 </thead>
                 <tbody>
-                    {% for l in loadings %}
+                    {% for order in completed_orders %}
                     <tr>
-                        <td>{{ (l.order.completion_date or l.order.order_date).strftime('%d-%m-%Y') if l.order else '-' }}</td>
-                        <td>#{{ l.order_id }}</td>
-                        <td>{{ l.order.vehicle.vehicle_number if l.order and l.order.vehicle else '-' }}</td>
-                        <td>{{ l.order.material_name if l.order else '-' }}</td>
-                        <td class="num">{{ "%.2f"|format(l.load_quantity or 0) }}</td>
-                        <td class="num">{{ "{:,.0f}".format(l.plant_amount or 0) }}</td>
+                        <td>{{ (order.completion_date or order.order_date).strftime('%d-%m-%Y') }}</td>
+                        <td>{{ order.vehicle.vehicle_number if order.vehicle else '-' }}</td>
+                        <td>{{ order.from_site.name if order.from_site else '-' }}</td>
+                        <td>{{ order.site.name if order.site else '-' }}</td>
+                        <td>{{ order.material_name }}</td>
+                        <td>{{ order.receipt_number or '-' }}</td>
+                        <td class="num">{{ "%.2f"|format(order.delivered_quantity or order.quantity or 0) }} {{ (order.unit or 'cft')|upper }}</td>
+                        <td class="num">{{ "%.2f"|format(order.contractor_rate or 0) }}</td>
+                        <td class="num">{{ "{:,.0f}".format(order.billable_amount) }}</td>
                     </tr>
                     {% else %}
-                    <tr><td colspan="6" style="text-align:center;">No loadings for this plant in the period.</td></tr>
+                    <tr><td colspan="9" style="text-align:center;">No delivered trips in this period.</td></tr>
                     {% endfor %}
-                    <tr class="subtotal"><td colspan="5">Total Plant Charges</td><td class="num">Rs. {{ "{:,.0f}".format(total_charges) }}</td></tr>
-                </tbody>
-            </table>
-
-            {% if payments %}
-            <h3 class="section">Payments Made to Plant</h3>
-            <table>
-                <thead>
-                    <tr><th>Date</th><th>Method</th><th>Reference</th><th class="num">Amount</th></tr>
-                </thead>
-                <tbody>
-                    {% for t in payments %}
-                    <tr>
-                        <td>{{ t.date.strftime('%d-%m-%Y') }}</td>
-                        <td>{{ (t.payment_method or '-')|title }}</td>
-                        <td>{{ t.reference or '-' }}</td>
-                        <td class="num">− {{ "{:,.0f}".format(t.amount or 0) }}</td>
+                    {% if completed_orders %}
+                    <tr class="subtotal">
+                        <td colspan="6">Total Trips</td>
+                        <td class="num">{{ "%.2f"|format(completed_orders|sum(attribute='delivered_quantity') or 0) }}</td>
+                        <td></td>
+                        <td class="num">{{ "{:,.0f}".format(period_amount) }}</td>
                     </tr>
-                    {% endfor %}
-                    <tr class="subtotal"><td colspan="3">Total Paid</td><td class="num">− {{ "{:,.0f}".format(payments_total) }}</td></tr>
+                    {% endif %}
                 </tbody>
             </table>
-            {% endif %}
 
-            {{ financial_section(financial, "Plant Charges (this period)", table_class="", num_class="num") }}
+            {{ financial_section(financial, "Trips Delivered (this period)", table_class="", num_class="num") }}
 
             <footer class="footer">
-                The Account Summary above shows the previous balance, the plant charges for the period, and every receipt and payment with signs.
+                This statement covers the delivered trips for the selected period. The Account Summary shows the previous balance, the period trips, and every receipt and payment with signs.
             </footer>
         </div>
     </div>

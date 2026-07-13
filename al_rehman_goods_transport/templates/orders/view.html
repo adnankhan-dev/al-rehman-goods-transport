@@ -55,11 +55,6 @@
         <div class="detail-panel">
             <h3><i class="bi bi-wrench-adjustable-circle-fill"></i> Operational Costs</h3>
             <div class="detail-list">
-                {{ detail_value("Advance Amount", "Rs. " ~ order.advance_amount) }}
-                {{ detail_value("Diesel Amount", "Rs. " ~ order.diesel_amount) }}
-                {{ detail_value("Diesel Litres", order.primary_diesel_entry.litres if order.primary_diesel_entry and order.primary_diesel_entry.litres is not none else "-") }}
-                {{ detail_value("Petrol Pump", order.primary_diesel_entry.petrol_pump.name if order.primary_diesel_entry and order.primary_diesel_entry.petrol_pump else "-") }}
-                {{ detail_value("Diesel Receipt", order.primary_diesel_entry.receipt_number if order.primary_diesel_entry and order.primary_diesel_entry.receipt_number else "-") }}
                 {{ detail_value("Commission", "Rs. " ~ order.commission) }}
                 {{ detail_value("Plant Amount", "Rs. " ~ order.plant_amount) }}
                 {{ detail_value("Loading Image", order.primary_loading.loading_image if order.primary_loading and order.primary_loading.loading_image else "-") }}
@@ -72,13 +67,23 @@
                 {{ detail_value("Contractor Rate", "Rs. " ~ order.contractor_rate) }}
                 {{ detail_value("Contractor Amount", "Rs. " ~ ("%.2f"|format(order.total_contractor_amount()))) }}
                 {{ detail_value("Vehicle Amount", "Rs. " ~ ("%.2f"|format(order.total_vehicle_amount()))) }}
-                {{ detail_value("Remaining Vehicle Payable", "Rs. " ~ ("%.2f"|format(order.remaining_vehicle_payment()))) }}
-                {{ detail_value("Total Diesel Amount", "Rs. " ~ ("%.2f"|format(order.total_diesel_amount()))) }}
-                {{ detail_value("Total Advance Amount", "Rs. " ~ ("%.2f"|format(order.total_advance_amount()))) }}
+                {{ detail_value("Vehicle Payable", "Rs. " ~ ("%.2f"|format(order.remaining_vehicle_payment()))) }}
                 {{ detail_value("Profit Amount", "Rs. " ~ ("%.2f"|format(order.profit_amount()))) }}
             </div>
         </div>
     </div>
+    {% if current_user.can('orders.approve') or current_user.can('users.manage') %}
+    <div class="detail-panel">
+        <h3><i class="bi bi-person-badge"></i> Entry &amp; Approval Record</h3>
+        <div class="detail-list">
+            {{ detail_value("Entered By", order.entered_by_name or "-") }}
+            {{ detail_value("Entered At", order.created_at.strftime('%Y-%m-%d %I:%M %p') if order.created_at else "-") }}
+            {{ detail_value("Approved By", (order.approved_by.username if order.approved_by else "-")) }}
+            {{ detail_value("Approved At", order.approved_at.strftime('%Y-%m-%d %I:%M %p') if order.approved_at else "-") }}
+            {{ detail_value("Approval Status", (order.approval_status or "approved")|title) }}
+        </div>
+    </div>
+    {% endif %}
     <div class="detail-panel">
         <h3><i class="bi bi-file-earmark-check-fill"></i> Billing Status</h3>
         <div class="detail-list">

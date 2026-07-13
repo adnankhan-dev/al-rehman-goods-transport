@@ -59,5 +59,26 @@ class Transaction(db.Model):
             return self.petrol_pump.name
         return "-"
 
+    @property
+    def type_label(self):
+        """Human wording for statements and bills: 'Received from <name>' /
+        'Payment paid to <name>' instead of the raw transaction type."""
+        transaction_type = self.type or ""
+        name = self.entity_name
+        has_name = name and name != "-"
+        if transaction_type == "previous_balance":
+            return f"Previous balance — {name}" if has_name else "Previous balance"
+        if transaction_type == "vehicle_advance":
+            return f"Advance paid to {name}" if has_name else "Vehicle advance"
+        if transaction_type == "initial_balance":
+            return "Initial balance"
+        if transaction_type == "other_expense":
+            return "Other expense"
+        if transaction_type.endswith("_receipt") or transaction_type == "receipt":
+            return f"Received from {name}" if has_name else "Received"
+        if transaction_type.endswith("_payment") or transaction_type == "payment":
+            return f"Payment paid to {name}" if has_name else "Payment paid"
+        return transaction_type.replace("_", " ").title()
+
     def __repr__(self):
         return f"<Transaction {self.type} {self.amount}>"

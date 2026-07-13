@@ -11,6 +11,7 @@ from ..models import Bill, DieselEntry, Order, OrderLoading
 from ..repositories import BillingRepository
 from .exceptions import NotFoundError, ValidationError
 from .finance_summary import balance_summary
+from .financials import entity_period_financials
 from .transactions import TransactionInput, TransactionService
 
 
@@ -84,7 +85,8 @@ class BillingService:
         activity_end_date = bill.end_date or bill.bill_date
 
         if bill.entity_type == "petrol_pump" and bill.petrol_pump_id:
-            diesel_activity_rows = self.billing.petrol_pump_activity_rows(bill.petrol_pump_id, bill.start_date, activity_end_date)
+            # Order-linked diesel is retired — pump bills are built from the
+            # Fuel Log entries only.
             by_bill = list(self.session.query(DieselEntry).filter(DieselEntry.bill_id == bill.id).order_by(DieselEntry.date.desc()).all())
             standalone_diesel_rows = by_bill if by_bill else self.billing.standalone_diesel_rows(bill.petrol_pump_id, bill.start_date, activity_end_date)
 
@@ -136,61 +138,24 @@ class BillingService:
             owner_vehicle_groups = group_owner_activity_by_vehicle(vehicle_owner_activity_rows, vehicle_owner_diesel_rows)
         related_transactions = self.related_transactions(bill)
 
-        # Petrol pump bill: previous balance + this bill's diesel - payments made
-        # within the bill period = net payable.
-        pump_opening_balance = 0.0
-        pump_period_payments = 0.0
-        pump_net_payable = 0.0
-        if bill.entity_type == "petrol_pump":
-            pump_opening_balance = float(getattr(bill.petrol_pump, "opening_balance", 0) or 0) if bill.petrol_pump else 0.0
-
-            def _as_date(value):
-                return value.date() if hasattr(value, "date") else value
-
-            start = _as_date(bill.start_date) if bill.start_date else None
-            end = _as_date(bill.end_date) if bill.end_date else None
-            for txn in related_transactions:
-                if txn.type != "petrol_pump_payment":
-                    continue
-                txn_date = _as_date(txn.date) if txn.date else None
-                if start and txn_date and txn_date < start:
-                    continue
-                if end and txn_date and txn_date > end:
-                    continue
-                pump_period_payments += float(txn.amount or 0)
-            pump_net_payable = pump_opening_balance + float(bill.total_amount or 0) - pump_period_payments
-
-        # Generic financial summary for EVERY bill: previous (pre-ERP) balance +
-        # this bill's amount, less the payments/receipts recorded during the bill
-        # tenure = net payable. Mirrors the pump statement for all entity types.
-        entity_obj = bill.contractor or bill.plant or bill.petrol_pump or bill.vehicle_owner
-
-        def _as_date(value):
-            return value.date() if hasattr(value, "date") else value
-
-        _start = _as_date(bill.start_date) if bill.start_date else None
-        _end = _as_date(bill.end_date) if bill.end_date else None
-        period_transactions = []
-        for txn in related_transactions:
-            txn_date = _as_date(txn.date) if txn.date else None
-            if _start and txn_date and txn_date < _start:
-                continue
-            if _end and txn_date and txn_date > _end:
-                continue
-            period_transactions.append(txn)
-        previous_balance = float(getattr(entity_obj, "opening_balance", 0) or 0) if entity_obj else 0.0
-        period_payments_total = sum(float(t.amount or 0) for t in period_transactions)
-        financial_summary = {
-            "previous_balance": previous_balance,
-            "bill_amount": float(bill.total_amount or 0),
-            "period_transactions": period_transactions,
-            "payments_total": period_payments_total,
-            "net_payable": previous_balance + float(bill.total_amount or 0) - period_payments_total,
-        }
+        # Financial picture for EVERY bill, computed live at render time from
+        # the ledger: previous balance = all activity before the bill period
+        # (excluding this bill's own rows); receipts/payments inside the period
+        # fall into this bill automatically, even when posted in back dates.
+        financial_summary = entity_period_financials(
+            bill.entity_type,
+            self._bill_entity_id(bill),
+            start_date=bill.start_date,
+            end_date=bill.end_date,
+            exclude_bill_id=bill.id,
+            period_activity_total=float(bill.total_amount or 0),
+            session=self.session,
+        )
 
         return {
             "bill": bill,
             "financial_summary": financial_summary,
+            "addable_candidates": self.billable_candidates_for_bill(bill),
             "orders": linked_orders,
             "orders_grouped": orders_grouped,
             "orders_by_site": orders_by_site,
@@ -198,9 +163,6 @@ class BillingService:
             "linked_trip_count": len(linked_orders),
             "total_quantity": sum((order.delivered_quantity or order.quantity or 0) for order in linked_orders),
             "related_transactions": related_transactions,
-            "pump_opening_balance": pump_opening_balance,
-            "pump_period_payments": pump_period_payments,
-            "pump_net_payable": pump_net_payable,
             "diesel_activity_rows": diesel_activity_rows,
             "standalone_diesel_rows": standalone_diesel_rows,
             "loading_activity_rows": loading_activity_rows,
@@ -225,16 +187,19 @@ class BillingService:
 
         candidate_vehicle_owner_diesel_entries = []
 
+        # The bill timeframe drives the FINANCIAL section only — it does not
+        # limit which unbilled records can be picked (backdated trips/entries
+        # must remain billable), so the pick lists are date-unbounded.
         if selected_entity:
             if entity_type == "contractor":
-                candidate_orders = self.billing.contractor_billable_orders(entity_id, site_ids, material_type, start_date, end_date)
+                candidate_orders = self.billing.contractor_billable_orders(entity_id, site_ids, material_type)
             elif entity_type == "petrol_pump":
-                candidate_diesel_entries = self.billing.unbilled_diesel_entries(entity_id, start_date, end_date)
+                candidate_diesel_entries = self.billing.unbilled_diesel_entries(entity_id)
             elif entity_type == "plant":
-                candidate_plant_loadings = self.billing.unbilled_plant_loadings(entity_id, start_date, end_date)
+                candidate_plant_loadings = self.billing.unbilled_plant_loadings(entity_id)
             elif entity_type == "vehicle_owner":
-                candidate_orders = self.billing.vehicle_owner_billable_orders(entity_id, start_date, end_date)
-                candidate_vehicle_owner_diesel_entries = self.billing.diesel_entries_for_vehicle_owner(entity_id, start_date, end_date)
+                candidate_orders = self.billing.vehicle_owner_billable_orders(entity_id)
+                candidate_vehicle_owner_diesel_entries = self.billing.diesel_entries_for_vehicle_owner(entity_id)
 
         if entity_type == "contractor":
             candidate_total_amount = sum(o.billable_amount for o in candidate_orders)
@@ -270,11 +235,47 @@ class BillingService:
             "entity_balance_summary": balance_summary(entity_type, getattr(selected_entity, "balance", 0.0) if selected_entity else 0.0),
             "candidate_total_amount": candidate_total_amount,
             "candidate_total_quantity": candidate_total_quantity,
+            "suggested_start_date": self.suggested_start_date(entity_type, entity_id) if selected_entity else None,
         }
+
+    def suggested_start_date(self, entity_type, entity_id):
+        """Day after the entity's last bill period ended — the default start
+        for the next bill so periods chain without gaps. None for a first bill."""
+        from datetime import timedelta
+
+        if not entity_id:
+            return None
+        field = {
+            "contractor": Bill.contractor_id,
+            "plant": Bill.plant_id,
+            "petrol_pump": Bill.petrol_pump_id,
+            "vehicle_owner": Bill.vehicle_owner_id,
+        }.get(entity_type)
+        if field is None:
+            return None
+        last_bill = (
+            self.session.query(Bill)
+            .filter(field == entity_id, Bill.end_date.isnot(None))
+            .order_by(Bill.end_date.desc(), Bill.id.desc())
+            .first()
+        )
+        if last_bill is None:
+            return None
+        last_end = last_bill.end_date.date() if hasattr(last_bill.end_date, "date") else last_bill.end_date
+        return last_end + timedelta(days=1)
 
     def create_bill(self, entity_type, entity_id, order_ids=None, entry_ids=None, loading_ids=None, site_ids=None, material_type=None, start_date=None, end_date=None, notes=None):
         entity = self._get_entity(entity_type, entity_id)
         bill_date = datetime.now(UTC).replace(tzinfo=None)
+
+        # The bill timeframe is mandatory: it drives the financial section
+        # (previous balance as on the day before the start; receipts/payments
+        # dated inside the period — even posted later in back dates — reflect
+        # in this bill automatically).
+        if not start_date or not end_date:
+            raise ValidationError("Select the bill timeframe (start and end dates) before creating the bill.")
+        if (end_date.date() if hasattr(end_date, "date") else end_date) < (start_date.date() if hasattr(start_date, "date") else start_date):
+            raise ValidationError("The bill end date cannot be before its start date.")
 
         selected_orders = []
         selected_entries = []
@@ -283,7 +284,7 @@ class BillingService:
         if entity_type == "contractor":
             if not order_ids:
                 raise ValidationError("Select at least one delivered trip to create a bill.")
-            candidates = self.billing.contractor_billable_orders(entity_id, site_ids, material_type, start_date, end_date)
+            candidates = self.billing.contractor_billable_orders(entity_id, site_ids, material_type)
             eligible = {o.id for o in candidates}
             if any(oid not in eligible for oid in order_ids):
                 raise ValidationError("Some selected trips are no longer available for billing.")
@@ -293,7 +294,7 @@ class BillingService:
         elif entity_type == "petrol_pump":
             if not entry_ids:
                 raise ValidationError("Select at least one diesel entry to create a bill.")
-            candidates = self.billing.unbilled_diesel_entries(entity_id, start_date, end_date)
+            candidates = self.billing.unbilled_diesel_entries(entity_id)
             eligible = {e.id for e in candidates}
             if any(eid not in eligible for eid in entry_ids):
                 raise ValidationError("Some selected diesel entries are no longer available for billing.")
@@ -305,7 +306,7 @@ class BillingService:
         elif entity_type == "plant":
             if not loading_ids:
                 raise ValidationError("Select at least one loading record to create a bill.")
-            candidates = self.billing.unbilled_plant_loadings(entity_id, start_date, end_date)
+            candidates = self.billing.unbilled_plant_loadings(entity_id)
             eligible = {l.id for l in candidates}
             if any(lid not in eligible for lid in loading_ids):
                 raise ValidationError("Some selected loadings are no longer available for billing.")
@@ -317,14 +318,14 @@ class BillingService:
         elif entity_type == "vehicle_owner":
             if not order_ids:
                 raise ValidationError("Select at least one order to create a bill.")
-            candidates = self.billing.vehicle_owner_billable_orders(entity_id, start_date, end_date)
+            candidates = self.billing.vehicle_owner_billable_orders(entity_id)
             eligible = {o.id for o in candidates}
             if any(oid not in eligible for oid in order_ids):
                 raise ValidationError("Some selected orders are no longer available for billing.")
             selected_orders = [o for o in candidates if o.id in set(order_ids)]
             trips_gross = sum(o.remaining_vehicle_payment() for o in selected_orders)
             # Auto-attach all unlinked diesel entries for the owner's vehicles in the period
-            diesel_deductions = self.billing.diesel_entries_for_vehicle_owner(entity_id, start_date, end_date)
+            diesel_deductions = self.billing.diesel_entries_for_vehicle_owner(entity_id)
             diesel_total = sum(d.amount or 0 for d in diesel_deductions)
             total_amount = trips_gross - diesel_total
 
@@ -370,48 +371,9 @@ class BillingService:
             raise
         return bill, selected_orders
 
-    def settle_bill(self, bill_id, amount, payment_method=None, reference=None):
-        bill = self.get_bill(bill_id)
-        if bill.approval_status == "pending":
-            raise ValidationError("This bill is awaiting approval and cannot be settled yet.")
-        settlement_amount = float(amount or 0.0)
-        if settlement_amount <= 0:
-            raise ValidationError("Settlement amount must be greater than zero.")
-        if settlement_amount > bill.outstanding_amount:
-            raise ValidationError("Settlement amount cannot exceed the outstanding bill amount.")
-
-        transaction_type = {
-            "contractor": "contractor_receipt",
-            "plant": "plant_payment",
-            "petrol_pump": "petrol_pump_payment",
-            "vehicle_owner": "vehicle_owner_payment",
-        }.get(bill.entity_type)
-        if transaction_type is None:
-            raise ValidationError("This bill cannot be settled.")
-
-        transaction_input = TransactionInput(
-            type=transaction_type,
-            amount=settlement_amount,
-            description=f"Settlement for bill {bill.bill_number}",
-            payment_method=payment_method,
-            reference=reference,
-            entity_type=bill.entity_type,
-            entity_id=self._bill_entity_id(bill),
-            reference_id=bill.id,
-            contractor_id=bill.contractor_id,
-            plant_id=bill.plant_id,
-            petrol_pump_id=bill.petrol_pump_id,
-            vehicle_owner_id=bill.vehicle_owner_id,
-        )
-
-        try:
-            self.transactions.create_transaction(transaction_input, commit=False)
-            bill.settled_amount = (bill.settled_amount or 0.0) + settlement_amount
-            self.session.commit()
-        except Exception:
-            self.session.rollback()
-            raise
-        return bill
+    # Bill settlement was retired: bills are pure period documents. Money
+    # movement is recorded only as ledger receipts/payments, which every
+    # bill/statement reflects by date in its Account Summary section.
 
     def delete_bill(self, bill_id):
         bill = self.get_bill(bill_id)
@@ -451,6 +413,164 @@ class BillingService:
 
     def related_transactions(self, bill):
         return self.transactions.transactions_for_entity(bill.entity_type, self._bill_entity_id(bill))
+
+    # ── Admin bill editing (permission: ledger.admin) ────────────────────────
+
+    def _recompute_bill_total(self, bill):
+        """Recalculate a bill's total from the records currently attached."""
+        # The session runs with autoflush off — push pending attach/detach
+        # changes so the queries below see the current linkage.
+        self.session.flush()
+        if bill.entity_type == "contractor":
+            orders = self.session.query(Order).filter(Order.bill_id == bill.id).all()
+            bill.total_amount = sum(float(o.billable_amount or 0) for o in orders)
+        elif bill.entity_type == "vehicle_owner":
+            orders = self.session.query(Order).filter(Order.vehicle_owner_bill_id == bill.id).all()
+            diesel = self.session.query(DieselEntry).filter(DieselEntry.vehicle_owner_bill_id == bill.id).all()
+            bill.total_amount = sum(float(o.remaining_vehicle_payment() or 0) for o in orders) - sum(float(d.amount or 0) for d in diesel)
+        elif bill.entity_type == "petrol_pump":
+            entries = self.session.query(DieselEntry).filter(DieselEntry.bill_id == bill.id).all()
+            bill.total_amount = sum(float(e.amount or 0) for e in entries)
+        elif bill.entity_type == "plant":
+            loadings = self.session.query(OrderLoading).filter(OrderLoading.bill_id == bill.id).all()
+            bill.total_amount = sum(float(l.plant_amount or 0) for l in loadings)
+        return bill.total_amount
+
+    def remove_order_from_bill(self, bill_id, record_id, kind=None):
+        """Detach one record (trip / diesel entry / loading, per bill type)
+        from a bill and recalculate the total. The record becomes billable
+        again. For vehicle-owner bills `kind='diesel'` targets a fuel-log
+        entry (order ids and diesel ids can collide numerically)."""
+        bill = self.get_bill(bill_id)
+        detached = False
+        if bill.entity_type == "contractor":
+            order = self.session.get(Order, record_id)
+            if order and order.bill_id == bill.id:
+                order.bill_id = None
+                order.billed_at = None
+                detached = True
+        elif bill.entity_type == "vehicle_owner":
+            if kind == "diesel":
+                entry = self.session.get(DieselEntry, record_id)
+                if entry and entry.vehicle_owner_bill_id == bill.id:
+                    entry.vehicle_owner_bill_id = None
+                    detached = True
+            else:
+                order = self.session.get(Order, record_id)
+                if order and order.vehicle_owner_bill_id == bill.id:
+                    order.vehicle_owner_bill_id = None
+                    detached = True
+        elif bill.entity_type == "petrol_pump":
+            entry = self.session.get(DieselEntry, record_id)
+            if entry and entry.bill_id == bill.id:
+                entry.bill_id = None
+                detached = True
+        elif bill.entity_type == "plant":
+            loading = self.session.get(OrderLoading, record_id)
+            if loading and loading.bill_id == bill.id:
+                loading.bill_id = None
+                detached = True
+        if not detached:
+            raise ValidationError("The selected record is not attached to this bill.")
+        try:
+            self._recompute_bill_total(bill)
+            self.session.commit()
+        except Exception:
+            self.session.rollback()
+            raise
+        return bill
+
+    def remove_vehicle_from_bill(self, bill_id, vehicle_id):
+        """Detach every record of one vehicle from a bill (trips and, for
+        vehicle-owner bills, that vehicle's fuel-log diesel) and recalculate."""
+        bill = self.get_bill(bill_id)
+        removed = 0
+        if bill.entity_type == "contractor":
+            orders = self.session.query(Order).filter(Order.bill_id == bill.id, Order.vehicle_id == vehicle_id).all()
+            for order in orders:
+                order.bill_id = None
+                order.billed_at = None
+                removed += 1
+        elif bill.entity_type == "vehicle_owner":
+            orders = self.session.query(Order).filter(Order.vehicle_owner_bill_id == bill.id, Order.vehicle_id == vehicle_id).all()
+            for order in orders:
+                order.vehicle_owner_bill_id = None
+                removed += 1
+            diesel = self.session.query(DieselEntry).filter(DieselEntry.vehicle_owner_bill_id == bill.id, DieselEntry.vehicle_id == vehicle_id).all()
+            for entry in diesel:
+                entry.vehicle_owner_bill_id = None
+                removed += 1
+        else:
+            raise ValidationError("Removing a vehicle applies to contractor and vehicle-owner bills only.")
+        if not removed:
+            raise ValidationError("This vehicle has no records on the bill.")
+        try:
+            self._recompute_bill_total(bill)
+            self.session.commit()
+        except Exception:
+            self.session.rollback()
+            raise
+        return bill, removed
+
+    def add_orders_to_bill(self, bill_id, record_ids):
+        """Attach unbilled records (trips / diesel entries / loadings, per bill
+        type) to an existing bill and recalculate the total."""
+        bill = self.get_bill(bill_id)
+        if not record_ids:
+            raise ValidationError("Select at least one record to add to the bill.")
+        added = 0
+        if bill.entity_type == "contractor":
+            eligible = {o.id: o for o in self.billing.contractor_billable_orders(bill.contractor_id)}
+            for record_id in record_ids:
+                order = eligible.get(record_id)
+                if order is None:
+                    raise ValidationError("Some selected trips are no longer available for billing.")
+                order.bill_id = bill.id
+                order.billed_at = datetime.now(UTC).replace(tzinfo=None)
+                added += 1
+        elif bill.entity_type == "vehicle_owner":
+            eligible = {o.id: o for o in self.billing.vehicle_owner_billable_orders(bill.vehicle_owner_id)}
+            for record_id in record_ids:
+                order = eligible.get(record_id)
+                if order is None:
+                    raise ValidationError("Some selected trips are no longer available for billing.")
+                order.vehicle_owner_bill_id = bill.id
+                added += 1
+        elif bill.entity_type == "petrol_pump":
+            eligible = {e.id: e for e in self.billing.unbilled_diesel_entries(bill.petrol_pump_id)}
+            for record_id in record_ids:
+                entry = eligible.get(record_id)
+                if entry is None:
+                    raise ValidationError("Some selected diesel entries are no longer available for billing.")
+                entry.bill_id = bill.id
+                added += 1
+        elif bill.entity_type == "plant":
+            eligible = {l.id: l for l in self.billing.unbilled_plant_loadings(bill.plant_id)}
+            for record_id in record_ids:
+                loading = eligible.get(record_id)
+                if loading is None:
+                    raise ValidationError("Some selected loadings are no longer available for billing.")
+                loading.bill_id = bill.id
+                added += 1
+        try:
+            self._recompute_bill_total(bill)
+            self.session.commit()
+        except Exception:
+            self.session.rollback()
+            raise
+        return bill, added
+
+    def billable_candidates_for_bill(self, bill):
+        """Unbilled records that an admin could still add to this bill."""
+        if bill.entity_type == "contractor":
+            return self.billing.contractor_billable_orders(bill.contractor_id)
+        if bill.entity_type == "vehicle_owner":
+            return self.billing.vehicle_owner_billable_orders(bill.vehicle_owner_id)
+        if bill.entity_type == "petrol_pump":
+            return self.billing.unbilled_diesel_entries(bill.petrol_pump_id)
+        if bill.entity_type == "plant":
+            return self.billing.unbilled_plant_loadings(bill.plant_id)
+        return []
 
     def export_bill_excel(self, bill_id):
         snapshot = self.bill_snapshot(bill_id)

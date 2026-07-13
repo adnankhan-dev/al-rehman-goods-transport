@@ -66,12 +66,19 @@
             </div>
             {% endif %}
             <div class="form-field">
-                <label class="form-label" for="start_date">Start Date</label>
-                <input class="form-control" type="date" id="start_date" name="start_date" value="{{ filter_state.start_date.strftime('%Y-%m-%d') if filter_state.start_date else '' }}">
+                <label class="form-label" for="start_date">Bill Start Date <span class="text-danger">*</span></label>
+                <input class="form-control" type="date" id="start_date" name="start_date"
+                       value="{{ filter_state.start_date.strftime('%Y-%m-%d') if filter_state.start_date else (suggested_start_date.strftime('%Y-%m-%d') if suggested_start_date else '') }}">
+                {% if suggested_start_date %}
+                <small class="text-muted">Suggested {{ suggested_start_date.strftime('%d-%m-%Y') }} — the day after the previous bill closed.</small>
+                {% else %}
+                <small class="text-muted">First bill for this account — pick where its financial period starts.</small>
+                {% endif %}
             </div>
             <div class="form-field">
-                <label class="form-label" for="end_date">End Date</label>
+                <label class="form-label" for="end_date">Bill End Date <span class="text-danger">*</span></label>
                 <input class="form-control" type="date" id="end_date" name="end_date" value="{{ filter_state.end_date.strftime('%Y-%m-%d') if filter_state.end_date else '' }}">
+                <small class="text-muted">The timeframe drives the financial summary, not which trips can be selected.</small>
             </div>
         </div>
         {% if available_sites %}
@@ -101,7 +108,7 @@
         <input type="hidden" name="entity_type" value="{{ filter_state.entity_type }}">
         <input type="hidden" name="entity_id" value="{{ filter_state.entity_id }}">
         <input type="hidden" name="material_type" value="{{ filter_state.material_type }}">
-        <input type="hidden" name="start_date" value="{{ filter_state.start_date.strftime('%Y-%m-%d') if filter_state.start_date else '' }}">
+        <input type="hidden" name="start_date" value="{{ filter_state.start_date.strftime('%Y-%m-%d') if filter_state.start_date else (suggested_start_date.strftime('%Y-%m-%d') if suggested_start_date else '') }}">
         <input type="hidden" name="end_date" value="{{ filter_state.end_date.strftime('%Y-%m-%d') if filter_state.end_date else '' }}">
         {% for site_id in filter_state.site_ids %}
         <input type="hidden" name="site_ids" value="{{ site_id }}">
@@ -296,7 +303,7 @@
                         {% for transaction in entity_transactions[:10] %}
                         <tr>
                             <td>{{ transaction.date.strftime('%Y-%m-%d') }}</td>
-                            <td>{{ transaction.type|replace('_', ' ')|title }}</td>
+                            <td>{{ transaction.type_label }}</td>
                             <td>Rs. {{ "%.2f"|format(transaction.amount or 0) }}</td>
                             <td>{{ transaction.reference or "-" }}</td>
                         </tr>

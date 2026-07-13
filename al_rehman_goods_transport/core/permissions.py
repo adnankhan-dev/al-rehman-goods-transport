@@ -50,6 +50,7 @@ PERMISSION_GROUPS = [
             {"code": "ledger.edit", "label": "Edit Ledger Entries", "description": "Update settlements and editable transaction records."},
             {"code": "ledger.delete", "label": "Delete Ledger Entries", "description": "Delete editable transaction records."},
             {"code": "ledger.approve", "label": "Approve Ledger Entries", "description": "Review pending transactions and bills and approve or reject them."},
+            {"code": "ledger.admin", "label": "Administer Bills", "description": "Add or remove trips/vehicles on an existing bill and edit billed orders. Reserved for administrators."},
         ],
     },
     {

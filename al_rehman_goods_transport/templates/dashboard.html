@@ -97,7 +97,7 @@
         <div class="dashboard-alert-item">
             <i class="bi bi-hourglass-split"></i>
             <span>
-                <strong>{{ recent_open_bills|length }} bill{{ 's' if recent_open_bills|length != 1 }} unsettled</strong>
+                <strong>{{ recent_open_bills|length }} recent bill{{ 's' if recent_open_bills|length != 1 }}</strong>
                 &mdash;
                 <a href="{{ url_for('ledger.index') }}?kind=bill">View in ledger &rarr;</a>
             </span>

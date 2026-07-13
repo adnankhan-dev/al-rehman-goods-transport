@@ -410,7 +410,7 @@
                     <td class="td-ref">{{ entry.reference }}</td>
                     <td>—</td>
                     <td class="td-status">
-                        {% if entry.status in ('Settled', 'Posted') %}
+                        {% if entry.status in ('Posted', 'System') %}
                         <span class="badge badge-settled">{{ entry.status }}</span>
                         {% elif entry.status == 'Open' %}
                         <span class="badge badge-open">{{ entry.status }}</span>

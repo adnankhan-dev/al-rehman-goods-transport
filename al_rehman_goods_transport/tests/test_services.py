@@ -1,7 +1,7 @@
 import os
 import sys
 import unittest
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from pathlib import Path
 
 PACKAGE_PARENT = Path(__file__).resolve().parents[2]
@@ -269,6 +269,8 @@ class OrderFinanceServiceTests(unittest.TestCase):
             [order.id],
             [self.site_id],
             "Sand",
+            start_date=datetime(2026, 4, 1),
+            end_date=datetime(2026, 4, 30),
         )
         db.session.commit()
 
@@ -299,7 +301,10 @@ class OrderFinanceServiceTests(unittest.TestCase):
         db.session.commit()
 
         billing_service = BillingService()
-        bill, _ = billing_service.create_bill("contractor", self.contractor_id, order_ids=[order.id])
+        bill, _ = billing_service.create_bill(
+            "contractor", self.contractor_id, order_ids=[order.id],
+            start_date=datetime(2026, 4, 1), end_date=datetime(2026, 4, 30),
+        )
         bill_id = bill.id
 
         db.session.refresh(order)
@@ -314,7 +319,10 @@ class OrderFinanceServiceTests(unittest.TestCase):
         self.assertIsNone(order.billed_at)
 
         # Released trip is billable again — a fresh bill can be created.
-        rebill, _ = billing_service.create_bill("contractor", self.contractor_id, order_ids=[order.id])
+        rebill, _ = billing_service.create_bill(
+            "contractor", self.contractor_id, order_ids=[order.id],
+            start_date=datetime(2026, 4, 1), end_date=datetime(2026, 4, 30),
+        )
         self.assertIsInstance(rebill, Bill)
 
     def test_settled_bill_cannot_be_deleted(self):
@@ -332,15 +340,21 @@ class OrderFinanceServiceTests(unittest.TestCase):
         db.session.commit()
 
         billing_service = BillingService()
-        bill, _ = billing_service.create_bill("petrol_pump", self.pump_id, entry_ids=[entry.id])
+        bill, _ = billing_service.create_bill(
+            "petrol_pump", self.pump_id, entry_ids=[entry.id],
+            start_date=datetime(2026, 4, 1), end_date=datetime(2026, 4, 30),
+        )
         billing_service.approve_bill(bill.id)
-        billing_service.settle_bill(bill.id, 200, payment_method="cash")
+        # Settlement is retired; a legacy bill that carries a settled amount
+        # still cannot be deleted (its history must be reversed first).
+        bill.settled_amount = 200
+        db.session.commit()
 
         with self.assertRaises(ValidationError):
             billing_service.delete_bill(bill.id)
         self.assertIsNotNone(db.session.get(Bill, bill.id))
 
-    def test_non_contractor_bill_can_be_settled(self):
+    def test_pump_bill_reflects_ledger_payments_in_financials(self):
         pump = db.session.get(PetrolPump, self.pump_id)
         pump.balance = 500
         entry = DieselEntry(
@@ -355,16 +369,32 @@ class OrderFinanceServiceTests(unittest.TestCase):
         db.session.commit()
 
         billing_service = BillingService()
-        bill, _ = billing_service.create_bill("petrol_pump", self.pump_id, entry_ids=[entry.id], notes="Fuel settlement")
+        bill, _ = billing_service.create_bill(
+            "petrol_pump", self.pump_id, entry_ids=[entry.id], notes="Fuel bill",
+            start_date=datetime(2026, 4, 1), end_date=datetime(2026, 4, 30),
+        )
         billing_service.approve_bill(bill.id)
-        billing_service.settle_bill(bill.id, 200, payment_method="cash", reference="PAY-1")
 
-        db.session.refresh(bill)
+        # Money moves only through the ledger; the bill reflects it by date.
+        TransactionService().create_transaction(
+            TransactionInput(
+                type="petrol_pump_payment",
+                amount=200,
+                petrol_pump_id=self.pump_id,
+                entity_type="petrol_pump",
+                entity_id=self.pump_id,
+                date=date(2026, 4, 15),
+            )
+        )
+        db.session.commit()
+
+        snapshot = billing_service.bill_snapshot(bill.id)
+        financial = snapshot["financial_summary"]
         db.session.refresh(pump)
         company = Company.query.first()
 
-        self.assertEqual(bill.settled_amount, 200)
-        self.assertEqual(bill.outstanding_amount, 300)
+        self.assertEqual(financial["payments_total"], 200)
+        self.assertEqual(financial["current_total"], 300)  # 0 previous + 500 bill - 200 paid
         self.assertEqual(pump.balance, 300)
         self.assertEqual(company.balance, -200)
 
@@ -405,12 +435,16 @@ class OrderFinanceServiceTests(unittest.TestCase):
         db.session.commit()
 
         billing_service = BillingService()
-        bill, _ = billing_service.create_bill("petrol_pump", self.pump_id, entry_ids=[standalone_entry.id], notes="Fuel settlement")
+        bill, _ = billing_service.create_bill(
+            "petrol_pump", self.pump_id, entry_ids=[standalone_entry.id], notes="Fuel bill",
+            start_date=datetime(2026, 4, 1), end_date=datetime(2026, 4, 30),
+        )
         snapshot = billing_service.bill_snapshot(bill.id)
 
-        self.assertEqual(snapshot["linked_trip_count"], 1)
-        self.assertEqual(len(snapshot["orders"]), 1)
-        self.assertEqual(snapshot["orders"][0].id, order.id)
+        # Order-linked diesel is retired — pump bills are Fuel-Log documents.
+        self.assertEqual(snapshot["linked_trip_count"], 0)
+        self.assertEqual(len(snapshot["standalone_diesel_rows"]), 1)
+        self.assertEqual(snapshot["standalone_diesel_rows"][0].id, standalone_entry.id)
 
     def test_contractor_receipt_can_create_advance_position(self):
         contractor = db.session.get(Contractor, self.contractor_id)
@@ -648,7 +682,10 @@ class OrderFinanceServiceTests(unittest.TestCase):
         db.session.commit()
 
         billing_service = BillingService()
-        bill, _ = billing_service.create_bill("vehicle_owner", owner.id, order_ids=[order.id], notes="Owner settlement")
+        bill, _ = billing_service.create_bill(
+            "vehicle_owner", owner.id, order_ids=[order.id], notes="Owner bill",
+            start_date=datetime(2026, 4, 1), end_date=datetime(2026, 4, 30),
+        )
         snapshot = billing_service.bill_snapshot(bill.id)
 
         self.assertEqual(len(snapshot["vehicle_owner_activity_rows"]), 1)
@@ -686,7 +723,10 @@ class OrderFinanceServiceTests(unittest.TestCase):
         service = OrderService()
         order = service.create_order(self._order_input())
         service.approve_order(order.id, contractor_rate=15, vehicle_rate=10)
-        bill, _ = create_contractor_bill(self.contractor_id, [order.id])
+        bill, _ = create_contractor_bill(
+            self.contractor_id, [order.id],
+            start_date=datetime(2026, 4, 1), end_date=datetime(2026, 6, 30),
+        )
         db.session.commit()
 
         with self.assertRaises(ValidationError):
@@ -698,27 +738,29 @@ class OrderFinanceServiceTests(unittest.TestCase):
         self.assertEqual(order.delivered_quantity, 100)
         self.assertEqual(bill.total_amount, 1500)
 
-    def test_settlement_transaction_delete_rolls_back_bill(self):
+    def test_receipt_delete_restores_contractor_balance(self):
         service = OrderService()
         order = service.create_order(self._order_input())
         service.approve_order(order.id, contractor_rate=15, vehicle_rate=10)
-        bill, _ = create_contractor_bill(self.contractor_id, [order.id])
         db.session.commit()
 
-        billing_service = BillingService()
-        billing_service.approve_bill(bill.id)
-        billing_service.settle_bill(bill.id, 600, payment_method="cash", reference="PAY-9")
-        db.session.refresh(bill)
-        self.assertEqual(bill.settled_amount, 600)
-
         transaction_service = TransactionService()
-        settlement = next(t for t in transaction_service.list_transactions() if t.reference_id == bill.id)
-        transaction_service.delete_transaction(settlement.id)
-
-        db.session.refresh(bill)
+        receipt = transaction_service.create_transaction(
+            TransactionInput(
+                type="contractor_receipt",
+                amount=600,
+                contractor_id=self.contractor_id,
+                entity_type="contractor",
+                entity_id=self.contractor_id,
+                reference="PAY-9",
+            )
+        )
+        db.session.commit()
         contractor = db.session.get(Contractor, self.contractor_id)
-        self.assertEqual(bill.settled_amount, 0)
-        self.assertEqual(bill.outstanding_amount, bill.total_amount)
+        self.assertEqual(contractor.balance, 900)  # 1500 receivable - 600 received
+
+        transaction_service.delete_transaction(receipt.id)
+        db.session.refresh(contractor)
         self.assertEqual(contractor.balance, 1500)
 
     def test_dashboard_profit_matches_order_profit(self):

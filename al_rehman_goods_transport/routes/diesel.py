@@ -69,13 +69,19 @@ async def diesel_index(request: Request, _=Depends(require_permission("diesel.vi
     pumps = PetrolPump.query.order_by(PetrolPump.name).all()
     vehicle_owners = VehicleOwner.query.order_by(VehicleOwner.name).all()
 
-    # Amount paid to the pump(s) from the ledger, for the current filter scope.
-    amount_paid = service.pump_payments_total(pump_id=pump_id, date_from=date_from, date_to=date_to)
+    # Previous balance, payments, and net for the pump(s) in scope — computed
+    # from the ledger so the fuel log always matches the pump statement.
+    from ..services.financials import entity_period_financials
+
     selected_pump = next((p for p in pumps if p.id == pump_id), None) if pump_id else None
-    # Previous/opening balance so Net Payable matches the pump statement:
-    # Net Payable = previous balance + diesel - payments.
-    opening_balance = float(selected_pump.opening_balance or 0) if selected_pump else sum(float(p.opening_balance or 0) for p in pumps)
-    net_payable = opening_balance + stats["total_amount"] - amount_paid
+    scope_pumps = [selected_pump] if selected_pump else pumps
+    pump_financials = [
+        entity_period_financials("petrol_pump", p.id, start_date=date_from, end_date=date_to)
+        for p in scope_pumps
+    ]
+    opening_balance = sum(f["previous_balance"] for f in pump_financials)
+    amount_paid = sum(f["payments_total"] for f in pump_financials)
+    net_payable = sum(f["current_total"] for f in pump_financials)
     return render_template(
         request,
         "diesel/list.html",
@@ -126,13 +132,16 @@ async def diesel_print(request: Request, _=Depends(require_permission("diesel.vi
         "date_to": date_to.strftime("%Y-%m-%d") if date_to else None,
         "search": search or None,
     }
-    amount_paid = service.pump_payments_total(pump_id=pump_id, date_from=date_from, date_to=date_to)
-    if pump_id:
-        pump = PetrolPump.query.get(pump_id)
-        opening_balance = float(pump.opening_balance or 0) if pump else 0.0
-    else:
-        opening_balance = sum(float(p.opening_balance or 0) for p in PetrolPump.query.all())
-    net_payable = opening_balance + stats["total_amount"] - amount_paid
+    from ..services.financials import entity_period_financials
+
+    scope_pumps = [PetrolPump.query.get(pump_id)] if pump_id else PetrolPump.query.all()
+    pump_financials = [
+        entity_period_financials("petrol_pump", p.id, start_date=date_from, end_date=date_to)
+        for p in scope_pumps if p is not None
+    ]
+    opening_balance = sum(f["previous_balance"] for f in pump_financials)
+    amount_paid = sum(f["payments_total"] for f in pump_financials)
+    net_payable = sum(f["current_total"] for f in pump_financials)
     return render_template(request, "diesel/print.html", show_nav=False, entries=entries, filters=filters,
                            amount_paid=amount_paid, opening_balance=opening_balance, net_payable=net_payable,
                            now=_dt.now(), **stats)

@@ -99,6 +99,20 @@ class ReconciliationService:
                 vehicle = vehicles.get(tx.vehicle_id or tx.entity_id)
                 if vehicle and vehicle.owner_id:
                     owner_expected[vehicle.owner_id] -= amount
+            elif tx.type == "previous_balance":
+                # Pre-ERP balance markers move the linked account only (no cash).
+                if tx.contractor_id:
+                    contractor_expected[tx.contractor_id] += amount
+                elif tx.plant_id:
+                    plant_expected[tx.plant_id] += amount
+                elif tx.petrol_pump_id:
+                    pump_expected[tx.petrol_pump_id] += amount
+                elif tx.vehicle_owner_id:
+                    owner_expected[tx.vehicle_owner_id] += amount
+                elif tx.vehicle_id:
+                    vehicle = vehicles.get(tx.vehicle_id)
+                    if vehicle and vehicle.owner_id:
+                        owner_expected[vehicle.owner_id] += amount
 
             if tx.type in _COMPANY_INFLOW_TYPES:
                 company_expected += amount

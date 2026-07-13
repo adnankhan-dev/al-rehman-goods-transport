@@ -154,6 +154,34 @@ env var overrides the DB.
   keep captions **customer-facing** (this is production).
 - **Settings:** manual monthly-entry form; collapsible filters with the search box outside the collapse.
 
+## 5b. Financial engine rules (2026-07 restructure)
+
+- **Previous balance is COMPUTED, never stored.** `services/financials.py::entity_period_financials`
+  derives it from history (trips/diesel/loadings + signed ledger transactions before the period
+  start). Manual `opening_balance` columns were retired; a migration converted saved values into
+  backdated `previous_balance` transactions (type `previous_balance`: moves only the entity
+  balance, never company cash; amount may be negative; posted via the ledger form).
+- **Bill settlement is retired.** No settle route/UI/settled-outstanding columns. Bills are pure
+  period documents; money moves only as ledger receipts/payments, which every bill/statement
+  reflects live by date (backdated transactions automatically land in the right bill period).
+- **Bill timeframe is mandatory** (start+end); start defaults to the day after the entity's last
+  bill end (`BillingService.suggested_start_date`), editable. The timeframe drives the FINANCIAL
+  section only — pick lists and candidate validation are date-unbounded.
+- **Every bill/statement ends with the shared "Account Summary"** — macro `financial_section` in
+  `templates/_financial_summary.html`: Previous Balance, + period activity, signed receipt/payment
+  lines (never the words "Less"/"Add"/"carried forward"), `= Current Balance`, plus detail tables
+  "Received from <name>" / "Payment paid to <name>" (`Transaction.type_label`).
+- **Statements have date filters** (owner + contractor view pages; pump/plant prints accept
+  date_from/date_to): activity before the range becomes the Previous Balance.
+- **Admin bill editing** (`ledger.admin`, admin-only): add/remove trips or a whole vehicle on an
+  existing bill (`BillingService.remove_order_from_bill` — pass kind='diesel' for owner-bill fuel
+  rows — `remove_vehicle_from_bill`, `add_orders_to_bill`, totals recalc), and edit billed orders
+  (`update_order(allow_billed=True)` recomputes attached bill totals).
+- **Order-linked diesel and order advances are RETIRED** (no data existed): fuel lives only in the
+  Fuel Log (DieselEntry), advances only in the ledger (vehicle_payment). Order form/view, bills,
+  statements, and pump accruals no longer reference them.
+- **Order view** shows Entered By / Approved By (+ timestamps) to users with `orders.approve`.
+
 ## 6. Testing
 
 - Run: `PYTHONPATH=. .venv/Scripts/python.exe -m unittest al_rehman_goods_transport.tests.test_services al_rehman_goods_transport.tests.test_routes`

@@ -21,7 +21,7 @@ async def create_petrol_pump(request: Request, _current_user=Depends(require_per
     form = PetrolPumpForm(await request.form() if request.method == "POST" else None)
     if request.method == "POST" and form.validate():
         try:
-            PetrolPumpService().create_petrol_pump(form.name.data, opening_balance=form.opening_balance.data)
+            PetrolPumpService().create_petrol_pump(form.name.data)
             flash(request, "Petrol pump created successfully!", "success")
             return RedirectResponse(url=str(request.url_for("petrol_pumps.index")), status_code=303)
         except (ConflictError, ValidationError) as exc:
@@ -69,7 +69,7 @@ async def edit_petrol_pump(id: int, request: Request, _current_user=Depends(requ
     form = PetrolPumpForm(await request.form() if request.method == "POST" else None, obj=petrol_pump)
     if request.method == "POST" and form.validate():
         try:
-            service.update_petrol_pump(id, form.name.data, opening_balance=form.opening_balance.data)
+            service.update_petrol_pump(id, form.name.data)
             flash(request, "Petrol pump updated successfully!", "success")
             return RedirectResponse(url=str(request.url_for("petrol_pumps.index")), status_code=303)
         except (ConflictError, ValidationError) as exc:
