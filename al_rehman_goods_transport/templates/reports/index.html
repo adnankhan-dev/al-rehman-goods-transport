@@ -122,6 +122,14 @@
                 <i class="bi bi-printer" aria-hidden="true"></i>
                 <span>Print Report</span>
             </a>
+            <a href="{{ url_for('reports.consolidated_report',
+                date_from=filter_state.date_from.strftime('%Y-%m-%d') if filter_state.date_from else '',
+                date_to=filter_state.date_to.strftime('%Y-%m-%d') if filter_state.date_to else ''
+            ) }}" class="btn btn-ui-midnight" target="_blank" rel="noopener"
+               title="One printable pack for the selected period: financial position, P&amp;L, an account statement per contractor / owner / pump / plant, plus the trips, fuel, and ledger registers — made for the monthly hard file.">
+                <i class="bi bi-journal-bookmark-fill" aria-hidden="true"></i>
+                <span>Consolidated File Pack</span>
+            </a>
         </div>
     </form>
 

@@ -1,0 +1,415 @@
+{% from "_financial_summary.html" import financial_section %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Consolidated Period Report — Al Rehman Goods Transport</title>
+    <style>
+        :root { --ink:#0f172a; --muted:#475569; --soft:#e2e8f0; --panel:#f8fafc; --brand:#0b2742; --accent:#d97706; }
+        * { box-sizing: border-box; }
+        body { margin:0; background:#eef2f7; color:var(--ink); font-family:"Segoe UI",Arial,sans-serif; padding:28px; }
+        .shell { max-width:1040px; margin:0 auto; background:#fff; border-radius:18px; box-shadow:0 24px 60px rgba(15,23,42,0.14); overflow:hidden; }
+        .actions { display:flex; justify-content:flex-end; gap:12px; padding:18px 24px 0; }
+        .btn { border:1px solid var(--soft); border-radius:999px; background:var(--brand); color:#fff; padding:10px 16px; font:inherit; cursor:pointer; }
+        .body { padding:24px 32px 32px; }
+        .pack-section { margin-top:26px; }
+        .pack-break { page-break-before: always; }
+        h2.section-title { margin:0 0 4px; color:var(--brand); font-size:1.2rem; border-bottom:2px solid var(--soft); padding-bottom:6px; }
+        .section-sub { color:var(--muted); font-size:0.82rem; margin:2px 0 12px; }
+        table { width:100%; border-collapse:collapse; border:1px solid var(--soft); margin-bottom:10px; }
+        th, td { border-bottom:1px solid var(--soft); padding:6px 8px; text-align:left; font-size:0.78rem; }
+        th { background:#f1f5f9; color:var(--brand); }
+        td.num, th.num { text-align:right; }
+        .subtotal td { background:#f1f5f9; font-weight:700; }
+        .grand td { background:var(--brand); color:#fff; font-weight:700; }
+        .cover { text-align:center; padding:60px 20px 30px; }
+        .cover .kicker { text-transform:uppercase; letter-spacing:0.2em; color:var(--accent); font-weight:700; font-size:0.8rem; }
+        .cover h1 { color:var(--brand); font-size:2rem; margin:12px 0 4px; }
+        .cover .period { font-size:1.2rem; font-weight:700; margin:16px 0; }
+        .cover .line { color:var(--muted); font-size:0.9rem; margin:4px 0; }
+        .cover .contents { max-width:420px; margin:34px auto 0; text-align:left; }
+        .cover .contents li { margin:5px 0; color:var(--ink); font-size:0.9rem; }
+        .sign-row { display:flex; justify-content:space-between; gap:30px; margin-top:34px; }
+        .sign-box { flex:1; border-top:1px solid var(--ink); padding-top:6px; text-align:center; color:var(--muted); font-size:0.8rem; }
+        .entity-statement { border:1px solid var(--soft); border-radius:12px; padding:14px 16px; margin-bottom:20px; page-break-inside:avoid; }
+        .entity-head { display:flex; justify-content:space-between; align-items:baseline; border-bottom:1px solid var(--soft); padding-bottom:6px; margin-bottom:8px; }
+        .entity-head strong { color:var(--brand); font-size:1.02rem; }
+        .entity-head span { color:var(--muted); font-size:0.78rem; }
+        @media print {
+            @page { size:A4; margin:12mm 10mm; }
+            body { padding:0; background:#fff; }
+            .shell { box-shadow:none; border-radius:0; max-width:none; }
+            .actions { display:none; }
+            .body { padding:0; }
+            th, td { font-size:0.66rem; padding:3px 5px; }
+            thead { display:table-header-group; }
+            tr { break-inside:avoid; }
+        }
+    </style>
+</head>
+<body>
+    <div class="shell">
+        <div class="actions">
+            <button type="button" class="btn" onclick="window.print()">Print / Save PDF</button>
+        </div>
+        <div class="body">
+
+            {# ── COVER ─────────────────────────────────────────────── #}
+            <div class="cover">
+                <div class="kicker">Consolidated Period Report — File Copy</div>
+                <h1>{{ letterhead.name if letterhead else 'Al Rehman Goods Transport' }}</h1>
+                <div class="line">{{ letterhead.address if letterhead else 'Bahtr Mor Wah Cantt' }}</div>
+                <div class="line">{{ letterhead.contact1 if letterhead else 'Contact No. Ahsan Niazi 0307-2342827' }} · {{ letterhead.contact2 if letterhead else 'Inam Khan - 0301-5749086' }}</div>
+                <div class="period">Period: {{ date_from.strftime('%d %B %Y') if date_from else 'Start' }} — {{ date_to.strftime('%d %B %Y') if date_to else 'To date' }}</div>
+                <div class="line">Printed {{ generated_at.strftime('%d %B %Y, %I:%M %p') }}{% if prepared_by %} · Prepared by {{ prepared_by }}{% endif %}</div>
+                <div class="contents">
+                    <strong>Contents</strong>
+                    <ol>
+                        <li>Financial Position — every account, previous → current balance</li>
+                        <li>Profit &amp; Loss Summary</li>
+                        <li>Contractor Statements ({{ contractor_sections|length }})</li>
+                        <li>Vehicle Owner Statements ({{ owner_sections|length }})</li>
+                        <li>Petrol Pump Statements ({{ pump_sections|length }})</li>
+                        <li>Plant Statements ({{ plant_sections|length }})</li>
+                        <li>Trips Register ({{ orders_register|length }} trips)</li>
+                        <li>Fuel Log ({{ fuel_register|length }} entries)</li>
+                        <li>Ledger Book ({{ ledger_register|length }} transactions)</li>
+                    </ol>
+                </div>
+                <div class="sign-row">
+                    <div class="sign-box">Prepared by</div>
+                    <div class="sign-box">Checked by</div>
+                    <div class="sign-box">Approved by</div>
+                </div>
+            </div>
+
+            {# ── 1. FINANCIAL POSITION ─────────────────────────────── #}
+            <div class="pack-section pack-break">
+                <h2 class="section-title">1. Financial Position</h2>
+                <p class="section-sub">Every account with activity or a balance: previous balance as on {{ (date_from.strftime('%d-%m-%Y') + ' (day before)') if date_from else 'start' }}, period movement, and the current balance as on {{ date_to.strftime('%d-%m-%Y') if date_to else 'date' }}.</p>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Account</th>
+                            <th>Type</th>
+                            <th class="num">Previous Balance</th>
+                            <th class="num">+ Period Activity</th>
+                            <th class="num">Received</th>
+                            <th class="num">Paid</th>
+                            <th class="num">Current Balance</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for row in position %}
+                        <tr>
+                            <td>{{ row.name }}</td>
+                            <td>{{ row.type }}</td>
+                            <td class="num">{{ "{:,.0f}".format(row.previous) }}</td>
+                            <td class="num">+ {{ "{:,.0f}".format(row.activity) }}</td>
+                            <td class="num">{% if row.received %}{{ "{:,.0f}".format(row.received) }}{% else %}—{% endif %}</td>
+                            <td class="num">{% if row.paid %}{{ "{:,.0f}".format(row.paid) }}{% else %}—{% endif %}</td>
+                            <td class="num"><strong>{{ "{:,.0f}".format(row.current) }}</strong></td>
+                        </tr>
+                        {% else %}
+                        <tr><td colspan="7" style="text-align:center;">No accounts with activity or balances in this period.</td></tr>
+                        {% endfor %}
+                        <tr class="subtotal">
+                            <td colspan="6">Total Receivable (contractors owe us)</td>
+                            <td class="num">Rs. {{ "{:,.0f}".format(total_receivable) }}</td>
+                        </tr>
+                        <tr class="subtotal">
+                            <td colspan="6">Total Payable (we owe owners / pumps / plants)</td>
+                            <td class="num">− Rs. {{ "{:,.0f}".format(total_payable) }}</td>
+                        </tr>
+                        <tr class="grand">
+                            <td colspan="6">= Net Position</td>
+                            <td class="num">Rs. {{ "{:,.0f}".format(net_position) }}</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            {# ── 2. PROFIT & LOSS ──────────────────────────────────── #}
+            <div class="pack-section">
+                <h2 class="section-title">2. Profit &amp; Loss Summary</h2>
+                <p class="section-sub">{{ pnl.trips }} completed trip{{ 's' if pnl.trips != 1 }} in the period.</p>
+                <table>
+                    <tbody>
+                        <tr><td>Revenue (contractor receivable)</td><td class="num">Rs. {{ "{:,.0f}".format(pnl.revenue) }}</td></tr>
+                        <tr><td>− Vehicle Cost (owner payable)</td><td class="num">− Rs. {{ "{:,.0f}".format(pnl.vehicle_cost) }}</td></tr>
+                        <tr><td>− Plant Cost (loading charges)</td><td class="num">− Rs. {{ "{:,.0f}".format(pnl.plant_cost) }}</td></tr>
+                        <tr class="grand"><td>= Net {{ 'Profit' if pnl.profit >= 0 else 'Loss' }}</td><td class="num">Rs. {{ "{:,.0f}".format(pnl.profit|abs) }}</td></tr>
+                    </tbody>
+                </table>
+            </div>
+
+            {# ── 3. CONTRACTOR STATEMENTS ──────────────────────────── #}
+            <div class="pack-section pack-break">
+                <h2 class="section-title">3. Contractor Statements</h2>
+                <p class="section-sub">One account statement per contractor — file the signed copy behind this page.</p>
+                {% for section in contractor_sections %}
+                <div class="entity-statement">
+                    <div class="entity-head">
+                        <strong>{{ section.entity.name }}</strong>
+                        <span>{{ section.orders|length }} trip{{ 's' if section.orders|length != 1 }} this period</span>
+                    </div>
+                    {% if section.orders %}
+                    <table>
+                        <thead>
+                            <tr><th>Date</th><th>Vehicle</th><th>From → To</th><th>Material</th><th class="num">Delivered</th><th class="num">Rate</th><th class="num">Amount</th></tr>
+                        </thead>
+                        <tbody>
+                            {% for order in section.orders %}
+                            <tr>
+                                <td>{{ (order.completion_date or order.order_date).strftime('%d-%m-%Y') }}</td>
+                                <td>{{ order.vehicle.vehicle_number if order.vehicle else '-' }}</td>
+                                <td>{{ order.from_site.name if order.from_site else '-' }} → {{ order.site.name if order.site else '-' }}</td>
+                                <td>{{ order.material_name }}</td>
+                                <td class="num">{{ "%.2f"|format(order.delivered_quantity or order.quantity or 0) }} {{ (order.unit or 'cft')|upper }}</td>
+                                <td class="num">{{ "%.2f"|format(order.contractor_rate or 0) }}</td>
+                                <td class="num">{{ "{:,.0f}".format(order.billable_amount) }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                    {% endif %}
+                    {{ financial_section(section.financial, "Trips Delivered (this period)", table_class="", num_class="num") }}
+                </div>
+                {% else %}
+                <p class="section-sub">No contractor activity or balances in this period.</p>
+                {% endfor %}
+            </div>
+
+            {# ── 4. VEHICLE OWNER STATEMENTS ───────────────────────── #}
+            <div class="pack-section pack-break">
+                <h2 class="section-title">4. Vehicle Owner Statements</h2>
+                <p class="section-sub">Trips earned and fuel taken per owner, with the account summary.</p>
+                {% for section in owner_sections %}
+                <div class="entity-statement">
+                    <div class="entity-head">
+                        <strong>{{ section.entity.name }}</strong>
+                        <span>{{ section.orders|length }} trip{{ 's' if section.orders|length != 1 }} · Rs. {{ "{:,.0f}".format(section.trips_amount) }} trips − Rs. {{ "{:,.0f}".format(section.fuel_amount) }} fuel</span>
+                    </div>
+                    {% if section.orders %}
+                    <table>
+                        <thead>
+                            <tr><th>Date</th><th>Vehicle</th><th>From → To</th><th>Material</th><th class="num">Delivered</th><th class="num">Rate</th><th class="num">Amount</th></tr>
+                        </thead>
+                        <tbody>
+                            {% for order in section.orders %}
+                            <tr>
+                                <td>{{ (order.completion_date or order.order_date).strftime('%d-%m-%Y') }}</td>
+                                <td>{{ order.vehicle.vehicle_number if order.vehicle else '-' }}</td>
+                                <td>{{ order.from_site.name if order.from_site else '-' }} → {{ order.site.name if order.site else '-' }}</td>
+                                <td>{{ order.material_name }}</td>
+                                <td class="num">{{ "%.2f"|format(order.delivered_quantity or order.quantity or 0) }} {{ (order.unit or 'cft')|upper }}</td>
+                                <td class="num">{{ "%.2f"|format(order.vehicle_rate or 0) }}</td>
+                                <td class="num">{{ "{:,.0f}".format(order.total_vehicle_amount()) }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                    {% endif %}
+                    {% if section.diesel_rows %}
+                    <table>
+                        <thead>
+                            <tr><th>Date</th><th>Vehicle</th><th>Pump</th><th>Receipt</th><th class="num">Litres</th><th class="num">Fuel Amount</th></tr>
+                        </thead>
+                        <tbody>
+                            {% for entry in section.diesel_rows %}
+                            <tr>
+                                <td>{{ entry.date.strftime('%d-%m-%Y') }}</td>
+                                <td>{{ entry.vehicle.vehicle_number if entry.vehicle else '-' }}</td>
+                                <td>{{ entry.petrol_pump.name if entry.petrol_pump else '-' }}</td>
+                                <td>{{ entry.receipt_number or '-' }}</td>
+                                <td class="num">{{ "%.2f"|format(entry.litres) if entry.litres else '—' }}</td>
+                                <td class="num">− {{ "{:,.0f}".format(entry.amount or 0) }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                    {% endif %}
+                    {{ financial_section(section.financial, "Trips − Fuel-Log Diesel (this period)", table_class="", num_class="num") }}
+                </div>
+                {% else %}
+                <p class="section-sub">No vehicle owner activity or balances in this period.</p>
+                {% endfor %}
+            </div>
+
+            {# ── 5. PETROL PUMP STATEMENTS ─────────────────────────── #}
+            <div class="pack-section pack-break">
+                <h2 class="section-title">5. Petrol Pump Statements</h2>
+                <p class="section-sub">Diesel taken per pump, with the account summary.</p>
+                {% for section in pump_sections %}
+                <div class="entity-statement">
+                    <div class="entity-head">
+                        <strong>{{ section.entity.name }}</strong>
+                        <span>{{ section.diesel_rows|length }} entr{{ 'ies' if section.diesel_rows|length != 1 else 'y' }} this period</span>
+                    </div>
+                    {% if section.diesel_rows %}
+                    <table>
+                        <thead>
+                            <tr><th>Date</th><th>Vehicle</th><th>Receipt</th><th class="num">Litres</th><th class="num">Amount</th></tr>
+                        </thead>
+                        <tbody>
+                            {% for entry in section.diesel_rows %}
+                            <tr>
+                                <td>{{ entry.date.strftime('%d-%m-%Y') }}</td>
+                                <td>{{ entry.vehicle.vehicle_number if entry.vehicle else '-' }}</td>
+                                <td>{{ entry.receipt_number or '-' }}</td>
+                                <td class="num">{{ "%.2f"|format(entry.litres) if entry.litres else '—' }}</td>
+                                <td class="num">{{ "{:,.0f}".format(entry.amount or 0) }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                    {% endif %}
+                    {{ financial_section(section.financial, "Diesel Taken (this period)", table_class="", num_class="num") }}
+                </div>
+                {% else %}
+                <p class="section-sub">No petrol pump activity or balances in this period.</p>
+                {% endfor %}
+            </div>
+
+            {# ── 6. PLANT STATEMENTS ───────────────────────────────── #}
+            <div class="pack-section pack-break">
+                <h2 class="section-title">6. Plant Statements</h2>
+                <p class="section-sub">Loading charges per plant, with the account summary.</p>
+                {% for section in plant_sections %}
+                <div class="entity-statement">
+                    <div class="entity-head">
+                        <strong>{{ section.entity.name }}</strong>
+                        <span>{{ section.loadings|length }} loading{{ 's' if section.loadings|length != 1 }} this period</span>
+                    </div>
+                    {% if section.loadings %}
+                    <table>
+                        <thead>
+                            <tr><th>Date</th><th>Vehicle</th><th>Material</th><th class="num">Quantity</th><th class="num">Amount</th></tr>
+                        </thead>
+                        <tbody>
+                            {% for loading in section.loadings %}
+                            <tr>
+                                <td>{{ (loading.order.completion_date or loading.order.order_date).strftime('%d-%m-%Y') if loading.order else '-' }}</td>
+                                <td>{{ loading.order.vehicle.vehicle_number if loading.order and loading.order.vehicle else '-' }}</td>
+                                <td>{{ loading.order.material_name if loading.order else '-' }}</td>
+                                <td class="num">{{ "%.2f"|format(loading.load_quantity or 0) }}</td>
+                                <td class="num">{{ "{:,.0f}".format(loading.plant_amount or 0) }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                    {% endif %}
+                    {{ financial_section(section.financial, "Plant Charges (this period)", table_class="", num_class="num") }}
+                </div>
+                {% else %}
+                <p class="section-sub">No plant activity or balances in this period.</p>
+                {% endfor %}
+            </div>
+
+            {# ── 7. TRIPS REGISTER ─────────────────────────────────── #}
+            <div class="pack-section pack-break">
+                <h2 class="section-title">7. Trips Register</h2>
+                <p class="section-sub">Every completed trip in the period, in date order.</p>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Date</th><th>Vehicle</th><th>Contractor</th><th>From → To</th><th>Material</th>
+                            <th>Receipt</th><th class="num">Delivered</th><th class="num">Contractor Amt</th><th class="num">Vehicle Amt</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for order in orders_register %}
+                        <tr>
+                            <td>{{ (order.completion_date or order.order_date).strftime('%d-%m-%Y') }}</td>
+                            <td>{{ order.vehicle.vehicle_number if order.vehicle else '-' }}</td>
+                            <td>{{ order.contractor.name if order.contractor else '-' }}</td>
+                            <td>{{ order.from_site.name if order.from_site else '-' }} → {{ order.site.name if order.site else '-' }}</td>
+                            <td>{{ order.material_name }}</td>
+                            <td>{{ order.receipt_number or '-' }}</td>
+                            <td class="num">{{ "%.2f"|format(order.delivered_quantity or order.quantity or 0) }}</td>
+                            <td class="num">{{ "{:,.0f}".format(order.billable_amount) }}</td>
+                            <td class="num">{{ "{:,.0f}".format(order.total_vehicle_amount()) }}</td>
+                        </tr>
+                        {% else %}
+                        <tr><td colspan="9" style="text-align:center;">No completed trips in this period.</td></tr>
+                        {% endfor %}
+                        {% if orders_register %}
+                        <tr class="subtotal">
+                            <td colspan="7">Totals ({{ orders_register|length }} trips)</td>
+                            <td class="num">{{ "{:,.0f}".format(pnl.revenue) }}</td>
+                            <td class="num">{{ "{:,.0f}".format(pnl.vehicle_cost) }}</td>
+                        </tr>
+                        {% endif %}
+                    </tbody>
+                </table>
+            </div>
+
+            {# ── 8. FUEL LOG ───────────────────────────────────────── #}
+            <div class="pack-section pack-break">
+                <h2 class="section-title">8. Fuel Log</h2>
+                <p class="section-sub">Every diesel entry in the period, in date order.</p>
+                <table>
+                    <thead>
+                        <tr><th>Date</th><th>Vehicle</th><th>Owner</th><th>Pump</th><th>Receipt</th><th class="num">Litres</th><th class="num">Amount</th></tr>
+                    </thead>
+                    <tbody>
+                        {% for entry in fuel_register %}
+                        <tr>
+                            <td>{{ entry.date.strftime('%d-%m-%Y') }}</td>
+                            <td>{{ entry.vehicle.vehicle_number if entry.vehicle else '-' }}</td>
+                            <td>{{ entry.vehicle.owner_display_name if entry.vehicle else '-' }}</td>
+                            <td>{{ entry.petrol_pump.name if entry.petrol_pump else '-' }}</td>
+                            <td>{{ entry.receipt_number or '-' }}</td>
+                            <td class="num">{{ "%.2f"|format(entry.litres) if entry.litres else '—' }}</td>
+                            <td class="num">{{ "{:,.0f}".format(entry.amount or 0) }}</td>
+                        </tr>
+                        {% else %}
+                        <tr><td colspan="7" style="text-align:center;">No diesel entries in this period.</td></tr>
+                        {% endfor %}
+                        {% if fuel_register %}
+                        <tr class="subtotal">
+                            <td colspan="5">Total ({{ fuel_register|length }} entries)</td>
+                            <td class="num">{{ "%.2f"|format(fuel_register|sum(attribute='litres') or 0) }}</td>
+                            <td class="num">{{ "{:,.0f}".format(fuel_register|sum(attribute='amount') or 0) }}</td>
+                        </tr>
+                        {% endif %}
+                    </tbody>
+                </table>
+            </div>
+
+            {# ── 9. LEDGER BOOK ────────────────────────────────────── #}
+            <div class="pack-section pack-break">
+                <h2 class="section-title">9. Ledger Book</h2>
+                <p class="section-sub">Every posted transaction in the period, in date order.</p>
+                <table>
+                    <thead>
+                        <tr><th>Date</th><th>Detail</th><th>Method</th><th>Reference</th><th>Description</th><th class="num">Amount</th></tr>
+                    </thead>
+                    <tbody>
+                        {% for txn in ledger_register %}
+                        <tr>
+                            <td>{{ txn.date.strftime('%d-%m-%Y') }}</td>
+                            <td>{{ txn.type_label }}</td>
+                            <td>{{ (txn.payment_method or '-')|title }}</td>
+                            <td>{{ txn.reference or '-' }}</td>
+                            <td>{{ txn.description or '-' }}</td>
+                            <td class="num">{{ "{:,.0f}".format(txn.amount or 0) }}</td>
+                        </tr>
+                        {% else %}
+                        <tr><td colspan="6" style="text-align:center;">No transactions in this period.</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="pack-section" style="color:var(--muted);font-size:0.82rem;border-top:1px solid var(--soft);padding-top:12px;">
+                File this pack in front of the month's lever-arch file. Behind it, file the signed bills,
+                delivery receipts per bill, fuel receipts per pump, and payment vouchers in the same order
+                as the sections above. Have each party sign their statement — the signed Current Balance is
+                the agreed figure the next period starts from.
+            </div>
+        </div>
+    </div>
+</body>
+</html>

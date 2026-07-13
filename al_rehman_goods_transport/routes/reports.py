@@ -109,6 +109,32 @@ async def print_report(request: Request, _current_user=Depends(require_permissio
     )
 
 
+@router.get("/reports/consolidated", name="reports.consolidated_report")
+async def consolidated_report(request: Request, current_user=Depends(require_permission("reports.view"))):
+    """The printable period 'file pack': position summary, P&L, one Account
+    Summary statement per account, then the trips / fuel / ledger registers."""
+    from ..services.consolidated_report import consolidated_report_context
+
+    date_from = _parse_date(request.query_params.get("date_from"))
+    date_to = _parse_date(request.query_params.get("date_to"))
+    # Default to the current month so the pack always has a defined period.
+    if date_from is None and date_to is None:
+        now = datetime.now()
+        date_from = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+        date_to = now
+    context = consolidated_report_context(
+        date_from=date_from.date() if date_from else None,
+        date_to=date_to.date() if date_to else None,
+    )
+    return render_template(
+        request,
+        "reports/consolidated.html",
+        show_nav=False,
+        prepared_by=getattr(current_user, "username", None),
+        **context,
+    )
+
+
 @router.get("/reports/financial", name="reports.financial_reports")
 async def financial_reports(request: Request, _current_user=Depends(require_permission("reports.view"))):
     return _legacy_redirect(request, report_type="profit_loss")
