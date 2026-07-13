@@ -109,6 +109,19 @@ async def print_report(request: Request, _current_user=Depends(require_permissio
     )
 
 
+@router.get("/reports/export", name="reports.export_report")
+async def export_report(request: Request, _current_user=Depends(require_permission("reports.view"))):
+    from fastapi.responses import Response
+
+    filter_state = _report_filter_state(request.query_params)
+    filename, content = ReportService().export_report(filter_state)
+    return Response(
+        content=content,
+        media_type="application/vnd.ms-excel",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
 @router.get("/reports/consolidated", name="reports.consolidated_report")
 async def consolidated_report(request: Request, current_user=Depends(require_permission("reports.view"))):
     """The printable period 'file pack': position summary, P&L, one Account

@@ -210,6 +210,72 @@
             </table>
         </div>
     </div>
+    {% elif report_type == 'ageing' %}
+    <div class="report-panel">
+        <div class="report-panel-header"><div><h3 class="report-panel-title">Outstanding Balances By Age{% if ageing_as_of %} — as on {{ ageing_as_of.strftime('%d-%m-%Y') }}{% endif %}</h3></div></div>
+        <div class="report-panel-body">
+            <table class="table">
+                <thead>
+                    <tr><th>Account</th><th>Type</th><th>0–30</th><th>31–60</th><th>61–90</th><th>90+</th><th>Total</th><th>Advance</th></tr>
+                </thead>
+                <tbody>
+                    {% for row in ageing_rows %}
+                    <tr>
+                        <td>{{ row.name }}</td>
+                        <td>{{ row.type }}</td>
+                        <td>{{ "{:,.0f}".format(row.buckets[0]) }}</td>
+                        <td>{{ "{:,.0f}".format(row.buckets[1]) }}</td>
+                        <td>{{ "{:,.0f}".format(row.buckets[2]) }}</td>
+                        <td>{{ "{:,.0f}".format(row.buckets[3]) }}</td>
+                        <td><strong>{{ "{:,.0f}".format(row.total) }}</strong></td>
+                        <td>{{ "{:,.0f}".format(row.credit) }}</td>
+                    </tr>
+                    {% else %}
+                    <tr><td colspan="8" class="text-center">No outstanding balances.</td></tr>
+                    {% endfor %}
+                    {% if ageing_rows %}
+                    <tr>
+                        <th colspan="2">Totals</th>
+                        <th>{{ "{:,.0f}".format(ageing_bucket_totals[0]) }}</th>
+                        <th>{{ "{:,.0f}".format(ageing_bucket_totals[1]) }}</th>
+                        <th>{{ "{:,.0f}".format(ageing_bucket_totals[2]) }}</th>
+                        <th>{{ "{:,.0f}".format(ageing_bucket_totals[3]) }}</th>
+                        <th>{{ "{:,.0f}".format(ageing_total) }}</th>
+                        <th></th>
+                    </tr>
+                    {% endif %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {% elif report_type == 'vehicles' %}
+    <div class="report-panel">
+        <div class="report-panel-header"><div><h3 class="report-panel-title">Vehicle Profitability</h3></div></div>
+        <div class="report-panel-body">
+            <table class="table">
+                <thead>
+                    <tr><th>Vehicle</th><th>Owner</th><th>Trips</th><th>Quantity</th><th>Revenue</th><th>Vehicle Cost</th><th>Plant Cost</th><th>Profit</th><th>Fuel (info)</th></tr>
+                </thead>
+                <tbody>
+                    {% for row in vehicle_profit_rows %}
+                    <tr>
+                        <td>{{ row.vehicle_number }}</td>
+                        <td>{{ row.owner_name }}</td>
+                        <td>{{ row.trips }}</td>
+                        <td>{{ "%.2f"|format(row.quantity) }}</td>
+                        <td>{{ "{:,.0f}".format(row.revenue) }}</td>
+                        <td>{{ "{:,.0f}".format(row.vehicle_cost) }}</td>
+                        <td>{{ "{:,.0f}".format(row.plant_cost) }}</td>
+                        <td><strong>{{ "{:,.0f}".format(row.profit) }}</strong></td>
+                        <td>{{ "{:,.0f}".format(row.fuel) }}</td>
+                    </tr>
+                    {% else %}
+                    <tr><td colspan="9" class="text-center">No completed trips matched the filters.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
     {% elif report_type == 'finances' %}
     <div class="report-panel">
         <div class="report-panel-header">

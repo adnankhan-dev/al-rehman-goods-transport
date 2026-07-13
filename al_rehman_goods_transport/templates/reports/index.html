@@ -165,6 +165,23 @@
                 <i class="bi bi-printer" aria-hidden="true"></i>
                 <span>Print Report</span>
             </a>
+            <a href="{{ url_for('reports.export_report',
+                report_type=filter_state.report_type,
+                contractor_id=filter_state.contractor_id or '',
+                site_id=filter_state.site_id or '',
+                from_site_id=filter_state.from_site_id or '',
+                material_id=filter_state.material_id or '',
+                vehicle_id=filter_state.vehicle_id or '',
+                plant_id=filter_state.plant_id or '',
+                petrol_pump_id=filter_state.petrol_pump_id or '',
+                billing_status=filter_state.billing_status,
+                date_from=filter_state.date_from.strftime('%Y-%m-%d') if filter_state.date_from else '',
+                date_to=filter_state.date_to.strftime('%Y-%m-%d') if filter_state.date_to else '',
+                search=filter_state.search
+            ) }}" class="btn btn-ui-ocean">
+                <i class="bi bi-file-earmark-spreadsheet" aria-hidden="true"></i>
+                <span>Export Excel</span>
+            </a>
             <a href="{{ url_for('reports.consolidated_report',
                 date_from=filter_state.date_from.strftime('%Y-%m-%d') if filter_state.date_from else '',
                 date_to=filter_state.date_to.strftime('%Y-%m-%d') if filter_state.date_to else ''
@@ -238,6 +255,43 @@
             <div class="report-panel-body"><div class="chart-stage"><canvas id="reportExpenseChart" width="600" height="300"></canvas></div></div>
         </article>
     </div>
+
+    {% if comparison %}
+    <div class="table-panel table-panel-list">
+        <div class="table-panel-header">
+            <div>
+                <h3 class="table-panel-title">Compared with the previous period</h3>
+                <p class="table-panel-copy">{{ comparison.prev_from.strftime('%d-%m-%Y') }} — {{ comparison.prev_to.strftime('%d-%m-%Y') }} ({{ comparison.prev_trips }} trips), same length as the selected period.</p>
+            </div>
+        </div>
+        <div class="table-responsive">
+            <table class="table detail-table">
+                <thead>
+                    <tr>
+                        <th></th>
+                        <th class="text-end">This Period</th>
+                        <th class="text-end">Previous Period</th>
+                        <th class="text-end">Change</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for row in comparison.rows %}
+                    <tr>
+                        <td><strong>{{ row.label }}</strong></td>
+                        <td class="text-end table-amount">Rs. {{ "{:,.0f}".format(row.current) }}</td>
+                        <td class="text-end table-amount">Rs. {{ "{:,.0f}".format(row.previous) }}</td>
+                        <td class="text-end table-amount">
+                            {% if row.pct is none %}—{% else %}
+                            <span class="{% if row.pct >= 0 %}text-success{% else %}text-danger{% endif %}">{{ '+' if row.pct >= 0 }}{{ "%.1f"|format(row.pct) }}%</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {% endif %}
 
     <div class="table-panel table-panel-list">
         <div class="table-panel-header table-panel-header">
@@ -450,6 +504,120 @@
                     </tr>
                     {% else %}
                     <tr><td colspan="6" class="text-center table-muted">No vehicle activity matched these filters.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {% elif report_type == 'ageing' %}
+    <div class="table-panel table-panel-list">
+        <div class="table-panel-header">
+            <div>
+                <h3 class="table-panel-title">Outstanding balances by age{% if ageing_as_of %} — as on {{ ageing_as_of.strftime('%d-%m-%Y') }}{% endif %}</h3>
+                <p class="table-panel-copy">Receipts and payments settle the oldest charges first. The 90+ column is the money at risk — chase it first.</p>
+            </div>
+        </div>
+        <div class="table-responsive">
+            <table class="table detail-table">
+                <thead>
+                    <tr>
+                        <th>Account</th>
+                        <th>Type</th>
+                        <th class="text-end">0–30 Days</th>
+                        <th class="text-end">31–60 Days</th>
+                        <th class="text-end">61–90 Days</th>
+                        <th class="text-end">90+ Days</th>
+                        <th class="text-end">Total Outstanding</th>
+                        <th class="text-end">Advance</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for row in ageing_rows %}
+                    <tr>
+                        <td><strong>{{ row.name }}</strong></td>
+                        <td><span class="status-chip {% if row.receivable %}status-chip-complete{% else %}status-chip-pending{% endif %}">{{ row.type }}</span></td>
+                        <td class="text-end table-amount">{% if row.buckets[0] %}Rs. {{ "{:,.0f}".format(row.buckets[0]) }}{% else %}—{% endif %}</td>
+                        <td class="text-end table-amount">{% if row.buckets[1] %}Rs. {{ "{:,.0f}".format(row.buckets[1]) }}{% else %}—{% endif %}</td>
+                        <td class="text-end table-amount">{% if row.buckets[2] %}Rs. {{ "{:,.0f}".format(row.buckets[2]) }}{% else %}—{% endif %}</td>
+                        <td class="text-end table-amount" {% if row.buckets[3] %}style="color:#dc2626;font-weight:700;"{% endif %}>{% if row.buckets[3] %}Rs. {{ "{:,.0f}".format(row.buckets[3]) }}{% else %}—{% endif %}</td>
+                        <td class="text-end table-amount"><strong>Rs. {{ "{:,.0f}".format(row.total) }}</strong></td>
+                        <td class="text-end table-amount">{% if row.credit %}Rs. {{ "{:,.0f}".format(row.credit) }}{% else %}—{% endif %}</td>
+                    </tr>
+                    {% else %}
+                    <tr><td colspan="8" class="text-center table-muted">No outstanding balances.</td></tr>
+                    {% endfor %}
+                </tbody>
+                {% if ageing_rows %}
+                <tfoot>
+                    <tr class="bill-grand-total-row">
+                        <td colspan="2"><strong>Totals</strong></td>
+                        <td class="text-end"><strong>Rs. {{ "{:,.0f}".format(ageing_bucket_totals[0]) }}</strong></td>
+                        <td class="text-end"><strong>Rs. {{ "{:,.0f}".format(ageing_bucket_totals[1]) }}</strong></td>
+                        <td class="text-end"><strong>Rs. {{ "{:,.0f}".format(ageing_bucket_totals[2]) }}</strong></td>
+                        <td class="text-end"><strong>Rs. {{ "{:,.0f}".format(ageing_bucket_totals[3]) }}</strong></td>
+                        <td class="text-end"><strong>Rs. {{ "{:,.0f}".format(ageing_total) }}</strong></td>
+                        <td></td>
+                    </tr>
+                </tfoot>
+                {% endif %}
+            </table>
+        </div>
+    </div>
+    {% elif report_type == 'vehicles' %}
+    <div class="report-grid">
+        <article class="report-panel report-grid-wide">
+            <div class="report-panel-header">
+                <div>
+                    <h3 class="report-panel-title">Profit By Vehicle</h3>
+                    <p class="report-panel-copy">Top vehicles by company profit in the filtered period.</p>
+                </div>
+            </div>
+            <div class="report-panel-body"><div class="chart-stage"><canvas id="vehicleProfitChart" width="600" height="300"></canvas></div></div>
+        </article>
+    </div>
+
+    <div class="table-panel table-panel-list">
+        <div class="table-panel-header">
+            <div>
+                <h3 class="table-panel-title">Vehicle profitability register</h3>
+                <p class="table-panel-copy">Per vehicle: revenue earned minus the owner payment and plant charges. Fuel is informational — it settles between the owner and pump accounts.</p>
+            </div>
+            <div class="table-toolbar">
+                <span class="collection-pill"><strong>{{ vehicle_profit_rows|length }}</strong> vehicles</span>
+            </div>
+        </div>
+        <div class="table-responsive">
+            <table class="table detail-table">
+                <thead>
+                    <tr>
+                        <th>Vehicle</th>
+                        <th>Owner</th>
+                        <th class="text-end">Trips</th>
+                        <th class="text-end">Quantity</th>
+                        <th class="text-end">Revenue</th>
+                        <th class="text-end">Vehicle Cost</th>
+                        <th class="text-end">Plant Cost</th>
+                        <th class="text-end">Profit</th>
+                        <th class="text-end">Profit / Trip</th>
+                        <th class="text-end">Fuel (info)</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for row in vehicle_profit_rows %}
+                    <tr>
+                        <td><strong>{{ row.vehicle_number }}</strong></td>
+                        <td>{{ row.owner_name }}</td>
+                        <td class="text-end">{{ row.trips }}</td>
+                        <td class="text-end">{{ "%.2f"|format(row.quantity) }}</td>
+                        <td class="text-end table-amount">Rs. {{ "{:,.0f}".format(row.revenue) }}</td>
+                        <td class="text-end table-amount">Rs. {{ "{:,.0f}".format(row.vehicle_cost) }}</td>
+                        <td class="text-end table-amount">{% if row.plant_cost %}Rs. {{ "{:,.0f}".format(row.plant_cost) }}{% else %}—{% endif %}</td>
+                        <td class="text-end table-amount {% if row.profit >= 0 %}text-success{% else %}text-danger{% endif %}"><strong>Rs. {{ "{:,.0f}".format(row.profit) }}</strong></td>
+                        <td class="text-end table-amount">Rs. {{ "{:,.0f}".format(row.profit_per_trip) }}</td>
+                        <td class="text-end table-amount">{% if row.fuel %}Rs. {{ "{:,.0f}".format(row.fuel) }}{% else %}—{% endif %}</td>
+                    </tr>
+                    {% else %}
+                    <tr><td colspan="10" class="text-center table-muted">No completed trips matched these report filters.</td></tr>
                     {% endfor %}
                 </tbody>
             </table>
@@ -771,8 +939,10 @@
         {% elif report_type == 'performance' %}
         buildBarChart('performanceTrendChart', {{ trend_chart['labels'] | tojson }}, {{ trend_chart['values'] | tojson }}, 'Profit', 'rgba(34, 184, 166, 0.82)');
         buildBarChart('performanceContractorChart', {{ contractor_chart['labels'] | tojson }}, {{ contractor_chart['values'] | tojson }}, 'Profit', 'rgba(58, 134, 255, 0.82)');
-        {% elif report_type == 'finances' %}
-        /* Finances report uses tables, no charts. */
+        {% elif report_type == 'vehicles' %}
+        buildBarChart('vehicleProfitChart', {{ vehicle_profit_chart['labels'] | tojson }}, {{ vehicle_profit_chart['values'] | tojson }}, 'Profit', 'rgba(21, 122, 110, 0.82)');
+        {% elif report_type == 'finances' or report_type == 'ageing' %}
+        /* Table-only reports, no charts. */
         {% else %}
         buildBarChart('plantAmountChart', {{ plant_chart['labels'] | tojson }}, {{ plant_chart['values'] | tojson }}, 'Plant Amount', 'rgba(184, 92, 56, 0.82)');
         buildDoughnutChart('plantMaterialChart', {{ material_chart['labels'] | tojson }}, {{ material_chart['values'] | tojson }}, ['#157a6e', '#3a86ff', '#f59e0b', '#b85c38', '#6b7280']);

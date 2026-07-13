@@ -192,6 +192,69 @@ def _accrual_rows(entity_type, entity_id, session, exclude_bill_id=None):
     return rows
 
 
+AGEING_BUCKETS = ((0, 30), (31, 60), (61, 90), (91, None))
+
+
+def entity_ageing(entity_type, entity_id, as_of=None, session=None):
+    """Age an account's outstanding balance into 0–30 / 31–60 / 61–90 / 90+
+    day buckets, FIFO: receipts/payments knock out the OLDEST charges first,
+    so whatever remains unpaid is aged by the date it was earned/charged.
+
+    Returns {"buckets": [b0, b1, b2, b3], "total": float, "credit": float}
+    where ``credit`` is any advance position (paid more than charged)."""
+    from datetime import date as date_cls
+
+    session = session or db.session
+    as_of = _as_date(as_of) or date_cls.today()
+    signs = _TXN_SIGNS.get(entity_type, {})
+
+    charges = []          # (day, amount) that INCREASE what is owed
+    credits_total = 0.0   # everything that reduces it
+
+    for day, amount in _accrual_rows(entity_type, entity_id, session):
+        if day is not None and day > as_of:
+            continue
+        if amount > 0:
+            charges.append((day, amount))
+        else:
+            credits_total += -amount
+
+    for txn in entity_transactions(entity_type, entity_id, session=session):
+        day = _as_date(txn.date)
+        if day is not None and day > as_of:
+            continue
+        signed = signs.get(txn.type, 0) * _safe(txn.amount)
+        if signed > 0:
+            charges.append((day, signed))
+        else:
+            credits_total += -signed
+
+    # Oldest first; undated rows are treated as oldest.
+    charges.sort(key=lambda row: (row[0] is not None, row[0] or as_of))
+
+    remaining_credit = credits_total
+    buckets = [0.0, 0.0, 0.0, 0.0]
+    for day, amount in charges:
+        unpaid = amount
+        if remaining_credit > 0:
+            applied = min(remaining_credit, unpaid)
+            remaining_credit -= applied
+            unpaid -= applied
+        if unpaid <= 0.005:
+            continue
+        age_days = (as_of - day).days if day else 10**6
+        for index, (low, high) in enumerate(AGEING_BUCKETS):
+            if age_days >= low and (high is None or age_days <= high):
+                buckets[index] += unpaid
+                break
+
+    return {
+        "buckets": buckets,
+        "total": sum(buckets),
+        "credit": remaining_credit if remaining_credit > 0.005 else 0.0,
+    }
+
+
 def entity_period_financials(
     entity_type,
     entity_id,

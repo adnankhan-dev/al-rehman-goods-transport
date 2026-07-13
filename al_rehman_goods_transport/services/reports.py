@@ -30,6 +30,16 @@ REPORT_TYPES = (
         "label": "Finances",
         "description": "Who owes you and whom you owe — detailed receivables and payables.",
     },
+    {
+        "key": "ageing",
+        "label": "Ageing",
+        "description": "How old each outstanding balance is — 0–30, 31–60, 61–90, and 90+ days.",
+    },
+    {
+        "key": "vehicles",
+        "label": "Vehicle Profitability",
+        "description": "Revenue, cost, fuel, and profit per vehicle for the filtered period.",
+    },
 )
 
 
@@ -94,6 +104,10 @@ class ReportService:
             context.update(self._performance_context(filter_state))
         elif report_type == "finances":
             context.update(self._finances_context(filter_state))
+        elif report_type == "ageing":
+            context.update(self._ageing_context(filter_state))
+        elif report_type == "vehicles":
+            context.update(self._vehicles_context(filter_state))
         else:
             context.update(self._profit_loss_context(filter_state))
         return context
@@ -119,8 +133,44 @@ class ReportService:
             "Plant Payments": plant_payments,
         }
 
+        # Compare against the equal-length period immediately before, so the
+        # P&L answers "is this better or worse than last time?" at a glance.
+        comparison = None
+        if filters.get("date_from") and filters.get("date_to"):
+            from datetime import timedelta as _td
+
+            length = filters["date_to"] - filters["date_from"]
+            prev_to = filters["date_from"] - _td(days=1)
+            prev_from = prev_to - length
+            prev_filters = dict(filters)
+            prev_filters["date_from"] = prev_from
+            prev_filters["date_to"] = prev_to
+            prev_orders = self.repository.completed_orders_filtered(prev_filters)
+            prev_revenue = sum(o.total_contractor_amount() for o in prev_orders)
+            prev_vehicle = sum(o.total_vehicle_amount() for o in prev_orders)
+            prev_plant = sum(o.plant_amount or 0 for o in prev_orders)
+            prev_profit = prev_revenue - prev_vehicle - prev_plant
+
+            def pct(current, previous):
+                if abs(previous) < 0.005:
+                    return None
+                return (current - previous) / abs(previous) * 100
+
+            comparison = {
+                "prev_from": prev_from,
+                "prev_to": prev_to,
+                "rows": [
+                    {"label": "Revenue", "current": total_revenue, "previous": prev_revenue, "pct": pct(total_revenue, prev_revenue)},
+                    {"label": "Vehicle Payments", "current": vehicle_payables, "previous": prev_vehicle, "pct": pct(vehicle_payables, prev_vehicle)},
+                    {"label": "Plant Payments", "current": plant_payments, "previous": prev_plant, "pct": pct(plant_payments, prev_plant)},
+                    {"label": "Net Profit", "current": total_profit, "previous": prev_profit, "pct": pct(total_profit, prev_profit)},
+                ],
+                "prev_trips": len(prev_orders),
+            }
+
         return {
             "report_heading": "Profit & Loss Report",
+            "comparison": comparison,
             "report_intro_title": "Operational orders with a built-in profit and loss statement.",
             "report_intro_copy": "Use the same familiar order-style workspace, but now with revenue, expense, and profitability visibility for every filtered trip.",
             "summary_cards": [
@@ -390,6 +440,195 @@ class ReportService:
             },
             "print_title": "Finances Report",
         }
+
+    def _ageing_context(self, filters):
+        from .financials import entity_ageing
+        from ..extensions import db
+        from ..models import Contractor, PetrolPump, Plant, VehicleOwner
+
+        as_of = filters.get("date_to")
+        rows = []
+
+        def collect(model, entity_type, type_label, receivable):
+            for entity in db.session.query(model).order_by(model.name.asc()).all():
+                ageing = entity_ageing(entity_type, entity.id, as_of=as_of)
+                if ageing["total"] <= 0.005 and ageing["credit"] <= 0.005:
+                    continue
+                rows.append({
+                    "name": entity.name,
+                    "type": type_label,
+                    "receivable": receivable,
+                    "buckets": ageing["buckets"],
+                    "total": ageing["total"],
+                    "credit": ageing["credit"],
+                })
+
+        collect(Contractor, "contractor", "Contractor", True)
+        collect(VehicleOwner, "vehicle_owner", "Vehicle Owner", False)
+        collect(PetrolPump, "petrol_pump", "Petrol Pump", False)
+        collect(Plant, "plant", "Plant", False)
+        rows.sort(key=lambda row: row["total"], reverse=True)
+
+        bucket_totals = [sum(row["buckets"][i] for row in rows) for i in range(4)]
+        total_outstanding = sum(bucket_totals)
+        overdue_90 = bucket_totals[3]
+        credit_total = sum(row["credit"] for row in rows)
+
+        return {
+            "report_heading": "Ageing Report",
+            "report_intro_title": "How old every outstanding balance is.",
+            "report_intro_copy": "Receipts and payments settle the OLDEST charges first; whatever remains is aged by the date it was earned. Chase the 90+ column first.",
+            "summary_cards": [
+                {"label": "Total Outstanding", "value": f"Rs. {total_outstanding:,.0f}", "hint": "Across all open accounts", "tone": "primary"},
+                {"label": "90+ Days", "value": f"Rs. {overdue_90:,.0f}", "hint": "Oldest, highest-risk money", "tone": "ocean"},
+                {"label": "Advance Positions", "value": f"Rs. {credit_total:,.0f}", "hint": "Paid/received beyond charges", "tone": "accent"},
+                {"label": "Open Accounts", "value": len(rows), "hint": "Accounts with a balance", "tone": "slate"},
+            ],
+            "ageing_rows": rows,
+            "ageing_bucket_totals": bucket_totals,
+            "ageing_total": total_outstanding,
+            "ageing_as_of": as_of,
+            "print_title": "Ageing Report",
+        }
+
+    def _vehicles_context(self, filters):
+        from ..extensions import db
+        from ..models import DieselEntry
+
+        orders = self.repository.completed_orders_filtered(filters)
+        rows_by_vehicle = {}
+        for order in orders:
+            key = order.vehicle_id or 0
+            row = rows_by_vehicle.setdefault(key, {
+                "vehicle_number": order.vehicle.vehicle_number if order.vehicle else "Unknown",
+                "owner_name": order.vehicle.owner_display_name if order.vehicle else "-",
+                "trips": 0, "quantity": 0.0, "revenue": 0.0,
+                "vehicle_cost": 0.0, "plant_cost": 0.0, "fuel": 0.0,
+            })
+            row["trips"] += 1
+            row["quantity"] += float(order.delivered_quantity or order.quantity or 0)
+            row["revenue"] += float(order.total_contractor_amount())
+            row["vehicle_cost"] += float(order.total_vehicle_amount())
+            row["plant_cost"] += float(order.plant_amount or 0)
+
+        fuel_query = db.session.query(DieselEntry).filter(DieselEntry.approval_status == "approved")
+        if filters.get("date_from"):
+            fuel_query = fuel_query.filter(DieselEntry.date >= filters["date_from"].date() if hasattr(filters["date_from"], "date") else filters["date_from"])
+        if filters.get("date_to"):
+            fuel_query = fuel_query.filter(DieselEntry.date <= filters["date_to"].date() if hasattr(filters["date_to"], "date") else filters["date_to"])
+        for entry in fuel_query.all():
+            if entry.vehicle_id in rows_by_vehicle:
+                rows_by_vehicle[entry.vehicle_id]["fuel"] += float(entry.amount or 0)
+
+        vehicle_profit_rows = []
+        for row in rows_by_vehicle.values():
+            row["profit"] = row["revenue"] - row["vehicle_cost"] - row["plant_cost"]
+            row["profit_per_trip"] = row["profit"] / row["trips"] if row["trips"] else 0.0
+            vehicle_profit_rows.append(row)
+        vehicle_profit_rows.sort(key=lambda row: row["profit"], reverse=True)
+
+        total_profit = sum(row["profit"] for row in vehicle_profit_rows)
+        best = vehicle_profit_rows[0] if vehicle_profit_rows else None
+        worst = vehicle_profit_rows[-1] if vehicle_profit_rows else None
+
+        return {
+            "report_heading": "Vehicle Profitability Report",
+            "report_intro_title": "What each vehicle earns the company.",
+            "report_intro_copy": "Per vehicle: contractor revenue minus the owner payment and plant charges. Fuel is shown for context — it settles between the owner and pump accounts, not the trip P&L.",
+            "summary_cards": [
+                {"label": "Vehicles in Report", "value": len(vehicle_profit_rows), "hint": "With completed trips after filters", "tone": "primary"},
+                {"label": "Total Profit", "value": f"Rs. {total_profit:,.0f}", "hint": "Across all vehicles", "tone": "accent"},
+                {"label": "Best Vehicle", "value": best["vehicle_number"] if best else "—", "hint": f"Rs. {best['profit']:,.0f} profit" if best else "No data", "tone": "ocean"},
+                {"label": "Lowest Vehicle", "value": worst["vehicle_number"] if worst else "—", "hint": f"Rs. {worst['profit']:,.0f} profit" if worst else "No data", "tone": "slate"},
+            ],
+            "vehicle_profit_rows": vehicle_profit_rows,
+            "vehicle_profit_chart": {
+                "labels": [row["vehicle_number"] for row in vehicle_profit_rows[:10]],
+                "values": [round(row["profit"], 2) for row in vehicle_profit_rows[:10]],
+            },
+            "print_title": "Vehicle Profitability Report",
+        }
+
+    def export_report(self, filters):
+        """Excel (.xls via HTML table) export of the active report's register."""
+        from html import escape
+
+        context = self.workspace_context(filters)
+        report_type = context["report_type"]
+
+        def money(value):
+            return f"{float(value or 0):,.2f}"
+
+        headers, rows = [], []
+        if report_type == "diesel":
+            headers = ["Date", "Order", "Vehicle", "Pump", "Receipt", "Litres", "Amount"]
+            rows = [[
+                entry["date"].strftime("%Y-%m-%d") if entry["date"] else "-",
+                entry["order_id"] or "-", entry["vehicle_number"], entry["pump_name"],
+                entry["receipt_number"] or "-", f"{entry['litres']:.2f}", money(entry["amount"]),
+            ] for entry in context["diesel_entries"]]
+        elif report_type == "plants":
+            headers = ["Date", "Order", "Plant", "Vehicle", "Material", "Loaded Qty", "Plant Amount"]
+            rows = [[
+                (loading.order.completion_date or loading.order.order_date).strftime("%Y-%m-%d") if loading.order else "-",
+                loading.order_id, loading.plant.name if loading.plant else "-",
+                loading.order.vehicle.vehicle_number if loading.order and loading.order.vehicle else "-",
+                loading.order.material_name if loading.order else "-",
+                f"{float(loading.load_quantity or 0):.2f}", money(loading.plant_amount),
+            ] for loading in context["plant_loadings"]]
+        elif report_type == "performance":
+            headers = ["Month", "Trips", "Quantity", "Revenue", "Profit"]
+            rows = [[
+                row["label"], row["trips"], f"{row['quantity']:.2f}", money(row["revenue"]), money(row["profit"]),
+            ] for row in context["monthly_rows"]]
+        elif report_type == "finances":
+            headers = ["Side", "Account", "Type", "Amount"]
+            rows = [["Receivable", row["name"], row["type"], money(row["amount"])] for row in context["receivables"]]
+            rows += [["Payable", row["name"], row["type"], money(row["amount"])] for row in context["payables"]]
+        elif report_type == "ageing":
+            headers = ["Account", "Type", "0-30 Days", "31-60 Days", "61-90 Days", "90+ Days", "Total", "Advance"]
+            rows = [[
+                row["name"], row["type"],
+                money(row["buckets"][0]), money(row["buckets"][1]), money(row["buckets"][2]), money(row["buckets"][3]),
+                money(row["total"]), money(row["credit"]),
+            ] for row in context["ageing_rows"]]
+        elif report_type == "vehicles":
+            headers = ["Vehicle", "Owner", "Trips", "Quantity", "Revenue", "Vehicle Cost", "Plant Cost", "Profit", "Profit/Trip", "Fuel (info)"]
+            rows = [[
+                row["vehicle_number"], row["owner_name"], row["trips"], f"{row['quantity']:.2f}",
+                money(row["revenue"]), money(row["vehicle_cost"]), money(row["plant_cost"]),
+                money(row["profit"]), money(row["profit_per_trip"]), money(row["fuel"]),
+            ] for row in context["vehicle_profit_rows"]]
+        else:  # profit_loss
+            headers = ["ID", "Date", "Vehicle", "Contractor", "Material", "Delivered", "Revenue", "Vehicle Payable", "Plant", "Profit"]
+            rows = [[
+                order.id,
+                (order.completion_date or order.order_date).strftime("%Y-%m-%d"),
+                order.vehicle.vehicle_number if order.vehicle else "-",
+                order.contractor.name if order.contractor else "-",
+                order.material_name,
+                f"{float(order.delivered_quantity or order.quantity or 0):.2f}",
+                money(order.total_contractor_amount()), money(order.total_vehicle_amount()),
+                money(order.plant_amount), money(order.profit_amount()),
+            ] for order in context["orders"]]
+
+        title = context.get("print_title") or "Report"
+        period = ""
+        if filters.get("date_from") or filters.get("date_to"):
+            period = f" ({filters['date_from'].strftime('%Y-%m-%d') if filters.get('date_from') else 'start'} to {filters['date_to'].strftime('%Y-%m-%d') if filters.get('date_to') else 'date'})"
+        header_html = "".join(f"<th style='background:#0b2742;color:#fff'>{escape(str(h))}</th>" for h in headers)
+        body_html = "".join(
+            "<tr>" + "".join(f"<td>{escape(str(cell))}</td>" for cell in row) + "</tr>"
+            for row in rows
+        )
+        html = (
+            "<html><head><meta charset='utf-8'></head><body>"
+            f"<h3>Al Rehman Goods Transport — {escape(title)}{escape(period)}</h3>"
+            f"<table border='1'><thead><tr>{header_html}</tr></thead><tbody>{body_html}</tbody></table>"
+            "</body></html>"
+        )
+        filename = f"{report_type}_report.xls"
+        return filename, html
 
     def _filter_chips(self, filters, options):
         lookups = {
