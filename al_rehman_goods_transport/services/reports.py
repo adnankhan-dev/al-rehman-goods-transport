@@ -38,18 +38,14 @@ class ReportService:
         self.repository = repository or ReportRepository()
 
     def financial_report(self, start_date, end_date):
+        # Order-linked diesel and order advances are retired: a trip's cost is
+        # the full vehicle amount plus plant charges. Fuel lives in the Fuel
+        # Log against the pump/owner accounts, advances in the ledger.
         completed_orders = self.repository.completed_orders_between(start_date, end_date)
-        module_diesel = self.repository.module_diesel_totals_by_order([order.id for order in completed_orders])
-        module_diesel_total = sum(module_diesel.values())
         total_revenue = sum(order.total_contractor_amount() for order in completed_orders)
-        # Diesel-module amounts linked to these orders are paid via pump credit,
-        # so they move from the cash vehicle-payable bucket into the diesel
-        # bucket; totals and profit are unchanged.
-        vehicle_payables = sum(order.remaining_vehicle_payment() for order in completed_orders) - module_diesel_total
+        vehicle_payables = sum(order.total_vehicle_amount() for order in completed_orders)
         plant_payments = sum(order.plant_amount or 0 for order in completed_orders)
-        diesel_total = sum(order.total_diesel_amount() for order in completed_orders) + module_diesel_total
-        advances_total = sum(order.total_advance_amount() for order in completed_orders)
-        total_expenses = vehicle_payables + plant_payments + diesel_total + advances_total
+        total_expenses = vehicle_payables + plant_payments
         total_profit = total_revenue - total_expenses
 
         revenue_by_contractor = {}
@@ -65,8 +61,6 @@ class ReportService:
             "expenses_by_category": {
                 "Vehicle Payments": vehicle_payables,
                 "Plant Payments": plant_payments,
-                "Diesel": diesel_total,
-                "Advances": advances_total,
             },
             "cash_flow": {"Inflow": total_revenue, "Outflow": total_expenses, "Net Cash Flow": total_profit},
         }
@@ -106,17 +100,12 @@ class ReportService:
 
     def _profit_loss_context(self, filters):
         orders = self.repository.completed_orders_filtered(filters)
-        module_diesel_by_order = self.repository.module_diesel_totals_by_order([order.id for order in orders])
-        module_diesel_total = sum(module_diesel_by_order.values())
+        # Order-linked diesel and advances are retired — a trip's expense side
+        # is the vehicle amount plus plant charges only.
         total_revenue = sum(order.total_contractor_amount() for order in orders)
-        # Same split as financial_report: order-linked Diesel-module amounts are
-        # paid via pump credit, so they belong in the diesel bucket rather than
-        # the cash vehicle payable. Totals and profit are unchanged.
-        vehicle_payables = sum(order.remaining_vehicle_payment() for order in orders) - module_diesel_total
+        vehicle_payables = sum(order.total_vehicle_amount() for order in orders)
         plant_payments = sum(order.plant_amount or 0 for order in orders)
-        diesel_total = sum(order.total_diesel_amount() for order in orders) + module_diesel_total
-        advances_total = sum(order.total_advance_amount() for order in orders)
-        total_expenses = vehicle_payables + plant_payments + diesel_total + advances_total
+        total_expenses = vehicle_payables + plant_payments
         total_profit = total_revenue - total_expenses
         total_quantity = sum(order.delivered_quantity or order.quantity or 0 for order in orders)
 
@@ -128,8 +117,6 @@ class ReportService:
         expense_breakdown = {
             "Vehicle Payments": vehicle_payables,
             "Plant Payments": plant_payments,
-            "Diesel": diesel_total,
-            "Advances": advances_total,
         }
 
         return {
@@ -139,15 +126,13 @@ class ReportService:
             "summary_cards": [
                 {"label": "Trips in Report", "value": len(orders), "hint": "Completed orders after filters", "tone": "primary"},
                 {"label": "Revenue", "value": f"Rs. {total_revenue:,.0f}", "hint": "Contractor-side billed value", "tone": "accent"},
-                {"label": "Expenses", "value": f"Rs. {total_expenses:,.0f}", "hint": "Vehicle, plant, diesel, and advances", "tone": "ocean"},
+                {"label": "Expenses", "value": f"Rs. {total_expenses:,.0f}", "hint": "Vehicle and plant costs", "tone": "ocean"},
                 {"label": "Net Profit", "value": f"Rs. {total_profit:,.0f}", "hint": f"Delivered quantity {total_quantity:,.2f}", "tone": "slate"},
             ],
             "statement_lines": [
                 {"label": "Revenue", "amount": total_revenue, "kind": "positive"},
                 {"label": "Vehicle Payments", "amount": vehicle_payables, "kind": "negative"},
                 {"label": "Plant Payments", "amount": plant_payments, "kind": "negative"},
-                {"label": "Diesel", "amount": diesel_total, "kind": "negative"},
-                {"label": "Advances", "amount": advances_total, "kind": "negative"},
             ],
             "statement_totals": {
                 "revenue": total_revenue,
@@ -155,7 +140,6 @@ class ReportService:
                 "profit": total_profit,
             },
             "orders": orders,
-            "module_diesel_by_order": module_diesel_by_order,
             "profit_chart": {
                 "labels": [item[0] for item in sorted_contractors],
                 "values": [round(item[1], 2) for item in sorted_contractors],

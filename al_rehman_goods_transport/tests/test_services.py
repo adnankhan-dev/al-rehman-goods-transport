@@ -466,7 +466,10 @@ class OrderFinanceServiceTests(unittest.TestCase):
         self.assertEqual(company.balance, 400)
         self.assertEqual(contractor.balance, -400)
 
-    def test_financial_report_uses_remaining_vehicle_payable_bucket(self):
+    def test_financial_report_uses_vehicle_and_plant_costs_only(self):
+        # Order-linked diesel and advances are retired: a trip's expense side is
+        # the full vehicle amount plus plant charges; fuel lives in the Fuel Log
+        # against the pump/owner accounts and advances in the ledger.
         order = Order(
             vehicle_id=self.vehicle_one_id,
             contractor_id=self.contractor_id,
@@ -476,43 +479,15 @@ class OrderFinanceServiceTests(unittest.TestCase):
             material_type="Sand",
             quantity=100,
             delivered_quantity=100,
-            advance_amount=100,
-            diesel_amount=120,
             contractor_rate=500,
             vehicle_rate=400,
             plant_id=self.plant_id,
             plant_amount=110,
             status="Completed",
         )
-        order.diesel_entries = [OrderDieselEntry(amount=120)]
-        db.session.add(order)
-        db.session.commit()
-
-        report = ReportService().financial_report(order.order_date - timedelta(minutes=1), order.order_date + timedelta(days=1))
-
-        self.assertEqual(report["expenses_by_category"]["Vehicle Payments"], 39780)
-        self.assertEqual(report["expenses_by_category"]["Diesel"], 120)
-        self.assertEqual(report["expenses_by_category"]["Advances"], 100)
-        self.assertEqual(report["cash_flow"]["Outflow"], 40110)
-
-    def test_financial_report_moves_module_diesel_into_diesel_bucket(self):
-        order = Order(
-            vehicle_id=self.vehicle_one_id,
-            contractor_id=self.contractor_id,
-            site_id=self.site_id,
-            driver_name="Driver",
-            material_id=self.material_id,
-            material_type="Sand",
-            quantity=100,
-            delivered_quantity=100,
-            advance_amount=0,
-            contractor_rate=500,
-            vehicle_rate=400,
-            status="Completed",
-        )
         db.session.add(order)
         db.session.flush()
-        # Diesel recorded through the Diesel module, linked to this order, paid on pump credit.
+        # Fuel-Log diesel for the same vehicle must NOT change the trip P&L.
         db.session.add(DieselEntry(
             vehicle_id=self.vehicle_one_id,
             petrol_pump_id=self.pump_id,
@@ -526,12 +501,12 @@ class OrderFinanceServiceTests(unittest.TestCase):
 
         report = ReportService().financial_report(order.order_date - timedelta(minutes=1), order.order_date + timedelta(days=1))
 
-        # Revenue 50000, gross vehicle 40000. Module diesel of 300 moves out of the
-        # cash vehicle bucket into the diesel bucket; totals and profit unchanged.
-        self.assertEqual(report["expenses_by_category"]["Vehicle Payments"], 39700)
-        self.assertEqual(report["expenses_by_category"]["Diesel"], 300)
-        self.assertEqual(report["total_expenses"], 40000)
-        self.assertEqual(report["total_profit"], 10000)
+        self.assertEqual(report["expenses_by_category"]["Vehicle Payments"], 40000)
+        self.assertEqual(report["expenses_by_category"]["Plant Payments"], 110)
+        self.assertNotIn("Diesel", report["expenses_by_category"])
+        self.assertNotIn("Advances", report["expenses_by_category"])
+        self.assertEqual(report["total_expenses"], 40110)
+        self.assertEqual(report["total_profit"], 50000 - 40110)
 
     def test_scoped_rate_surfaces_before_from_site_and_material_chosen(self):
         from datetime import date as date_type

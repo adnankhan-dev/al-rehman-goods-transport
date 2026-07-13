@@ -83,16 +83,15 @@ def get_dashboard_metrics():
         DieselEntry.date >= today_start.date()
     ).scalar() or 0.0
 
-    # P&L for today's completed orders. The vehicle line is the *remaining*
-    # payable (net of diesel/advance) so that adding the diesel and advance
-    # lines back yields the true total cost — same statement structure as
-    # ReportService.financial_report; otherwise diesel/advances are counted twice.
+    # P&L for today's completed orders. Order-linked diesel/advances are
+    # retired, so a trip's cost is the vehicle amount plus plant charges —
+    # same statement structure as ReportService.financial_report.
     today_revenue = sum(o.total_contractor_amount() for o in orders_today_list)
-    today_vehicle_cost = sum(o.remaining_vehicle_payment() for o in orders_today_list)
+    today_vehicle_cost = sum(o.total_vehicle_amount() for o in orders_today_list)
     today_plant_cost = sum(o.plant_amount or 0 for o in orders_today_list)
-    today_diesel_cost = sum(o.total_diesel_amount() for o in orders_today_list)
-    today_advances = sum(o.total_advance_amount() for o in orders_today_list)
-    today_expenses = today_vehicle_cost + today_plant_cost + today_diesel_cost + today_advances
+    today_diesel_cost = 0.0
+    today_advances = 0.0
+    today_expenses = today_vehicle_cost + today_plant_cost
     today_profit = today_revenue - today_expenses
 
     # ── Diesel entries this month ─────────────────────────────────────────────

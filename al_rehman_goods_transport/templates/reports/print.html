@@ -75,7 +75,7 @@
                         <td>{{ order.material_name }}</td>
                         <td>{{ "%.2f"|format(order.delivered_quantity or order.quantity or 0) }} {{ order.unit.upper() }}</td>
                         <td>Rs. {{ "%.2f"|format(order.total_contractor_amount()) }}</td>
-                        <td>Rs. {{ "%.2f"|format(order.remaining_vehicle_payment() - module_diesel_by_order.get(order.id, 0)) }}</td>
+                        <td>Rs. {{ "%.2f"|format(order.total_vehicle_amount()) }}</td>
                         <td>Rs. {{ "%.2f"|format(order.profit_amount()) }}</td>
                     </tr>
                     {% else %}

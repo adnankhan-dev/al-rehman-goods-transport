@@ -96,6 +96,49 @@
                 <input class="form-control" type="date" id="date_to" name="date_to" value="{{ filter_state.date_to.strftime('%Y-%m-%d') if filter_state.date_to else '' }}">
             </div>
         </div>
+        <div class="mt-2" style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;">
+            <span style="font-size:0.75rem;letter-spacing:0.06em;text-transform:uppercase;font-weight:700;color:#5b6472;margin-right:4px;">Quick Period:</span>
+            <button type="button" class="btn btn-sm btn-ui-neutral" data-period-preset="today">Today</button>
+            <button type="button" class="btn btn-sm btn-ui-neutral" data-period-preset="yesterday">Yesterday</button>
+            <button type="button" class="btn btn-sm btn-ui-neutral" data-period-preset="this_week">This Week</button>
+            <button type="button" class="btn btn-sm btn-ui-neutral" data-period-preset="this_month">This Month</button>
+            <button type="button" class="btn btn-sm btn-ui-neutral" data-period-preset="last_month">Last Month</button>
+            <button type="button" class="btn btn-sm btn-ui-neutral" data-period-preset="this_year">This Year</button>
+            <button type="button" class="btn btn-sm btn-ui-neutral" data-period-preset="all_time">All Time</button>
+        </div>
+        <script>
+            (function () {
+                function pad(n) { return String(n).padStart(2, '0'); }
+                function fmt(d) { return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()); }
+                document.querySelectorAll('[data-period-preset]').forEach(function (button) {
+                    button.addEventListener('click', function () {
+                        var now = new Date();
+                        var from = null, to = null;
+                        switch (button.dataset.periodPreset) {
+                            case 'today': from = now; to = now; break;
+                            case 'yesterday':
+                                from = new Date(now); from.setDate(now.getDate() - 1); to = from; break;
+                            case 'this_week':
+                                from = new Date(now);
+                                // Week starts Monday.
+                                from.setDate(now.getDate() - ((now.getDay() + 6) % 7));
+                                to = now; break;
+                            case 'this_month':
+                                from = new Date(now.getFullYear(), now.getMonth(), 1); to = now; break;
+                            case 'last_month':
+                                from = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+                                to = new Date(now.getFullYear(), now.getMonth(), 0); break;
+                            case 'this_year':
+                                from = new Date(now.getFullYear(), 0, 1); to = now; break;
+                            case 'all_time': from = null; to = null; break;
+                        }
+                        document.getElementById('date_from').value = from ? fmt(from) : '';
+                        document.getElementById('date_to').value = to ? fmt(to) : '';
+                        button.closest('form').submit();
+                    });
+                });
+            })();
+        </script>
         <div class="filter-grid mt-3">
             <div class="form-field">
                 <label class="form-label" for="search">Search</label>
@@ -219,8 +262,6 @@
                         <th>Revenue</th>
                         <th>Vehicle Payable</th>
                         <th>Plant</th>
-                        <th>Diesel</th>
-                        <th>Advance</th>
                         <th>Profit</th>
                     </tr>
                 </thead>
@@ -233,16 +274,13 @@
                         <td>{{ order.contractor.name if order.contractor else '-' }}</td>
                         <td>{{ order.material_name }}</td>
                         <td>{{ "%.2f"|format(order.delivered_quantity or order.quantity or 0) }} {{ order.unit.upper() }}</td>
-                        {% set live_diesel = module_diesel_by_order.get(order.id, 0) %}
                         <td class="table-amount">Rs. {{ "%.2f"|format(order.total_contractor_amount()) }}</td>
-                        <td class="table-amount">Rs. {{ "%.2f"|format(order.remaining_vehicle_payment() - live_diesel) }}</td>
+                        <td class="table-amount">Rs. {{ "%.2f"|format(order.total_vehicle_amount()) }}</td>
                         <td class="table-amount">Rs. {{ "%.2f"|format(order.plant_amount or 0) }}</td>
-                        <td class="table-amount">Rs. {{ "%.2f"|format(order.total_diesel_amount() + live_diesel) }}</td>
-                        <td class="table-amount">Rs. {{ "%.2f"|format(order.total_advance_amount()) }}</td>
                         <td class="table-amount text-success">Rs. {{ "%.2f"|format(order.profit_amount()) }}</td>
                     </tr>
                     {% else %}
-                    <tr><td colspan="12" class="text-center table-muted">No completed orders matched these report filters.</td></tr>
+                    <tr><td colspan="10" class="text-center table-muted">No completed orders matched these report filters.</td></tr>
                     {% endfor %}
                 </tbody>
             </table>
