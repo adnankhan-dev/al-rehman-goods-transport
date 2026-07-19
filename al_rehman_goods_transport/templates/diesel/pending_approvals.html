@@ -63,12 +63,20 @@
                                 <button type="button" class="btn btn-sm btn-ui-primary" onclick="approveDieselRow(this)">
                                     <i class="bi bi-check-lg"></i> Approve
                                 </button>
+                                {% endif %}
+                                {% if can_edit %}
+                                <a href="{{ url_for('diesel.edit', id=entry.id) }}" class="btn btn-sm btn-ui-edit" title="Edit entry">
+                                    <i class="bi bi-pencil"></i>
+                                </a>
+                                {% endif %}
+                                {% if can_approve %}
                                 <button type="submit" class="btn btn-sm btn-ui-danger"
                                         formaction="{{ url_for('diesel.reject_entry', id=entry.id) }}"
                                         onclick="return confirm('Reject and remove this pending diesel entry?');">
                                     <i class="bi bi-x-lg"></i>
                                 </button>
-                                {% else %}<span class="text-muted">—</span>{% endif %}
+                                {% endif %}
+                                {% if not can_approve and not can_edit %}<span class="text-muted">—</span>{% endif %}
                             </td>
                         </tr>
                         {% endfor %}

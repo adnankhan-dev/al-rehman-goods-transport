@@ -2867,6 +2867,52 @@ body.orders-list-page .orders-register-table .table-amount {
     }
 }
 
+/* ── Mobile: dense tables & panels (approvals, ledger, lists) ─────────────────
+   Keep wide tables scrolling inside their own panel instead of stretching the
+   page, and let panel headers / toolbars / filter bars wrap so nothing is cut
+   off or overflows the viewport on phones and small tablets. */
+@media (max-width: 767.98px) {
+    .table-responsive {
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+    }
+
+    .table-panel-header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 0.5rem;
+    }
+
+    .table-toolbar,
+    .table-panel-actions,
+    .filter-actions,
+    .detail-actions,
+    .erp-top-bar-actions {
+        flex-wrap: wrap;
+    }
+
+    /* The pending-approval tables are column-dense; keep them legible and let
+       the panel scroll horizontally rather than crushing every cell. */
+    .approval-table {
+        min-width: 720px;
+    }
+    .approval-table .form-control-sm {
+        max-width: 74px;
+    }
+
+    /* Stack the top page bar (title + actions) so buttons don't overflow. */
+    .erp-top-bar,
+    .section-heading {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 0.6rem;
+    }
+    .section-heading > a,
+    .section-heading .btn {
+        width: 100%;
+    }
+}
+
 @media (max-width: 575.98px) {
     .app-header-brand span {
         display: none;

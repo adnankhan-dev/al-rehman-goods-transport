@@ -30,8 +30,6 @@ else:
     from .core.templating import build_route_index
     from .models import *  # noqa: F401,F403
     from .services.backups import run_automatic_backup
-
-
 async def _daily_backup_loop():
     while True:
         await asyncio.sleep(24 * 60 * 60)

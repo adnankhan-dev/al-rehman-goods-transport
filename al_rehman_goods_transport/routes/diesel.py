@@ -181,12 +181,16 @@ async def diesel_create(request: Request, current_user=Depends(require_permissio
 async def diesel_pending(request: Request, current_user=Depends(require_any_permission("diesel.view", "diesel.approve"))):
     service = DieselService()
     entries = service.list_pending()
+    def _can(code):
+        return bool(getattr(current_user, "can", lambda _c: False)(code))
+
     return render_template(
         request,
         "diesel/pending_approvals.html",
         entries=entries,
         pending_count=len(entries),
-        can_approve=bool(getattr(current_user, "can", lambda _c: False)("diesel.approve")),
+        can_approve=_can("diesel.approve"),
+        can_edit=_can("diesel.edit"),
     )
 
 
@@ -256,9 +260,13 @@ async def diesel_edit(id: int, request: Request, current_user=Depends(require_pe
         _populate_choices(form, service, vehicle_id=vehicle_id)
         if form.validate():
             try:
-                service.update_entry(id, _entry_data_from_form(form))
+                updated = service.update_entry(id, _entry_data_from_form(form))
                 record_audit(current_user, "update", "diesel_entry", id, f"Diesel entry #{id} updated")
                 flash(request, f"Diesel entry #{id} updated.", "success")
+                # A still-pending entry isn't in the fuel log, so send an approver
+                # who can also approve back to the Diesel Approvals screen.
+                if updated.approval_status == "pending" and current_user.can("diesel.approve"):
+                    return RedirectResponse(url=str(request.url_for("diesel.pending_approvals")), status_code=303)
                 return RedirectResponse(url=str(request.url_for("diesel.view", id=id)), status_code=303)
             except Exception as exc:
                 flash(request, str(exc), "danger")
