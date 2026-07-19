@@ -11,6 +11,10 @@
         {{ metric_tile("Pending Bills", pending_bills|length, "Not yet visible on the ledger", "ocean", "bi bi-receipt") }}
     </div>
 
+    {% if not can_approve %}
+    <div class="alert alert-info"><i class="bi bi-eye"></i> You have view-only access. Approving or rejecting transactions and bills requires the Approve Ledger Entries permission.</div>
+    {% endif %}
+
     {% if not pending_transactions and not pending_bills %}
         {{ empty_state("Nothing is waiting for approval in the ledger.", "bi-check2-circle") }}
     {% endif %}
@@ -23,7 +27,7 @@
                 <h3 class="table-panel-title">Pending transactions</h3>
                 <div class="table-toolbar">
                     <span class="section-count">{{ pending_transactions|length }}</span>
-                    <button type="button" class="btn btn-sm btn-ui-primary" onclick="approveAllTx()"><i class="bi bi-check2-all"></i> Approve All</button>
+                    {% if can_approve %}<button type="button" class="btn btn-sm btn-ui-primary" onclick="approveAllTx()"><i class="bi bi-check2-all"></i> Approve All</button>{% endif %}
                 </div>
             </div>
             <div class="table-responsive">
@@ -47,10 +51,12 @@
                             <td class="text-end">Rs. {{ "%.2f"|format(tx.amount or 0) }}</td>
                             <td>{{ tx.reference or '-' }}</td>
                             <td class="text-end text-nowrap">
+                                {% if can_approve %}
                                 <button type="button" class="btn btn-sm btn-ui-primary" onclick="approveTxRow(this)"><i class="bi bi-check-lg"></i> Approve</button>
                                 <button type="submit" class="btn btn-sm btn-ui-danger"
                                         formaction="{{ url_for('transactions.reject_transaction', id=tx.id) }}"
                                         onclick="return confirm('Reject and remove this pending transaction?');"><i class="bi bi-x-lg"></i></button>
+                                {% else %}<span class="text-muted">—</span>{% endif %}
                             </td>
                         </tr>
                         {% endfor %}
@@ -88,6 +94,7 @@
                         <td>{{ bill.bill_date.strftime('%d %b %Y') if bill.bill_date else '-' }}</td>
                         <td class="text-end">Rs. {{ "%.2f"|format(bill.total_amount or 0) }}</td>
                         <td class="text-end text-nowrap">
+                            {% if can_approve %}
                             <form method="POST" action="{{ url_for('bills.approve_bill', id=bill.id) }}" class="d-inline">
                                 <button type="submit" class="btn btn-sm btn-ui-primary"><i class="bi bi-check-lg"></i> Approve</button>
                             </form>
@@ -95,6 +102,7 @@
                                   onsubmit="return confirm('Reject bill {{ bill.bill_number }} and release its records?');">
                                 <button type="submit" class="btn btn-sm btn-ui-danger"><i class="bi bi-x-lg"></i></button>
                             </form>
+                            {% else %}<span class="text-muted">—</span>{% endif %}
                         </td>
                     </tr>
                     {% endfor %}
@@ -108,6 +116,7 @@
 {% endblock %}
 
 {% block page_scripts %}
+{% if can_approve %}
 <script>
     document.addEventListener('DOMContentLoaded', function() {
         const form = document.getElementById('txApprovalForm');
@@ -123,4 +132,5 @@
         };
     });
 </script>
+{% endif %}
 {% endblock %}

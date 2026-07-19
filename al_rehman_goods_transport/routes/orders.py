@@ -3,7 +3,7 @@ from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 
-from ..core.auth import require_permission
+from ..core.auth import require_any_permission, require_permission
 from ..core.flash import flash
 from ..core.templating import render_template
 from ..forms import EditOrderForm, OrderForm
@@ -209,15 +209,32 @@ async def create_order(request: Request, current_user=Depends(require_permission
 
 
 @router.get("/orders/pending", name="orders.pending_approvals")
-async def pending_approvals(request: Request, _current_user=Depends(require_permission("orders.approve"))):
+async def pending_approvals(request: Request, current_user=Depends(require_any_permission("orders.approve", "orders.view"))):
     service = OrderService()
-    groups = service.list_pending_approvals()
+    params = request.query_params
+    group_by = (params.get("group_by") or "default").strip()
+    filter_state = {
+        "contractor_id": _parse_int(params.get("contractor_id")),
+        "vehicle_owner_id": _parse_int(params.get("vehicle_owner_id")),
+        "vehicle_id": _parse_int(params.get("vehicle_id")),
+        "site_id": _parse_int(params.get("site_id")),
+    }
+    groups = service.list_pending_approvals(group_by=group_by, filters={k: v for k, v in filter_state.items() if v})
+
+    def _can(code):
+        return bool(getattr(current_user, "can", lambda _c: False)(code))
+
     return render_template(
         request,
         "orders/pending_approvals.html",
         groups=groups,
         pending_count=sum(len(g["rows"]) for g in groups),
-        can_save_rates=bool(getattr(_current_user, "can", lambda _c: False)("rates.create")),
+        group_by=group_by if group_by in OrderService.PENDING_GROUP_BY else "default",
+        filter_state=filter_state,
+        filter_options=service.pending_approval_filter_options(),
+        can_approve=_can("orders.approve"),
+        can_edit=_can("orders.edit"),
+        can_save_rates=_can("rates.create"),
     )
 
 

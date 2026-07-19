@@ -144,7 +144,9 @@ class DieselService:
         entries = (
             DieselEntry.query.filter(DieselEntry.approval_status == "pending").all()
         )
-        entries.sort(key=lambda e: (e.date or date_type.today(), receipt_sort_key(e.receipt_number)))
+        # Sorted by receipt number ascending (768 before 1001), blanks last —
+        # same convention as the fuel log and pump statement.
+        entries.sort(key=lambda e: receipt_sort_key(e.receipt_number))
         return entries
 
     def approve_entry(self, entry_id, approver_id=None):

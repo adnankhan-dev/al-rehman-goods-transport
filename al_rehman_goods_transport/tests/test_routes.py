@@ -328,6 +328,48 @@ class RouteTests(unittest.TestCase):
         self.assertEqual(approved.contractor_rate, 16)
         self.assertGreater(db.session.get(Contractor, contractor.id).balance, 0)
 
+    def test_pending_approvals_grouping_and_view_only_access(self):
+        contractor = Contractor(name="ABC Contractors")
+        material = Material(name="Sand")
+        vehicle = Vehicle(vehicle_number="ABC-777")
+        db.session.add_all([contractor, material, vehicle])
+        db.session.flush()
+        site = Site(name="Site One", contractor_id=contractor.id)
+        db.session.add(site)
+        db.session.flush()
+        order = Order(
+            vehicle_id=vehicle.id, contractor_id=contractor.id, site_id=site.id,
+            driver_name="Driver", material_id=material.id, material_type="Sand",
+            quantity=100, delivered_quantity=100, receipt_number="RCPT-GRP",
+            status="Pending Approval", approval_status="pending",
+        )
+        db.session.add(order)
+        db.session.commit()
+
+        # A view-only user (orders.view, no approve/edit).
+        viewer = User(username="viewer2", email="viewer2@example.com")
+        viewer.set_role("viewer")
+        viewer.set_permissions(["orders.view"])
+        viewer.set_password("viewerpass1")
+        db.session.add(viewer)
+        db.session.commit()
+
+        # Admin sees the page with the grouping applied and Approve controls.
+        self._login()
+        grouped = self.client.get("/orders/pending?group_by=vehicle", follow_redirects=True)
+        self.assertEqual(grouped.status_code, 200)
+        self.assertIn("ABC-777", grouped.text)
+        self.assertIn("Approve", grouped.text)
+
+        # Viewer can open it read-only: sees the order, but no approve controls.
+        self.client.get("/logout", follow_redirects=True)
+        self._login(username="viewer2", password="viewerpass1")
+        view_only = self.client.get("/orders/pending", follow_redirects=True)
+        self.assertEqual(view_only.status_code, 200)
+        self.assertIn("RCPT-GRP", view_only.text)
+        self.assertIn("view-only access", view_only.text)
+        self.assertNotIn("approveRow", view_only.text)
+
     def test_reports_workspace_supports_diesel_mode(self):
         contractor = Contractor(name="ABC Contractors", contact_person="John Doe")
         material = Material(name="Sand")

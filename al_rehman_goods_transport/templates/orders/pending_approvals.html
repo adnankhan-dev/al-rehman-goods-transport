@@ -3,16 +3,76 @@
 
 {% block title %}Pending Approvals - Al Rehman Goods Transport{% endblock %}
 
+{% set GROUP_LABELS = {'default': 'Default (Contractor · Site · Material · Owner)', 'contractor': 'Contractor', 'vehicle_owner': 'Vehicle Owner', 'vehicle': 'Vehicle', 'site': 'Site'} %}
+
 {% block content %}
-{% call form_shell("Pending Approvals", "Confirm the contractor and vehicle rates, then approve orders to post them to the ledger and make them billable. Grouped by contractor, site, material, and vehicle owner.", "Orders", url_for('orders.orders'), "Back to Orders") %}
+{% call form_shell("Pending Approvals", "Confirm the contractor and vehicle rates, then approve orders to post them to the ledger and make them billable. Filter and choose how the pending orders are grouped.", "Orders", url_for('orders.orders'), "Back to Orders") %}
 <section class="content-stack">
     <div class="collection-overview">
         {{ metric_tile("Orders Awaiting Approval", pending_count, "Not yet posted to ledger or reports", "primary", "bi bi-hourglass-split") }}
-        {{ metric_tile("Groups", groups|length, "Contractor · site · material · owner", "ocean", "bi bi-collection") }}
+        {{ metric_tile("Groups", groups|length, "Grouped by " ~ GROUP_LABELS.get(group_by, 'Default'), "ocean", "bi bi-collection") }}
     </div>
 
+    {# ── Filters & grouping ─────────────────────────────────────────── #}
+    <form method="GET" action="{{ url_for('orders.pending_approvals') }}" class="detail-panel">
+        <div class="filter-grid filter-grid-four">
+            <div class="form-field">
+                <label class="form-label" for="group_by">Group By</label>
+                <select class="form-select" id="group_by" name="group_by" onchange="this.form.submit()">
+                    {% for value, label in GROUP_LABELS.items() %}
+                    <option value="{{ value }}" {% if group_by == value %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-field">
+                <label class="form-label" for="contractor_id">Contractor</label>
+                <select class="form-select" id="contractor_id" name="contractor_id" onchange="this.form.submit()">
+                    <option value="">All Contractors</option>
+                    {% for cid, name in filter_options.contractors %}
+                    <option value="{{ cid }}" {% if filter_state.contractor_id == cid %}selected{% endif %}>{{ name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-field">
+                <label class="form-label" for="vehicle_owner_id">Vehicle Owner</label>
+                <select class="form-select" id="vehicle_owner_id" name="vehicle_owner_id" onchange="this.form.submit()">
+                    <option value="">All Owners</option>
+                    {% for oid, name in filter_options.vehicle_owners %}
+                    <option value="{{ oid }}" {% if filter_state.vehicle_owner_id == oid %}selected{% endif %}>{{ name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-field">
+                <label class="form-label" for="vehicle_id">Vehicle</label>
+                <select class="form-select" id="vehicle_id" name="vehicle_id" onchange="this.form.submit()">
+                    <option value="">All Vehicles</option>
+                    {% for vid, name in filter_options.vehicles %}
+                    <option value="{{ vid }}" {% if filter_state.vehicle_id == vid %}selected{% endif %}>{{ name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-field">
+                <label class="form-label" for="site_id">Site</label>
+                <select class="form-select" id="site_id" name="site_id" onchange="this.form.submit()">
+                    <option value="">All Sites</option>
+                    {% for sid, name in filter_options.sites %}
+                    <option value="{{ sid }}" {% if filter_state.site_id == sid %}selected{% endif %}>{{ name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+        </div>
+        <div class="filter-actions mt-2">
+            <button type="submit" class="btn btn-sm btn-ui-midnight"><i class="bi bi-funnel"></i> Apply</button>
+            <a href="{{ url_for('orders.pending_approvals') }}" class="btn btn-sm btn-ui-neutral">Clear</a>
+        </div>
+    </form>
+
+    {% if not can_approve %}
+    <div class="alert alert-info"><i class="bi bi-eye"></i> You have view-only access to pending approvals. Approving, editing, and rejecting require the relevant permissions.</div>
+    {% endif %}
+
     {% if not groups %}
-        {{ empty_state("No orders are waiting for approval. New orders will appear here.", "bi-check2-circle") }}
+        {{ empty_state("No orders match the current filters.", "bi-check2-circle") }}
     {% else %}
     <form method="POST" action="{{ url_for('orders.approve_orders') }}" id="approvalForm">
         <input type="hidden" name="order_ids" id="order_ids" value="">
@@ -29,34 +89,28 @@
         <input type="hidden" name="rate_effective_from" id="rate_effective_from" value="">
         <input type="hidden" name="rate_effective_to" id="rate_effective_to" value="">
 
+        {% if can_approve %}
         <div class="d-flex justify-content-end mb-3">
             <button type="button" class="btn btn-ui-primary" onclick="approveAll(this)">
                 <i class="bi bi-check2-all"></i> Approve All ({{ pending_count }})
             </button>
         </div>
+        {% endif %}
 
         {% for group in groups %}
-        <div class="table-panel mb-4 approval-group"
-             data-contractor-id="{{ group.contractor_id }}"
-             data-site-id="{{ group.site_id }}"
-             data-material-id="{{ group.material_id or '' }}"
-             data-owner-id="{{ group.owner_id or '' }}"
-             data-unit="{{ group.unit }}">
+        <div class="table-panel mb-4 approval-group">
             <div class="table-panel-header">
                 <div>
-                    <h3 class="table-panel-title">{{ group.contractor_name }}</h3>
-                    <div class="text-muted small">
-                        <i class="bi bi-geo-alt"></i> {{ group.site_name }}
-                        &middot; <i class="bi bi-box-seam"></i> {{ group.material_name }}
-                        &middot; <i class="bi bi-person-badge"></i> {{ group.owner_name }}
-                        &middot; Unit: {{ group.unit|upper }}
-                    </div>
+                    <h3 class="table-panel-title">{{ group.title }}</h3>
+                    <div class="text-muted small">{{ group.meta }}</div>
                 </div>
                 <div class="table-toolbar">
                     <span class="section-count">{{ group.rows|length }} order(s)</span>
+                    {% if can_approve %}
                     <button type="button" class="btn btn-sm btn-ui-ocean" onclick="approveGroup(this)">
                         <i class="bi bi-check2"></i> Approve Group
                     </button>
+                    {% endif %}
                 </div>
             </div>
             <div class="table-responsive">
@@ -65,6 +119,7 @@
                         <tr>
                             <th>Date</th>
                             <th>Vehicle / Owner</th>
+                            <th>Contractor</th>
                             <th>From → To</th>
                             <th>Material</th>
                             <th>Receipt</th>
@@ -81,7 +136,12 @@
                         {% set order = row.order %}
                         <tr class="approval-row"
                             data-order-id="{{ order.id }}"
+                            data-contractor-id="{{ order.contractor_id or '' }}"
+                            data-site-id="{{ order.site_id or '' }}"
+                            data-material-id="{{ order.material_id or '' }}"
+                            data-owner-id="{{ row.owner_id or '' }}"
                             data-from-site-id="{{ order.from_site_id or '' }}"
+                            data-unit="{{ row.unit }}"
                             data-saved-rate-id="{{ row.saved_rate_id or '' }}"
                             data-saved-contractor-rate="{{ row.suggested_contractor_rate if row.suggested_contractor_rate is not none else '' }}"
                             data-saved-vehicle-rate="{{ row.suggested_vehicle_rate if row.suggested_vehicle_rate is not none else '' }}">
@@ -90,41 +150,55 @@
                                 <strong>{{ order.vehicle.vehicle_number if order.vehicle else '-' }}</strong>
                                 <div class="text-muted small">{{ order.vehicle.owner_display_name if order.vehicle else '-' }}</div>
                             </td>
+                            <td>{{ order.contractor.name if order.contractor else '-' }}</td>
                             <td class="small">{{ order.from_site.name if order.from_site else '—' }} → {{ order.site.name if order.site else '-' }}</td>
                             <td>{{ order.material_name }}</td>
                             <td>{{ order.receipt_number or '-' }}</td>
-                            <td class="text-end">{{ "%.2f"|format(order.delivered_quantity or order.quantity or 0) }} {{ group.unit }}</td>
+                            <td class="text-end">{{ "%.2f"|format(order.delivered_quantity or order.quantity or 0) }} {{ row.unit }}</td>
                             <td class="text-end">
                                 {{ "%.2f"|format(order.plant_amount or 0) }}
                                 {% if order.plant %}<div class="text-muted small">{{ order.plant.name }}</div>{% endif %}
                             </td>
                             <td class="text-end">{{ "%.2f"|format(order.commission or 0) }}</td>
                             <td>
+                                {% if can_approve %}
                                 <input type="number" step="0.01" min="0" class="form-control form-control-sm rate-contractor"
                                        name="contractor_rate_{{ order.id }}"
                                        value="{{ row.suggested_contractor_rate if row.suggested_contractor_rate is not none else '' }}"
                                        placeholder="Rate">
+                                {% else %}
+                                <span class="text-muted">{{ ("%.2f"|format(row.suggested_contractor_rate)) if row.suggested_contractor_rate is not none else '—' }}</span>
+                                {% endif %}
                             </td>
                             <td>
+                                {% if can_approve %}
                                 <input type="number" step="0.01" min="0" class="form-control form-control-sm rate-vehicle"
                                        name="vehicle_rate_{{ order.id }}"
                                        value="{{ row.suggested_vehicle_rate if row.suggested_vehicle_rate is not none else '' }}"
                                        placeholder="Rate">
+                                {% else %}
+                                <span class="text-muted">{{ ("%.2f"|format(row.suggested_vehicle_rate)) if row.suggested_vehicle_rate is not none else '—' }}</span>
+                                {% endif %}
                             </td>
                             <td class="text-end text-nowrap">
+                                {% if can_approve %}
                                 <button type="button" class="btn btn-sm btn-ui-primary" onclick="approveRow(this)">
                                     <i class="bi bi-check-lg"></i> Approve
                                 </button>
-                                {% if current_user.can('orders.edit') %}
+                                {% endif %}
+                                {% if can_edit %}
                                 <a href="{{ url_for('orders.edit_order', id=order.id) }}" class="btn btn-sm btn-ui-edit" title="Edit order">
                                     <i class="bi bi-pencil"></i>
                                 </a>
                                 {% endif %}
+                                {% if can_approve %}
                                 <button type="submit" class="btn btn-sm btn-ui-danger"
                                         formaction="{{ url_for('orders.reject_order', id=order.id) }}"
                                         onclick="return confirm('Reject and remove this pending order?');" title="Reject">
                                     <i class="bi bi-x-lg"></i>
                                 </button>
+                                {% endif %}
+                                {% if not can_approve and not can_edit %}<span class="text-muted">—</span>{% endif %}
                             </td>
                         </tr>
                         {% endfor %}
@@ -137,6 +211,7 @@
     {% endif %}
 </section>
 
+{% if can_approve %}
 <div class="modal fade" id="saveApprovalRateModal" tabindex="-1" aria-hidden="true" data-bs-backdrop="static">
     <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content border-0 shadow-lg">
@@ -170,10 +245,12 @@
         </div>
     </div>
 </div>
+{% endif %}
 {% endcall %}
 {% endblock %}
 
 {% block page_scripts %}
+{% if can_approve %}
 <script>
     document.addEventListener('DOMContentLoaded', function() {
         const CAN_SAVE_RATES = {{ (can_save_rates | default(false)) | tojson }};
@@ -226,14 +303,13 @@
         window.approveRow = function(btn) {
             const row = btn.closest('.approval-row');
             if (!validateRows([row])) return;
-            const group = btn.closest('.approval-group');
             const rates = rowRates(row);
             const savedContractor = row.dataset.savedContractorRate;
             const savedRateId = row.dataset.savedRateId;
             const matches = savedRateId && savedContractor !== '' && Number(savedContractor) === rates.contractor;
 
             if (CAN_SAVE_RATES && !matches) {
-                openSavePrompt(group, row, rates);
+                openSavePrompt(row, rates);
             } else {
                 clearSaveFields();
                 submitApproval([row.dataset.orderId]);
@@ -256,20 +332,20 @@
         };
 
         let pendingApproveIds = [];
-        function openSavePrompt(group, row, rates) {
+        function openSavePrompt(row, rates) {
+            // Scope now lives on the row, so grouping stays purely visual.
             pendingApproveIds = [row.dataset.orderId];
-            const unit = (group.dataset.unit || 'unit').toUpperCase();
+            const unit = (row.dataset.unit || 'unit').toUpperCase();
             summaryEl.innerHTML = renderSummary([
                 { label: 'Contractor Rate', value: money(rates.contractor) + ' / ' + unit },
                 { label: 'Vehicle Rate', value: rates.vehicle ? (money(rates.vehicle) + ' / ' + unit) : '—' },
             ]);
-            // Stash scope + rates for submission.
-            document.getElementById('save_rate_contractor_id').value = group.dataset.contractorId || '';
-            document.getElementById('save_rate_site_id').value = group.dataset.siteId || '';
+            document.getElementById('save_rate_contractor_id').value = row.dataset.contractorId || '';
+            document.getElementById('save_rate_site_id').value = row.dataset.siteId || '';
             document.getElementById('save_rate_from_site_id').value = row.dataset.fromSiteId || '';
-            document.getElementById('save_rate_material_id').value = group.dataset.materialId || '';
-            document.getElementById('save_rate_owner_id').value = group.dataset.ownerId || '';
-            document.getElementById('save_rate_unit').value = group.dataset.unit || 'cft';
+            document.getElementById('save_rate_material_id').value = row.dataset.materialId || '';
+            document.getElementById('save_rate_owner_id').value = row.dataset.ownerId || '';
+            document.getElementById('save_rate_unit').value = row.dataset.unit || 'cft';
             document.getElementById('save_rate_contractor_rate').value = rates.contractor;
             document.getElementById('save_rate_vehicle_rate').value = rates.vehicle || '';
             rateFromInput.value = today();
@@ -305,4 +381,5 @@
         });
     });
 </script>
+{% endif %}
 {% endblock %}

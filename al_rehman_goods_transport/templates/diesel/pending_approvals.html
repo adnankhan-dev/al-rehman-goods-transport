@@ -10,16 +10,22 @@
         {{ metric_tile("Entries Awaiting Approval", pending_count, "Not yet posted to balances", "primary", "bi bi-hourglass-split") }}
     </div>
 
+    {% if not can_approve %}
+    <div class="alert alert-info"><i class="bi bi-eye"></i> You have view-only access. Approving or rejecting diesel entries requires the Approve Diesel Entries permission.</div>
+    {% endif %}
+
     {% if not entries %}
         {{ empty_state("No diesel entries are waiting for approval.", "bi-check2-circle") }}
     {% else %}
     <form method="POST" action="{{ url_for('diesel.approve_entries') }}" id="dieselApprovalForm">
         <input type="hidden" name="entry_ids" id="entry_ids" value="">
+        {% if can_approve %}
         <div class="d-flex justify-content-end mb-3">
             <button type="button" class="btn btn-ui-primary" onclick="approveAllDiesel()">
                 <i class="bi bi-check2-all"></i> Approve All ({{ pending_count }})
             </button>
         </div>
+        {% endif %}
         <div class="table-panel">
             <div class="table-panel-header">
                 <h3 class="table-panel-title">Pending diesel entries</h3>
@@ -53,6 +59,7 @@
                             <td class="text-end">{{ ("%.2f"|format(entry.litres)) if entry.litres else '—' }}</td>
                             <td class="text-end">Rs. {{ "%.2f"|format(entry.amount or 0) }}</td>
                             <td class="text-end text-nowrap">
+                                {% if can_approve %}
                                 <button type="button" class="btn btn-sm btn-ui-primary" onclick="approveDieselRow(this)">
                                     <i class="bi bi-check-lg"></i> Approve
                                 </button>
@@ -61,6 +68,7 @@
                                         onclick="return confirm('Reject and remove this pending diesel entry?');">
                                     <i class="bi bi-x-lg"></i>
                                 </button>
+                                {% else %}<span class="text-muted">—</span>{% endif %}
                             </td>
                         </tr>
                         {% endfor %}
@@ -75,6 +83,7 @@
 {% endblock %}
 
 {% block page_scripts %}
+{% if can_approve %}
 <script>
     document.addEventListener('DOMContentLoaded', function() {
         const form = document.getElementById('dieselApprovalForm');
@@ -95,4 +104,5 @@
         };
     });
 </script>
+{% endif %}
 {% endblock %}

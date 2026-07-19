@@ -3,7 +3,7 @@ from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import RedirectResponse
 
-from ..core.auth import require_permission
+from ..core.auth import require_any_permission, require_permission
 from ..core.flash import flash
 from ..core.templating import render_template
 from ..forms import DieselEntryForm
@@ -178,10 +178,16 @@ async def diesel_create(request: Request, current_user=Depends(require_permissio
 
 
 @router.get("/diesel/pending", name="diesel.pending_approvals")
-async def diesel_pending(request: Request, _=Depends(require_permission("diesel.approve"))):
+async def diesel_pending(request: Request, current_user=Depends(require_any_permission("diesel.view", "diesel.approve"))):
     service = DieselService()
     entries = service.list_pending()
-    return render_template(request, "diesel/pending_approvals.html", entries=entries, pending_count=len(entries))
+    return render_template(
+        request,
+        "diesel/pending_approvals.html",
+        entries=entries,
+        pending_count=len(entries),
+        can_approve=bool(getattr(current_user, "can", lambda _c: False)("diesel.approve")),
+    )
 
 
 @router.post("/diesel/approve", name="diesel.approve_entries")

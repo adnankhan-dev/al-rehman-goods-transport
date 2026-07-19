@@ -132,20 +132,22 @@ def _pending_approval_counts(user):
     if not callable(can):
         return (0, 0)
     orders_pending = diesel_pending = ledger_pending = 0
+    # Viewers (view permission) can see the pending screens read-only, so the
+    # sidebar badges show for them too — not only approvers.
     try:
-        if can("orders.approve"):
+        if can("orders.view") or can("orders.approve"):
             from ..models import Order
             orders_pending = Order.query.filter(Order.approval_status == "pending").count()
     except Exception:
         orders_pending = 0
     try:
-        if can("diesel.approve"):
+        if can("diesel.view") or can("diesel.approve"):
             from ..models import DieselEntry
             diesel_pending = DieselEntry.query.filter(DieselEntry.approval_status == "pending").count()
     except Exception:
         diesel_pending = 0
     try:
-        if can("ledger.approve"):
+        if can("ledger.view") or can("ledger.approve"):
             from ..models import Bill, Transaction
             ledger_pending = (
                 Transaction.query.filter(Transaction.approval_status == "pending").count()

@@ -475,7 +475,7 @@
 
         <!-- Document footer -->
         <div class="doc-footer">
-            <span>Al Rehman Goods Transport — ERP Ledger Register. This document is generated from the live ERP system.</span>
+            <span>{{ letterhead.name if letterhead else 'Al Rehman Goods Transport' }} — ERP Ledger Register. Designed and developed by AK Tech | 0311-1831997</span>
             <span>Printed {{ now.strftime('%d %b %Y at %H:%M') if now is defined else '' }}</span>
         </div>
 

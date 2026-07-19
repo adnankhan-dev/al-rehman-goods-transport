@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import RedirectResponse
 
-from ..core.auth import require_permission
+from ..core.auth import require_any_permission, require_permission
 from ..core.flash import flash
 from ..core.templating import render_template
 from ..forms import TransactionForm
@@ -88,7 +88,7 @@ async def create_transaction(request: Request, current_user=Depends(require_perm
 
 
 @router.get("/ledger/pending", name="ledger.pending_approvals")
-async def ledger_pending(request: Request, _current_user=Depends(require_permission("ledger.approve"))):
+async def ledger_pending(request: Request, current_user=Depends(require_any_permission("ledger.view", "ledger.approve"))):
     service = TransactionService()
     from ..services import BillingService
 
@@ -100,6 +100,7 @@ async def ledger_pending(request: Request, _current_user=Depends(require_permiss
         pending_transactions=pending_transactions,
         pending_bills=pending_bills,
         pending_count=len(pending_transactions) + len(pending_bills),
+        can_approve=bool(getattr(current_user, "can", lambda _c: False)("ledger.approve")),
     )
 
 

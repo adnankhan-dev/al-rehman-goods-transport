@@ -805,7 +805,8 @@
             </section>
 
             <footer class="statement-footer">
-                This bill is issued by Al Rehman Goods Transport for the period shown above. Please verify the bill number, the timeframe, and the supporting activity rows before payment processing.
+                This bill is issued by {{ letterhead.name if letterhead else 'Al Rehman Goods Transport' }} for the period shown above. Please verify the bill number, the timeframe, and the supporting activity rows before payment processing.
+                <div style="margin-top:10px;font-weight:600;">Designed and developed by AK Tech | 0311-1831997</div>
             </footer>
         </div>
     </div>

@@ -100,12 +100,45 @@ class OrderService:
     def pending_count(self):
         return self.orders.pending_count()
 
-    def list_pending_approvals(self):
-        """Pending orders grouped by contractor → to-site → material → vehicle
-        owner (per the approval screen layout). Each order row carries the best
-        saved-rate suggestion so the approver's rate fields are pre-filled."""
+    # Group-by dimensions supported on the Pending Approvals screen.
+    PENDING_GROUP_BY = ("default", "contractor", "vehicle_owner", "vehicle", "site")
+
+    def _order_owner(self, order):
+        owner = order.vehicle.owner if order.vehicle else None
+        owner_id = owner.id if owner else None
+        owner_name = owner.name if owner else (order.vehicle.owner_display_name if order.vehicle else "Unassigned")
+        return owner_id, owner_name
+
+    def pending_approval_filter_options(self):
+        """Distinct contractor/owner/vehicle/site values present among pending
+        orders, for the Pending Approvals filter dropdowns."""
+        contractors, owners, vehicles, sites = {}, {}, {}, {}
+        for order in self.orders.list_pending():
+            if order.contractor_id and order.contractor:
+                contractors[order.contractor_id] = order.contractor.name
+            if order.vehicle and order.vehicle.owner_id and order.vehicle.owner:
+                owners[order.vehicle.owner_id] = order.vehicle.owner.name
+            if order.vehicle_id and order.vehicle:
+                vehicles[order.vehicle_id] = order.vehicle.vehicle_number
+            if order.site_id and order.site:
+                sites[order.site_id] = order.site.name
+        by_name = lambda d: sorted(d.items(), key=lambda kv: (kv[1] or "").lower())
+        return {
+            "contractors": by_name(contractors),
+            "vehicle_owners": by_name(owners),
+            "vehicles": by_name(vehicles),
+            "sites": by_name(sites),
+        }
+
+    def list_pending_approvals(self, group_by=None, filters=None):
+        """Pending orders for the approval screen, filtered and grouped by a
+        chosen dimension. Default grouping is contractor → to-site → material →
+        vehicle owner. Every row carries its OWN full rate scope (so grouping is
+        purely visual) plus the best saved-rate suggestion for pre-fill."""
         from .rates import RateService
 
+        filters = filters or {}
+        group_by = group_by if group_by in self.PENDING_GROUP_BY else "default"
         rate_service = RateService(self.session)
         suggestion_cache = {}
 
@@ -119,37 +152,50 @@ class OrderService:
                 )
             return suggestion_cache[key]
 
+        pending = self.orders.list_pending()
+        # Value filters narrow the set before grouping.
+        if filters.get("contractor_id"):
+            pending = [o for o in pending if o.contractor_id == filters["contractor_id"]]
+        if filters.get("vehicle_owner_id"):
+            pending = [o for o in pending if (o.vehicle.owner_id if o.vehicle else None) == filters["vehicle_owner_id"]]
+        if filters.get("vehicle_id"):
+            pending = [o for o in pending if o.vehicle_id == filters["vehicle_id"]]
+        if filters.get("site_id"):
+            pending = [o for o in pending if o.site_id == filters["site_id"]]
+
         groups = {}
-        for order in self.orders.list_pending():
-            owner = order.vehicle.owner if order.vehicle else None
-            owner_id = owner.id if owner else None
-            owner_name = owner.name if owner else (order.vehicle.owner_display_name if order.vehicle else "Unassigned")
-            key = (order.contractor_id, order.site_id, order.material_id, owner_id)
+        for order in pending:
+            owner_id, owner_name = self._order_owner(order)
+            contractor_name = order.contractor.name if order.contractor else "Unassigned"
+            site_name = order.site.name if order.site else "-"
+            vehicle_no = order.vehicle.vehicle_number if order.vehicle else "-"
+
+            if group_by == "contractor":
+                key, title, meta = ("c", order.contractor_id), contractor_name, "Contractor"
+            elif group_by == "vehicle_owner":
+                key, title, meta = ("o", owner_id), owner_name, "Vehicle Owner"
+            elif group_by == "vehicle":
+                key, title, meta = ("v", order.vehicle_id), vehicle_no, owner_name
+            elif group_by == "site":
+                key, title, meta = ("s", order.site_id), site_name, "To Site"
+            else:  # default nested-style key
+                key = ("d", order.contractor_id, order.site_id, order.material_id, owner_id)
+                title, meta = contractor_name, f"{site_name} · {order.material_name} · {owner_name}"
+
             if key not in groups:
-                groups[key] = {
-                    "contractor_id": order.contractor_id,
-                    "contractor_name": order.contractor.name if order.contractor else "Unassigned",
-                    "site_id": order.site_id,
-                    "site_name": order.site.name if order.site else "-",
-                    "material_id": order.material_id,
-                    "material_name": order.material_name,
-                    "unit": order.unit or "cft",
-                    "owner_id": owner_id,
-                    "owner_name": owner_name,
-                    "rows": [],
-                }
+                groups[key] = {"title": title, "meta": meta, "sort_key": (title or "").lower(), "rows": []}
+
             rate = suggest(order, owner_id)
             groups[key]["rows"].append({
                 "order": order,
+                "unit": order.unit or "cft",
+                "owner_id": owner_id,
                 "suggested_contractor_rate": rate.rate if rate else None,
                 "suggested_vehicle_rate": (rate.vehicle_rate if rate else None),
                 "saved_rate_id": rate.id if rate else None,
             })
 
-        return sorted(
-            groups.values(),
-            key=lambda g: (g["contractor_name"].lower(), g["site_name"].lower(), g["material_name"].lower(), g["owner_name"].lower()),
-        )
+        return sorted(groups.values(), key=lambda g: (g["sort_key"], g["meta"].lower()))
 
     def order_filter_options(self):
         # Filters include archived sites so historical orders can still be filtered;
@@ -744,6 +790,7 @@ class OrderService:
                         </table>
                         {profit_html}
                     </div>
+                    <div style="margin-top:24px;padding-top:14px;border-top:1px solid #dbe4f0;color:#64748b;font-size:0.82rem;text-align:center;font-weight:600;">Designed and developed by AK Tech | 0311-1831997</div>
                 </div>
             </body>
             </html>

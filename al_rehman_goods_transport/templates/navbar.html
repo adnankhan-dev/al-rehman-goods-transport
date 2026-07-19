@@ -81,7 +81,7 @@
                         </a>
                     </li>
                     {% endif %}
-                    {% if current_user.can('orders.approve') %}
+                    {% if current_user.can('orders.view') or current_user.can('orders.approve') %}
                     <li>
                         <a href="{{ url_for('orders.pending_approvals') }}"
                            data-label="Pending Approvals" title="Pending Approvals"
@@ -94,7 +94,7 @@
                         </a>
                     </li>
                     {% endif %}
-                    {% if current_user.can('diesel.approve') %}
+                    {% if current_user.can('diesel.view') or current_user.can('diesel.approve') %}
                     <li>
                         <a href="{{ url_for('diesel.pending_approvals') }}"
                            data-label="Diesel Approvals" title="Diesel Approvals"
@@ -124,7 +124,7 @@
                             <span class="app-nav-link-text">Ledger & Bills</span>
                         </a>
                     </li>
-                    {% if current_user.can('ledger.approve') %}
+                    {% if current_user.can('ledger.view') or current_user.can('ledger.approve') %}
                     <li>
                         <a href="{{ url_for('ledger.pending_approvals') }}"
                            data-label="Ledger Approvals" title="Ledger Approvals"

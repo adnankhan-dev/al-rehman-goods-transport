@@ -182,6 +182,7 @@ class SettingsService:
         <div><strong>Month:</strong> {escape(month_label)}</div>
     </div>
     {day_blocks.getvalue()}
+    <div style="margin-top:20px;padding-top:12px;border-top:1px solid #cbd9ec;color:#64748b;font-size:0.8rem;text-align:center;font-weight:600;">Designed and developed by AK Tech | 0311-1831997</div>
 </body>
 </html>
 """
