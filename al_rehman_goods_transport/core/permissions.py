@@ -38,6 +38,7 @@ PERMISSION_GROUPS = [
             {"code": "orders.edit", "label": "Edit Orders", "description": "Update or complete existing orders."},
             {"code": "orders.delete", "label": "Delete Orders", "description": "Delete existing orders."},
             {"code": "orders.approve", "label": "Approve Orders", "description": "Review pending orders, set contractor/vehicle rates, and approve or reject them."},
+            {"code": "orders.adjust_vehicle", "label": "Adjust Vehicle Quantity", "description": "Set a separate vehicle-delivered quantity on an order (when the vehicle measurement is lower than the contractor's)."},
         ],
     },
     {

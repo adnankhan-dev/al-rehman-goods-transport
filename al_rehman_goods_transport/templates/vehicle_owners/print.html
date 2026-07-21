@@ -105,7 +105,7 @@
                             <td>{{ order.from_site.name if order.from_site else "-" }}</td>
                             <td>{{ order.site.name if order.site else "-" }}</td>
                             <td>{{ order.material_name }}</td>
-                            <td class="num">{{ "%.2f"|format(order.delivered_quantity or order.quantity or 0) }} {{ (order.unit or 'cft')|upper }}</td>
+                            <td class="num">{{ "%.2f"|format(order.effective_vehicle_quantity) }} {{ (order.unit or 'cft')|upper }}</td>
                             <td class="num">{{ "%.2f"|format(order.vehicle_rate or 0) }}</td>
                             <td class="num">{{ "{:,.0f}".format(order.total_vehicle_amount()) }}</td>
                         </tr>

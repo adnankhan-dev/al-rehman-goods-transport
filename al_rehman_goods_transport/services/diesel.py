@@ -59,9 +59,9 @@ class DieselService:
                 | DieselEntry.vehicle_id.in_(vehicle_ids)
                 | DieselEntry.petrol_pump_id.in_(pump_ids)
             )
-        # Sort by receipt number numerically (768 before 1001), blanks last.
+        # Sort by date, then receipt number numerically (768 before 1001, blanks last).
         entries = q.all()
-        entries.sort(key=lambda e: receipt_sort_key(e.receipt_number))
+        entries.sort(key=lambda e: (e.date or date_type.min, receipt_sort_key(e.receipt_number)))
         return entries
 
     def pump_payments_total(self, pump_id=None, date_from=None, date_to=None):
@@ -144,9 +144,9 @@ class DieselService:
         entries = (
             DieselEntry.query.filter(DieselEntry.approval_status == "pending").all()
         )
-        # Sorted by receipt number ascending (768 before 1001), blanks last —
-        # same convention as the fuel log and pump statement.
-        entries.sort(key=lambda e: receipt_sort_key(e.receipt_number))
+        # Sorted by date, then receipt number ascending (768 before 1001), blanks
+        # last — same convention as the fuel log.
+        entries.sort(key=lambda e: (e.date or date_type.min, receipt_sort_key(e.receipt_number)))
         return entries
 
     def approve_entry(self, entry_id, approver_id=None):

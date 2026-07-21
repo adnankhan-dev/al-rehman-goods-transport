@@ -119,6 +119,17 @@ env var overrides the DB.
     (`letterhead_*`), edited on the Settings page (`update_letterhead` action). Injected into every
     template via `core/templating._base_context` as `letterhead`; the two Python-generated documents
     (orders statement, manual entry form) fetch `SettingsService().get_letterhead()`.
+- **Vehicle-delivered quantity (order):** `Order.vehicle_delivered_quantity` (nullable) captures the
+  vehicle's own measured quantity when it is *lower* than the contractor's. When set, the vehicle
+  payable is computed on it (`Order.effective_vehicle_quantity` → used by `gross_vehicle_amount`);
+  contractor amount always uses `delivered_quantity`. So profit absorbs the difference. It is NOT on
+  the add-order form — only the **edit** form, and only for users with the new `orders.adjust_vehicle`
+  permission (admin by default); unauthorised edits preserve the stored value. Reflected as the
+  "Delivered" quantity in all vehicle-owner statements/bills (view, print, excel) and in
+  `group_owner_activity_by_vehicle`. Additive migration `_add_order_vehicle_delivered_quantity`.
+- **Fuel log sort:** the fuel log (`DieselService.list_entries`) and the pending diesel list
+  (`list_pending`) sort by **date, then receipt number** (numeric; blanks last). (Earlier it was
+  receipt-number only.)
 - **Order & Diesel approval workflow:** every new order and every new fuel-log diesel entry is
   created **pending** and posts **no financials** (no ledger, no vehicle-owner/pump/vehicle balance,
   no P&L, not billable) and is **hidden** from all lists/reports/statements until an approver clears

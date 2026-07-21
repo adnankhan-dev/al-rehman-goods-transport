@@ -921,6 +921,28 @@ class OrderFinanceServiceTests(unittest.TestCase):
         self.assertEqual(db.session.get(Contractor, self.contractor_id).balance, 0)
         self.assertEqual(len(service.list_orders_filtered({})), 0)
 
+    def test_vehicle_delivered_quantity_drives_vehicle_amount_only(self):
+        order = Order(
+            vehicle_id=self.vehicle_one_id, contractor_id=self.contractor_id, site_id=self.site_id,
+            driver_name="Driver", material_id=self.material_id, material_type="Sand",
+            quantity=100, delivered_quantity=100, contractor_rate=15, vehicle_rate=10,
+            status="Completed",
+        )
+        db.session.add(order)
+        db.session.commit()
+
+        # No adjustment → vehicle paid on the delivered quantity, as before.
+        self.assertEqual(order.effective_vehicle_quantity, 100)
+        self.assertEqual(order.gross_vehicle_amount(), 1000)
+        self.assertEqual(order.total_contractor_amount(), 1500)
+
+        # Lower vehicle measurement → vehicle amount drops, contractor unchanged.
+        order.vehicle_delivered_quantity = 80
+        db.session.commit()
+        self.assertEqual(order.effective_vehicle_quantity, 80)
+        self.assertEqual(order.gross_vehicle_amount(), 800)
+        self.assertEqual(order.total_contractor_amount(), 1500)
+
     def test_financial_entity_transactions_move_company_balance(self):
         fe_service = FinancialEntityService()
         entity = fe_service.create_entity("Brother Account")

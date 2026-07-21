@@ -45,6 +45,11 @@ class Order(db.Model):
     contractor_rate = db.Column(db.Float, nullable=True)
     vehicle_rate = db.Column(db.Float, nullable=True)
     delivered_quantity = db.Column(db.Float, nullable=True)
+    # Optional vehicle-side delivered quantity: set only when the vehicle's own
+    # measurement is lower than the contractor's. When present, the vehicle's
+    # payable is computed on THIS quantity; when NULL, delivered_quantity is used.
+    # Set only via the edit form by an authorised user, never on order entry.
+    vehicle_delivered_quantity = db.Column(db.Float, nullable=True)
     plant_amount = db.Column(db.Float, default=0)
     commission = db.Column(db.Float, default=0)  # New field for commission
     completion_date = db.Column(db.DateTime, nullable=True)
@@ -118,6 +123,14 @@ class Order(db.Model):
     def primary_diesel_entry(self):
         return self.diesel_entries[0] if self.diesel_entries else None
     
+    @property
+    def effective_vehicle_quantity(self):
+        """Quantity the vehicle is paid on: the explicit vehicle-delivered
+        quantity when set, otherwise the (contractor) delivered quantity."""
+        if self.vehicle_delivered_quantity is not None:
+            return self.vehicle_delivered_quantity
+        return self.delivered_quantity or self.quantity or 0
+
     def total_contractor_amount(self):
         quantity = self.delivered_quantity or self.quantity or 0
         if self.contractor_rate:
@@ -125,7 +138,7 @@ class Order(db.Model):
         return 0
 
     def gross_vehicle_amount(self):
-        quantity = self.delivered_quantity or self.quantity or 0
+        quantity = self.effective_vehicle_quantity
         if self.vehicle_rate:
             return quantity * self.vehicle_rate
         return 0

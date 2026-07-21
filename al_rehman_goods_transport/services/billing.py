@@ -716,7 +716,7 @@ class BillingService:
                     "<tr>"
                     f"<td>{_cell((order.completion_date or order.order_date).strftime('%Y-%m-%d'))}</td>"
                     f"<td>{_cell(order.vehicle.vehicle_number if order.vehicle else '-')}</td>"
-                    f"<td>{_cell(f'{(order.delivered_quantity or order.quantity or 0):.2f} {order.unit.upper()}')}</td>"
+                    f"<td>{_cell(f'{order.effective_vehicle_quantity:.2f} {order.unit.upper()}')}</td>"
                     f"<td>{_cell(f'{(order.vehicle_rate or 0):.2f}')}</td>"
                     f"<td>{_cell(order.receipt_number or '-')}</td>"
                     f"<td>{_cell(f'{order.remaining_vehicle_payment():.2f}')}</td>"
@@ -1055,7 +1055,8 @@ def group_owner_activity_by_vehicle(orders, diesel_rows=None, advance_rows=None)
         group = group_for(order.vehicle, order.vehicle_id)
         group["orders"].append(order)
         group["trip_count"] += 1
-        group["total_delivered"] += float(order.delivered_quantity or order.quantity or 0)
+        # Vehicle-side quantity (falls back to delivered qty when not adjusted).
+        group["total_delivered"] += float(order.effective_vehicle_quantity)
         group["gross"] += float(order.total_vehicle_amount())
         group["order_diesel"] += float(order.total_diesel_amount())
         group["net_payable"] += float(order.remaining_vehicle_payment())

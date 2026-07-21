@@ -49,6 +49,9 @@
             </div>
             {{ render_field(form.load_quantity) }}
             {{ render_field(form.delivered_quantity) }}
+            {% if can_adjust_vehicle %}
+            {{ render_field(form.vehicle_delivered_quantity, help_text="Optional. Set only when the vehicle's measured quantity is lower than the contractor's — the vehicle payment is then calculated on this quantity. Leave blank to use the delivered quantity.") }}
+            {% endif %}
             {{ render_field(form.vehicle_rate) }}
             <div class="form-field" id="contractor_rate_wrapper">
                 {{ render_field(form.contractor_rate) }}

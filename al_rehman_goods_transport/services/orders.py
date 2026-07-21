@@ -58,6 +58,8 @@ class OrderInput:
     loading_image: object | None
     delivery_receipt_image: object | None
     remarks: str | None
+    # Optional; defaulted so existing OrderInput(...) call sites stay valid.
+    vehicle_delivered_quantity: float | None = None
 
 
 class OrderService:
@@ -229,6 +231,15 @@ class OrderService:
             "plant_choices": [(0, "Select Plant (Optional)")] + [(plant.id, plant.name) for plant in self.lookups.list_plants()],
         }
 
+    @staticmethod
+    def _vehicle_delivered_quantity_from_form(form):
+        """Read the optional vehicle-delivered quantity. Only EditOrderForm has
+        this field; a blank value means 'not set' (fall back to delivered qty)."""
+        field = getattr(form, "vehicle_delivered_quantity", None)
+        if field is None or field.data in (None, ""):
+            return None
+        return _safe_float(field.data)
+
     def input_from_form(self, form, form_data):
         return OrderInput(
             order_date=form.order_date.data,
@@ -244,6 +255,7 @@ class OrderService:
             builty_number=_clean_text(form.builty_number.data),
             receipt_number=_clean_text(form.receipt_number.data),
             delivered_quantity=_safe_float(form.delivered_quantity.data),
+            vehicle_delivered_quantity=self._vehicle_delivered_quantity_from_form(form),
             vehicle_rate=_safe_float(form.vehicle_rate.data),
             contractor_rate=_safe_float(form.contractor_rate.data),
             plant_id=form.plant_id.data if form.plant_id.data not in (None, 0) else None,
@@ -390,6 +402,7 @@ class OrderService:
         order.builty_number = order_input.builty_number
         order.receipt_number = order_input.receipt_number
         order.delivered_quantity = order_input.delivered_quantity
+        order.vehicle_delivered_quantity = order_input.vehicle_delivered_quantity
         order.vehicle_rate = order_input.vehicle_rate
         order.contractor_rate = order_input.contractor_rate
         order.plant_id = order_input.plant_id

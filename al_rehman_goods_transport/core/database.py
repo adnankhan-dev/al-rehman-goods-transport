@@ -67,6 +67,7 @@ def init_db():
     _add_contractor_rate_vehicle_owner()
     _add_order_approval_columns()
     _add_diesel_approval_columns()
+    _add_order_vehicle_delivered_quantity()
     _add_entity_opening_balances()
     _add_transaction_approval_columns()
     _add_bill_approval_columns()
@@ -211,6 +212,19 @@ def _add_bill_approval_columns():
             connection.execute(text("ALTER TABLE bill ADD COLUMN approved_by_id INTEGER"))
         if "approved_at" not in columns:
             connection.execute(text("ALTER TABLE bill ADD COLUMN approved_at TIMESTAMP"))
+
+
+def _add_order_vehicle_delivered_quantity():
+    """Add Order.vehicle_delivered_quantity to existing databases (SQLite +
+    Postgres). NULL means the vehicle is paid on the contractor delivered
+    quantity, exactly as before — so existing orders are unchanged."""
+    inspector = inspect(engine)
+    if "orders" not in inspector.get_table_names():
+        return
+    columns = {column["name"] for column in inspector.get_columns("orders")}
+    if "vehicle_delivered_quantity" not in columns:
+        with engine.begin() as connection:
+            connection.execute(text("ALTER TABLE orders ADD COLUMN vehicle_delivered_quantity FLOAT"))
 
 
 def _add_order_approval_columns():

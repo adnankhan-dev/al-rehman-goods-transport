@@ -394,7 +394,7 @@
                             <td>{{ order.from_site.name if order.from_site else '-' }}</td>
                             <td>{{ order.site.name if order.site else '-' }}</td>
                             <td>{{ order.material_name }}</td>
-                            <td>{{ "%.2f"|format(order.delivered_quantity or order.quantity or 0) }} {{ order.unit|upper }}</td>
+                            <td>{{ "%.2f"|format(order.effective_vehicle_quantity) }} {{ order.unit|upper }}</td>
                             <td>Rs. {{ "%.2f"|format(order.vehicle_rate or 0) }}</td>
                             <td>{{ order.receipt_number or '-' }}</td>
                             <td>

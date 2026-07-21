@@ -151,6 +151,9 @@ class SettingsForm(BaseForm):
 
 
 class EditOrderForm(OrderForm):
+    # Only shown to authorised users; sets the vehicle-side delivered quantity
+    # when it differs from (is lower than) the contractor delivered quantity.
+    vehicle_delivered_quantity = FloatField('Vehicle Delivered Quantity', validators=[Optional()])
     submit = SubmitField('Update Order')
 
 # Make sure to export all forms

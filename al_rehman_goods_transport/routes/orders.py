@@ -350,19 +350,26 @@ async def edit_order(id: int, request: Request, current_user=Depends(require_per
 
     form_data = await request.form() if request.method == "POST" else None
     form = EditOrderForm(form_data, obj=order)
+    can_adjust_vehicle = bool(getattr(current_user, "can", lambda _c: False)("orders.adjust_vehicle"))
     if request.method == "GET":
         form.order_date.data = order.order_date.date() if order.order_date else None
         form.material_id.data = order.material_id
         form.from_site_id.data = order.from_site_id or 0
         form.plant_id.data = order.plant_id or 0
         form.load_quantity.data = order.primary_loading.load_quantity if order.primary_loading else order.quantity
+        form.vehicle_delivered_quantity.data = order.vehicle_delivered_quantity
     _populate_order_choices(form, service)
 
     if request.method == "POST" and form.validate():
         try:
+            order_input = service.input_from_form(form, form_data)
+            # Only authorised users may change the vehicle-delivered quantity;
+            # for everyone else preserve whatever is already stored.
+            if not can_adjust_vehicle:
+                order_input.vehicle_delivered_quantity = order.vehicle_delivered_quantity
             updated = service.update_order(
                 id,
-                service.input_from_form(form, form_data),
+                order_input,
                 allow_billed=current_user.can("ledger.admin"),
             )
             record_audit(current_user, "update", "order", id, f"Order #{id} updated")
@@ -380,6 +387,7 @@ async def edit_order(id: int, request: Request, current_user=Depends(require_per
         form=form,
         order=order,
         material_units=_material_units(service),
+        can_adjust_vehicle=can_adjust_vehicle,
         status_code=400 if request.method == "POST" and form.errors else 200,
     )
 

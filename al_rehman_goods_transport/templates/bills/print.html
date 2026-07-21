@@ -535,7 +535,7 @@
                                 <td>{{ order.from_site.name if order.from_site else '-' }}</td>
                                 <td>{{ order.site.name if order.site else '-' }}</td>
                                 <td>{{ order.material_name }}</td>
-                                <td>{{ "%.2f"|format(order.delivered_quantity or order.quantity or 0) }} {{ order.unit|upper }}</td>
+                                <td>{{ "%.2f"|format(order.effective_vehicle_quantity) }} {{ order.unit|upper }}</td>
                                 <td class="align-right">Rs. {{ "%.2f"|format(order.vehicle_rate or 0) }}</td>
                                 <td class="align-right"><strong>Rs. {{ "%.2f"|format(order.total_vehicle_amount()) }}</strong></td>
                             </tr>
@@ -593,7 +593,7 @@
                                     <tr>
                                         <td>{{ (order.completion_date or order.order_date).strftime('%Y-%m-%d') }}</td>
                                         <td>{{ order.vehicle.vehicle_number }}</td>
-                                        <td>{{ "%.2f"|format(order.delivered_quantity or order.quantity or 0) }} {{ order.unit|upper }}</td>
+                                        <td>{{ "%.2f"|format(order.effective_vehicle_quantity) }} {{ order.unit|upper }}</td>
                                         <td class="align-right">Rs. {{ "%.2f"|format(order.total_vehicle_amount()) }}</td>
                                         <td class="align-right">- Rs. {{ "%.2f"|format(order.total_diesel_amount()) }}</td>
                                         <td class="align-right"><strong>Rs. {{ "%.2f"|format(order.remaining_vehicle_payment()) }}</strong></td>
