@@ -54,7 +54,14 @@ async def _lifespan(_app: FastAPI):
 
 def create_app() -> FastAPI:
     app = FastAPI(title=settings.app_name, debug=settings.debug, lifespan=_lifespan)
-    app.add_middleware(SessionMiddleware, secret_key=settings.secret_key, session_cookie=settings.session_cookie)
+    app.add_middleware(
+        SessionMiddleware,
+        secret_key=settings.secret_key,
+        session_cookie=settings.session_cookie,
+        # Idle timeout: the signed cookie expires this many seconds after the last
+        # response, so a system left unused past it requires signing in again.
+        max_age=settings.session_max_age,
+    )
     app.add_middleware(
         CORSMiddleware,
         allow_origins=["*"],

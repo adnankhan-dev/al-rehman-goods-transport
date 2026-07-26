@@ -119,6 +119,10 @@ env var overrides the DB.
     (`letterhead_*`), edited on the Settings page (`update_letterhead` action). Injected into every
     template via `core/templating._base_context` as `letterhead`; the two Python-generated documents
     (orders statement, manual entry form) fetch `SettingsService().get_letterhead()`.
+- **Session timeout:** `SessionMiddleware` runs with `max_age=settings.session_max_age` (env
+  `SESSION_MAX_AGE`, default **3 hours**) — a sliding **idle** timeout (activity re-issues the signed
+  cookie; away longer than this ⇒ forced re-login). Before this it had no max_age, so Starlette's
+  14-day default kept sliding on every request (flash writes) and users effectively never logged out.
 - **Printing:** every print document forces **high-contrast black ink** under `@media print` (black
   text, black 1px borders, `border-collapse: collapse` so first/last-row borders match the interior,
   white backgrounds so dark header/total bands print clean). The block is marked `AK-BLACK-PRINT` in

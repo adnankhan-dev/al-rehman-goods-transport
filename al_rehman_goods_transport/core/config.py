@@ -16,6 +16,9 @@ class Settings:
     host: str = os.environ.get("HOST", "127.0.0.1")
     port: int = int(os.environ.get("PORT", "8000"))
     session_cookie: str = os.environ.get("SESSION_COOKIE_NAME", "al_rehman_transport_session")
+    # Idle session timeout in seconds. Activity refreshes it; being away longer
+    # than this forces a fresh login. Default 3 hours.
+    session_max_age: int = int(os.environ.get("SESSION_MAX_AGE", str(3 * 60 * 60)))
 
 
 settings = Settings()
