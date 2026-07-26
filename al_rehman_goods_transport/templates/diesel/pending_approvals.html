@@ -20,7 +20,10 @@
     <form method="POST" action="{{ url_for('diesel.approve_entries') }}" id="dieselApprovalForm">
         <input type="hidden" name="entry_ids" id="entry_ids" value="">
         {% if can_approve %}
-        <div class="d-flex justify-content-end mb-3">
+        <div class="d-flex justify-content-end gap-2 mb-3 flex-wrap">
+            <button type="button" class="btn btn-ui-ocean" onclick="approveSelectedDiesel()">
+                <i class="bi bi-check2-square"></i> Approve Selected
+            </button>
             <button type="button" class="btn btn-ui-primary" onclick="approveAllDiesel()">
                 <i class="bi bi-check2-all"></i> Approve All ({{ pending_count }})
             </button>
@@ -35,6 +38,7 @@
                 <table class="table detail-table">
                     <thead>
                         <tr>
+                            {% if can_approve %}<th style="width:2.5rem"><input type="checkbox" id="dieselSelectAll" title="Select all"></th>{% endif %}
                             <th>Date</th>
                             <th>Vehicle / Owner</th>
                             <th>Petrol Pump</th>
@@ -48,6 +52,7 @@
                     <tbody>
                         {% for entry in entries %}
                         <tr class="diesel-approval-row" data-entry-id="{{ entry.id }}">
+                            {% if can_approve %}<td><input type="checkbox" class="diesel-check" value="{{ entry.id }}"></td>{% endif %}
                             <td>{{ entry.date.strftime('%d %b %Y') if entry.date else '-' }}</td>
                             <td>
                                 <strong>{{ entry.vehicle.vehicle_number if entry.vehicle else '-' }}</strong>
@@ -101,9 +106,20 @@
             entryIdsInput.value = ids.join(',');
             form.submit();
         }
+        const selectAll = document.getElementById('dieselSelectAll');
+        if (selectAll) {
+            selectAll.addEventListener('change', function() {
+                document.querySelectorAll('.diesel-check').forEach(function(cb) { cb.checked = selectAll.checked; });
+            });
+        }
         window.approveDieselRow = function(btn) {
             const row = btn.closest('.diesel-approval-row');
             submitApproval([row.dataset.entryId]);
+        };
+        window.approveSelectedDiesel = function() {
+            const ids = Array.from(document.querySelectorAll('.diesel-check:checked')).map(cb => cb.value);
+            if (!ids.length) { alert('Select at least one entry to approve.'); return; }
+            submitApproval(ids);
         };
         window.approveAllDiesel = function() {
             const rows = Array.from(document.querySelectorAll('.diesel-approval-row'));

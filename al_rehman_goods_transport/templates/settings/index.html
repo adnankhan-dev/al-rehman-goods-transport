@@ -56,6 +56,30 @@
     </div>
 
     <div class="detail-panel">
+        <h3>Print Columns</h3>
+        <p class="form-note">Choose which optional columns appear on each printed document. Unticking a column hides it everywhere that document is shown or printed. Essential columns (date, quantity, amount) always stay.</p>
+        <form method="POST" class="form-stack mt-2">
+            <input type="hidden" name="action" value="update_template_columns">
+            <div class="detail-grid">
+                {% for doc, meta in template_columns_catalog.items() %}
+                <div class="detail-panel" style="margin:0;">
+                    <h4 style="margin:0 0 8px;">{{ meta.label }}</h4>
+                    {% for key, label in meta.columns %}
+                    <label class="d-flex align-items-center gap-2 mb-1" style="cursor:pointer;">
+                        <input type="checkbox" name="col_{{ doc }}_{{ key }}" {% if key not in (template_columns_hidden.get(doc) or []) %}checked{% endif %}>
+                        <span>{{ label }}</span>
+                    </label>
+                    {% endfor %}
+                </div>
+                {% endfor %}
+            </div>
+            <div class="form-actions mt-2">
+                <button type="submit" class="btn btn-ui-primary"><i class="bi bi-save"></i> Save Print Columns</button>
+            </div>
+        </form>
+    </div>
+
+    <div class="detail-panel">
         <h3>Balance Reconciliation &amp; Audit</h3>
         <p class="form-note">Compare every stored account balance against the balance recomputed from orders, diesel entries, and payments — and review who changed what.</p>
         <div class="form-actions">

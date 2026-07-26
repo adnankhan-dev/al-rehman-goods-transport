@@ -370,6 +370,29 @@ class RouteTests(unittest.TestCase):
         self.assertIn("view-only access", view_only.text)
         self.assertNotIn("approveRow", view_only.text)
 
+    def test_print_column_settings_hide_and_reflect(self):
+        from al_rehman_goods_transport.services import SettingsService
+
+        self._login()
+        # Checked = shown. Send all columns checked EXCEPT fuel_log/litres to hide it.
+        data = {"action": "update_template_columns"}
+        for doc, meta in SettingsService.TEMPLATE_COLUMNS.items():
+            for key, _label in meta["columns"]:
+                if not (doc == "fuel_log" and key == "litres"):
+                    data[f"col_{doc}_{key}"] = "on"
+        resp = self.client.post("/settings", data=data, follow_redirects=True)
+        self.assertEqual(resp.status_code, 200)
+
+        # Saved: only litres hidden for the fuel log; other docs unchanged.
+        prefs = SettingsService().get_template_columns()
+        self.assertEqual(prefs["fuel_log"], ["litres"])
+        self.assertEqual(prefs["bill"], [])
+
+        # The fuel log print now carries the hide rule for that column.
+        printed = self.client.get("/diesel/print", follow_redirects=True)
+        self.assertEqual(printed.status_code, 200)
+        self.assertIn(".col-litres { display: none", printed.text)
+
     def test_reports_workspace_supports_diesel_mode(self):
         contractor = Contractor(name="ABC Contractors", contact_person="John Doe")
         material = Material(name="Sand")

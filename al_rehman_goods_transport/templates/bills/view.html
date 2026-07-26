@@ -6,6 +6,10 @@
 
 {% block content %}
 {% call form_shell("Bill " ~ bill.bill_number, "Review the linked trips and the account summary for this bill period.", "Finance") %}
+<style>
+{% for c in (template_columns.get('bill', []) if template_columns else []) %}.col-{{ c }} { display: none !important; }
+{% endfor %}
+</style>
 <section class="detail-shell">
     <div class="erp-top-bar">
         <a href="{{ url_for('ledger.index') }}" class="erp-top-bar-back">
@@ -170,8 +174,8 @@
                             <thead>
                                 <tr>
                                     <th>Date</th>
-                                    <th>Vehicle</th>
-                                    <th>Receipt</th>
+                                    <th class="col-vehicle">Vehicle</th>
+                                    <th class="col-receipt">Receipt</th>
                                     <th>Delivered</th>
                                     <th>Amount</th>
                                     {% if current_user.can('ledger.admin') %}<th></th>{% endif %}
@@ -181,8 +185,8 @@
                                 {% for order in group.orders %}
                                 <tr>
                                     <td>{{ (order.completion_date or order.order_date).strftime('%Y-%m-%d') }}</td>
-                                    <td>{{ order.vehicle.vehicle_number }}</td>
-                                    <td>{{ order.receipt_number or '-' }}</td>
+                                    <td class="col-vehicle">{{ order.vehicle.vehicle_number }}</td>
+                                    <td class="col-receipt">{{ order.receipt_number or '-' }}</td>
                                     <td>{{ "%.2f"|format(order.delivered_quantity or order.quantity or 0) }} {{ order.unit|upper }}</td>
                                     <td>Rs. {{ "%.2f"|format(order.billable_amount) }}</td>
                                     {% if current_user.can('ledger.admin') %}

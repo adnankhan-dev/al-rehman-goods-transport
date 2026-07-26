@@ -182,6 +182,15 @@ def _letterhead():
     return result
 
 
+def _template_columns():
+    """{document: [hidden column keys]} for print templates. Never raises."""
+    try:
+        from ..services import SettingsService
+        return SettingsService().get_template_columns()
+    except Exception:
+        return {}
+
+
 def _base_context(request: Request, **context):
     current_user = get_optional_user(request)
     orders_pending, diesel_pending, ledger_pending = _pending_approval_counts(current_user)
@@ -195,6 +204,7 @@ def _base_context(request: Request, **context):
         "nav_pending_diesel": diesel_pending,
         "nav_pending_ledger": ledger_pending,
         "letterhead": _letterhead(),
+        "template_columns": _template_columns(),
     }
     base_context.update(context)
     return base_context

@@ -119,6 +119,19 @@ env var overrides the DB.
     (`letterhead_*`), edited on the Settings page (`update_letterhead` action). Injected into every
     template via `core/templating._base_context` as `letterhead`; the two Python-generated documents
     (orders statement, manual entry form) fetch `SettingsService().get_letterhead()`.
+- **Printing:** every print document forces **high-contrast black ink** under `@media print` (black
+  text, black 1px borders, `border-collapse: collapse` so first/last-row borders match the interior,
+  white backgrounds so dark header/total bands print clean). The block is marked `AK-BLACK-PRINT` in
+  each standalone print template's `<style>`, the two Python-generated docs (orders statement, manual
+  form — braces doubled inside the f-strings), and `static/css/style.css` (for base-template pages).
+- **Editable print columns:** optional columns on Bill (contractor trip table: vehicle, receipt),
+  Vehicle Owner statement, Contractor statement, and Fuel log can be shown/hidden from **Settings →
+  Print Columns** (`SettingsService.TEMPLATE_COLUMNS`, stored as JSON in AppSetting
+  `template_column_prefs`; `get/update_template_columns`). Hiding works by CSS: each optional column's
+  cells carry a `col-<key>` class (key matches the catalog, e.g. `col-from_site`), and each template
+  emits `.col-<key>{display:none}` for its doc's hidden list — the whole column (incl. colspan totals)
+  collapses. `template_columns` (dict of doc→hidden list) is injected via `core/templating._base_context`.
+  A hidden column simply no-ops in any table that doesn't use its class.
 - **Vehicle-delivered quantity (order):** `Order.vehicle_delivered_quantity` (nullable) captures the
   vehicle's own measured quantity when it is *lower* than the contractor's. When set, the vehicle
   payable is computed on it (`Order.effective_vehicle_quantity` → used by `gross_vehicle_amount`);

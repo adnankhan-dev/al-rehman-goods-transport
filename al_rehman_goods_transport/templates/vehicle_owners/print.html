@@ -46,7 +46,19 @@
             .meta { grid-template-columns:repeat(2,minmax(0,1fr)); }
             table { display:block; overflow-x:auto; white-space:nowrap; }
         }
-    </style>
+            /* AK-BLACK-PRINT: force high-contrast black ink for printing. */
+        @media print {
+            body, h1, h2, h3, h4, h5, h6, p, span, div, td, th, a, strong, small, li { color: #000 !important; }
+            table, th, td, tr, thead, tbody, tfoot { border-color: #000 !important; }
+            table { border-collapse: collapse !important; }
+            th, td { border: 1px solid #000 !important; background: #fff !important; }
+            tr { background: #fff !important; }
+        }
+</style>
+<style>
+{% for c in (template_columns.get('owner_statement', []) if template_columns else []) %}.col-{{ c }} { display: none !important; }
+{% endfor %}
+</style>
 </head>
 <body>
     <div class="shell">
@@ -90,11 +102,12 @@
                     <thead>
                         <tr>
                             <th>Date</th>
-                            <th>From Site</th>
-                            <th>To Site</th>
-                            <th>Material</th>
+                            <th class="col-from_site">From Site</th>
+                            <th class="col-to_site">To Site</th>
+                            <th class="col-material">Material</th>
+                            <th class="col-receipt">Delivery Receipt</th>
                             <th class="num">Delivered</th>
-                            <th class="num">Rate</th>
+                            <th class="num col-rate">Rate</th>
                             <th class="num">Amount</th>
                         </tr>
                     </thead>
@@ -102,18 +115,19 @@
                         {% for order in vg.orders %}
                         <tr>
                             <td>{{ (order.completion_date or order.order_date).strftime('%d-%m-%Y') }}</td>
-                            <td>{{ order.from_site.name if order.from_site else "-" }}</td>
-                            <td>{{ order.site.name if order.site else "-" }}</td>
-                            <td>{{ order.material_name }}</td>
+                            <td class="col-from_site">{{ order.from_site.name if order.from_site else "-" }}</td>
+                            <td class="col-to_site">{{ order.site.name if order.site else "-" }}</td>
+                            <td class="col-material">{{ order.material_name }}</td>
+                            <td class="col-receipt">{{ order.receipt_number or '-' }}</td>
                             <td class="num">{{ "%.2f"|format(order.effective_vehicle_quantity) }} {{ (order.unit or 'cft')|upper }}</td>
-                            <td class="num">{{ "%.2f"|format(order.vehicle_rate or 0) }}</td>
+                            <td class="num col-rate">{{ "%.2f"|format(order.vehicle_rate or 0) }}</td>
                             <td class="num">{{ "{:,.0f}".format(order.total_vehicle_amount()) }}</td>
                         </tr>
                         {% endfor %}
                         <tr class="subtotal">
-                            <td colspan="4">Vehicle {{ vg.vehicle_number }} Subtotal</td>
+                            <td colspan="5">Vehicle {{ vg.vehicle_number }} Subtotal</td>
                             <td class="num">{{ "%.2f"|format(vg.total_delivered) }}</td>
-                            <td></td>
+                            <td class="col-rate"></td>
                             <td class="num">{{ "{:,.0f}".format(vg.gross) }}</td>
                         </tr>
                     </tbody>
@@ -224,7 +238,9 @@
             </table>
             {% endif %}
 
-            {{ financial_section(financial, "Trips − Fuel-Log Diesel (this period)", table_class="", num_class="num") }}
+            {# Payments are already itemised in "Payments & Advances Made" above,
+               so suppress the duplicate payment-detail table here. #}
+            {{ financial_section(financial, "Trips − Fuel-Log Diesel (this period)", table_class="", num_class="num", show_payment_detail=False) }}
 
             <footer class="footer">
                 This statement reflects completed trips for the owner's vehicles for the selected period. The Account Summary above shows the previous balance, the period activity, and every receipt and payment with signs.

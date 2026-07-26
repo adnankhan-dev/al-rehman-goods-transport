@@ -3678,3 +3678,12 @@ a.quick-action-btn i {
     flex: 0 0 auto;
     white-space: nowrap;
 }
+
+/* AK-BLACK-PRINT: high-contrast black ink for printing base-template pages. */
+@media print {
+    body, h1, h2, h3, h4, h5, h6, p, span, div, td, th, a, strong, small, li { color: #000 !important; }
+    table, th, td, tr, thead, tbody, tfoot { border-color: #000 !important; }
+            table { border-collapse: collapse !important; }
+    .detail-table th, .detail-table td, table.table th, table.table td { border: 1px solid #000 !important; background: #fff !important; }
+    table tr { background: #fff !important; }
+}

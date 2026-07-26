@@ -36,7 +36,19 @@
             thead { display:table-header-group; }
             tr { break-inside:avoid; }
         }
-    </style>
+            /* AK-BLACK-PRINT: force high-contrast black ink for printing. */
+        @media print {
+            body, h1, h2, h3, h4, h5, h6, p, span, div, td, th, a, strong, small, li { color: #000 !important; }
+            table, th, td, tr, thead, tbody, tfoot { border-color: #000 !important; }
+            table { border-collapse: collapse !important; }
+            th, td { border: 1px solid #000 !important; background: #fff !important; }
+            tr { background: #fff !important; }
+        }
+</style>
+<style>
+{% for c in (template_columns.get('fuel_log', []) if template_columns else []) %}.col-{{ c }} { display: none !important; }
+{% endfor %}
+</style>
 </head>
 <body>
     <div class="shell">
@@ -77,8 +89,8 @@
             <table>
                 <thead>
                     <tr>
-                        <th>Date</th><th>Vehicle</th><th>Owner</th><th>Petrol Pump</th><th>Receipt</th>
-                        <th class="num">Litres</th><th class="num">Amount</th>
+                        <th>Date</th><th>Vehicle</th><th class="col-owner">Owner</th><th class="col-pump">Petrol Pump</th><th class="col-receipt">Receipt</th>
+                        <th class="num col-litres">Litres</th><th class="num">Amount</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -86,10 +98,10 @@
                     <tr>
                         <td>{{ entry.date.strftime('%d-%m-%Y') }}</td>
                         <td>{{ entry.vehicle.vehicle_number if entry.vehicle else '-' }}</td>
-                        <td>{{ entry.vehicle.owner_display_name if entry.vehicle else '-' }}</td>
-                        <td>{{ entry.petrol_pump.name if entry.petrol_pump else '-' }}</td>
-                        <td>{{ entry.receipt_number or '-' }}</td>
-                        <td class="num">{{ "%.2f"|format(entry.litres) if entry.litres else '—' }}</td>
+                        <td class="col-owner">{{ entry.vehicle.owner_display_name if entry.vehicle else '-' }}</td>
+                        <td class="col-pump">{{ entry.petrol_pump.name if entry.petrol_pump else '-' }}</td>
+                        <td class="col-receipt">{{ entry.receipt_number or '-' }}</td>
+                        <td class="num col-litres">{{ "%.2f"|format(entry.litres) if entry.litres else '—' }}</td>
                         <td class="num">{{ "{:,.0f}".format(entry.amount or 0) }}</td>
                     </tr>
                     {% else %}
@@ -97,7 +109,7 @@
                     {% endfor %}
                     <tr class="grand">
                         <td colspan="5">Grand Total</td>
-                        <td class="num">{{ "%.2f"|format(total_litres) }} L</td>
+                        <td class="num col-litres">{{ "%.2f"|format(total_litres) }} L</td>
                         <td class="num">Rs. {{ "{:,.0f}".format(total_amount) }}</td>
                     </tr>
                 </tbody>

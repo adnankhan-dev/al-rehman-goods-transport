@@ -12,7 +12,7 @@
 {%- if sign < 0 %}− {{ _money(value) }}{% else %}+ {{ _money(value) }}{% endif -%}
 {%- endmacro %}
 
-{% macro financial_section(fs, activity_label, table_class="statement-table", num_class="align-right", heading_style="margin:22px 0 8px;color:#0b2742;font-size:1rem;", subheading_style="margin:14px 0 6px;color:#475569;font-size:0.85rem;") %}
+{% macro financial_section(fs, activity_label, table_class="statement-table", num_class="align-right", heading_style="margin:22px 0 8px;color:#0b2742;font-size:1rem;", subheading_style="margin:14px 0 6px;color:#475569;font-size:0.85rem;", show_payment_detail=True) %}
 <h3 style="{{ heading_style }}">Account Summary — {{ fs.entity_name }}</h3>
 <table class="{{ table_class }}">
     <tbody>
@@ -73,7 +73,7 @@
 </table>
 {% endif %}
 
-{% if fs.payments %}
+{% if fs.payments and show_payment_detail %}
 <h4 style="{{ subheading_style }}">Payment paid to {{ fs.entity_name }}</h4>
 <table class="{{ table_class }}">
     <thead>

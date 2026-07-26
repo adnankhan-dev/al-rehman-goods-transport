@@ -105,6 +105,19 @@ async def settings_dashboard(request: Request, current_user=Depends(require_any_
             flash(request, "Letterhead updated. It now appears on all printed documents.", "success")
             return RedirectResponse(url=str(request.url_for("settings.index")), status_code=303)
 
+        elif action == "update_template_columns":
+            if not current_user.can("settings.manage"):
+                flash(request, "You do not have permission to update ERP settings.", "warning")
+                return RedirectResponse(url=str(request.url_for("settings.index")), status_code=303)
+            # A checked box means the column is SHOWN; unchecked means hide it.
+            hidden = {}
+            for doc, meta in SettingsService.TEMPLATE_COLUMNS.items():
+                hidden[doc] = [key for key, _label in meta["columns"] if not form_data.get(f"col_{doc}_{key}")]
+            service.update_template_columns(hidden)
+            record_audit(current_user, "update", "settings", None, "Print template columns updated")
+            flash(request, "Print column settings saved.", "success")
+            return RedirectResponse(url=str(request.url_for("settings.index")), status_code=303)
+
     return render_template(
         request,
         "settings/index.html",
@@ -118,6 +131,8 @@ async def settings_dashboard(request: Request, current_user=Depends(require_any_
         contractors=LookupRepository().list_contractors(),
         current_month=datetime.now().strftime("%Y-%m"),
         letterhead_settings=service.get_letterhead(),
+        template_columns_catalog=SettingsService.TEMPLATE_COLUMNS,
+        template_columns_hidden=service.get_template_columns(),
         **service.diesel_rate_context(),
     )
 

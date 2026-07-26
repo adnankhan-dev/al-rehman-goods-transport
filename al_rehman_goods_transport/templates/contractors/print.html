@@ -37,7 +37,19 @@
             thead { display:table-header-group; }
             tr { break-inside:avoid; }
         }
-    </style>
+            /* AK-BLACK-PRINT: force high-contrast black ink for printing. */
+        @media print {
+            body, h1, h2, h3, h4, h5, h6, p, span, div, td, th, a, strong, small, li { color: #000 !important; }
+            table, th, td, tr, thead, tbody, tfoot { border-color: #000 !important; }
+            table { border-collapse: collapse !important; }
+            th, td { border: 1px solid #000 !important; background: #fff !important; }
+            tr { background: #fff !important; }
+        }
+</style>
+<style>
+{% for c in (template_columns.get('contractor_statement', []) if template_columns else []) %}.col-{{ c }} { display: none !important; }
+{% endfor %}
+</style>
 </head>
 <body>
     <div class="shell">
@@ -75,13 +87,13 @@
                 <thead>
                     <tr>
                         <th>Date</th>
-                        <th>Vehicle</th>
-                        <th>From Site</th>
-                        <th>To Site</th>
-                        <th>Material</th>
-                        <th>Receipt</th>
+                        <th class="col-vehicle">Vehicle</th>
+                        <th class="col-from_site">From Site</th>
+                        <th class="col-to_site">To Site</th>
+                        <th class="col-material">Material</th>
+                        <th class="col-receipt">Receipt</th>
                         <th class="num">Delivered</th>
-                        <th class="num">Rate</th>
+                        <th class="num col-rate">Rate</th>
                         <th class="num">Amount</th>
                     </tr>
                 </thead>
@@ -89,13 +101,13 @@
                     {% for order in completed_orders %}
                     <tr>
                         <td>{{ (order.completion_date or order.order_date).strftime('%d-%m-%Y') }}</td>
-                        <td>{{ order.vehicle.vehicle_number if order.vehicle else '-' }}</td>
-                        <td>{{ order.from_site.name if order.from_site else '-' }}</td>
-                        <td>{{ order.site.name if order.site else '-' }}</td>
-                        <td>{{ order.material_name }}</td>
-                        <td>{{ order.receipt_number or '-' }}</td>
+                        <td class="col-vehicle">{{ order.vehicle.vehicle_number if order.vehicle else '-' }}</td>
+                        <td class="col-from_site">{{ order.from_site.name if order.from_site else '-' }}</td>
+                        <td class="col-to_site">{{ order.site.name if order.site else '-' }}</td>
+                        <td class="col-material">{{ order.material_name }}</td>
+                        <td class="col-receipt">{{ order.receipt_number or '-' }}</td>
                         <td class="num">{{ "%.2f"|format(order.delivered_quantity or order.quantity or 0) }} {{ (order.unit or 'cft')|upper }}</td>
-                        <td class="num">{{ "%.2f"|format(order.contractor_rate or 0) }}</td>
+                        <td class="num col-rate">{{ "%.2f"|format(order.contractor_rate or 0) }}</td>
                         <td class="num">{{ "{:,.0f}".format(order.billable_amount) }}</td>
                     </tr>
                     {% else %}
@@ -105,7 +117,7 @@
                     <tr class="subtotal">
                         <td colspan="6">Total Trips</td>
                         <td class="num">{{ "%.2f"|format(completed_orders|sum(attribute='delivered_quantity') or 0) }}</td>
-                        <td></td>
+                        <td class="col-rate"></td>
                         <td class="num">{{ "{:,.0f}".format(period_amount) }}</td>
                     </tr>
                     {% endif %}

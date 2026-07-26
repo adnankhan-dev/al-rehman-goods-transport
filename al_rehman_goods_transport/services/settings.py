@@ -22,9 +22,79 @@ class SettingsService:
         "contact2": ("letterhead_contact2", "Inam Khan - 0301-5749086"),
     }
 
+    # Optional columns that can be shown/hidden on each printed document. The
+    # key (e.g. "receipt") maps to a CSS class "col-receipt" on that column's
+    # cells; hiding it collapses the whole column (headers, cells, and any
+    # colspan totals adjust automatically). Stored as JSON in one AppSetting.
+    TEMPLATE_COLUMNS_KEY = "template_column_prefs"
+    TEMPLATE_COLUMNS = {
+        "bill": {
+            "label": "Bill (contractor trip table)",
+            "columns": [
+                ("vehicle", "Vehicle"), ("receipt", "Delivery Receipt"),
+            ],
+        },
+        "owner_statement": {
+            "label": "Vehicle Owner Statement",
+            "columns": [
+                ("vehicle", "Vehicle"), ("from_site", "From Site"), ("to_site", "To Site"),
+                ("material", "Material"), ("receipt", "Delivery Receipt"),
+                ("rate", "Rate"), ("diesel", "Diesel"),
+            ],
+        },
+        "contractor_statement": {
+            "label": "Contractor Statement",
+            "columns": [
+                ("vehicle", "Vehicle"), ("from_site", "From Site"), ("to_site", "To Site"),
+                ("material", "Material"), ("receipt", "Delivery Receipt"), ("rate", "Rate"),
+            ],
+        },
+        "fuel_log": {
+            "label": "Fuel Log",
+            "columns": [
+                ("owner", "Owner"), ("pump", "Petrol Pump"),
+                ("receipt", "Receipt"), ("litres", "Litres"),
+            ],
+        },
+    }
+
     def __init__(self, session=None):
         self.session = session or db.session
         self.settings = SettingsRepository(self.session)
+
+    def get_template_columns(self):
+        """Return {document: [hidden column keys]} for the print templates."""
+        import json
+
+        setting = self.settings.get_by_key(self.TEMPLATE_COLUMNS_KEY)
+        stored = {}
+        if setting and setting.value:
+            try:
+                stored = json.loads(setting.value)
+            except (ValueError, TypeError):
+                stored = {}
+        # Only keep known documents/columns so a bad value can never break a page.
+        result = {}
+        for doc, meta in self.TEMPLATE_COLUMNS.items():
+            valid = {key for key, _label in meta["columns"]}
+            result[doc] = [c for c in (stored.get(doc) or []) if c in valid]
+        return result
+
+    def update_template_columns(self, hidden_by_doc):
+        """hidden_by_doc: {document: iterable of hidden column keys}."""
+        import json
+
+        clean = {}
+        for doc, meta in self.TEMPLATE_COLUMNS.items():
+            valid = {key for key, _label in meta["columns"]}
+            clean[doc] = sorted({c for c in (hidden_by_doc.get(doc) or []) if c in valid})
+        try:
+            self.settings.set_value(self.TEMPLATE_COLUMNS_KEY, json.dumps(clean))
+            self.session.commit()
+        except Exception:
+            self.session.rollback()
+            raise
+        return clean
 
     def get_letterhead(self):
         result = {}
@@ -161,7 +231,15 @@ class SettingsService:
             .day-block {{ break-inside: avoid; }}
             thead {{ display: table-header-group; }}
         }}
-    </style>
+            /* AK-BLACK-PRINT: force high-contrast black ink for printing. */
+        @media print {{
+            body, h1, h2, h3, h4, h5, h6, p, span, div, td, th, a, strong, small, li {{ color: #000 !important; }}
+            table, th, td, tr, thead, tbody, tfoot {{ border-color: #000 !important; }}
+            table {{ border-collapse: collapse !important; }}
+            th, td {{ border: 1px solid #000 !important; background: #fff !important; }}
+            tr {{ background: #fff !important; }}
+        }}
+</style>
 </head>
 <body>
     <div class="toolbar"><button type="button" class="button" onclick="window.print()">Print / Save PDF</button></div>

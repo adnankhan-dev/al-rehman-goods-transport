@@ -46,7 +46,15 @@
             thead { display:table-header-group; }
             tr { break-inside:avoid; }
         }
-    </style>
+            /* AK-BLACK-PRINT: force high-contrast black ink for printing. */
+        @media print {
+            body, h1, h2, h3, h4, h5, h6, p, span, div, td, th, a, strong, small, li { color: #000 !important; }
+            table, th, td, tr, thead, tbody, tfoot { border-color: #000 !important; }
+            table { border-collapse: collapse !important; }
+            th, td { border: 1px solid #000 !important; background: #fff !important; }
+            tr { background: #fff !important; }
+        }
+</style>
 </head>
 <body>
     <div class="shell">

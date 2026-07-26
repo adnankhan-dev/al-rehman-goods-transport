@@ -5,6 +5,10 @@
 
 {% block content %}
 {% call form_shell("Owner — " ~ owner.name, "Contact information and linked fleet vehicles.", "Vehicle Owners") %}
+<style>
+{% for c in (template_columns.get('owner_statement', []) if template_columns else []) %}.col-{{ c }} { display: none !important; }
+{% endfor %}
+</style>
 <section class="detail-shell">
     <div class="erp-top-bar">
         <a href="{{ url_for('vehicle_owners.index') }}" class="erp-top-bar-back">
@@ -99,14 +103,15 @@
                 <thead>
                     <tr>
                         <th>Date</th>
-                        <th>Vehicle</th>
-                        <th>From Site</th>
-                        <th>To Site</th>
-                        <th>Material</th>
+                        <th class="col-vehicle">Vehicle</th>
+                        <th class="col-from_site">From Site</th>
+                        <th class="col-to_site">To Site</th>
+                        <th class="col-material">Material</th>
+                        <th class="col-receipt">Delivery Receipt</th>
                         <th>Delivered</th>
-                        <th class="text-end">Rate</th>
+                        <th class="text-end col-rate">Rate</th>
                         <th class="text-end">Gross Amt</th>
-                        <th class="text-end">Diesel</th>
+                        <th class="text-end col-diesel">Diesel</th>
                         <th class="text-end">Net Payable</th>
                     </tr>
                 </thead>
@@ -114,28 +119,29 @@
                     {% for order in related_orders %}
                     <tr>
                         <td>{{ (order.completion_date or order.order_date).strftime('%Y-%m-%d') }}</td>
-                        <td><a href="{{ url_for('vehicles.view_vehicle', id=order.vehicle.id) }}">{{ order.vehicle.vehicle_number }}</a></td>
-                        <td>{{ order.from_site.name if order.from_site else "-" }}</td>
-                        <td>{{ order.site.name if order.site else "-" }}</td>
-                        <td>{{ order.material_name }}</td>
+                        <td class="col-vehicle"><a href="{{ url_for('vehicles.view_vehicle', id=order.vehicle.id) }}">{{ order.vehicle.vehicle_number }}</a></td>
+                        <td class="col-from_site">{{ order.from_site.name if order.from_site else "-" }}</td>
+                        <td class="col-to_site">{{ order.site.name if order.site else "-" }}</td>
+                        <td class="col-material">{{ order.material_name }}</td>
+                        <td class="col-receipt">{{ order.receipt_number or '-' }}</td>
                         <td>{{ "%.2f"|format(order.effective_vehicle_quantity) }} {{ (order.unit or 'cft')|upper }}</td>
-                        <td class="text-end">{{ "%.2f"|format(order.vehicle_rate or 0) }}</td>
+                        <td class="text-end col-rate">{{ "%.2f"|format(order.vehicle_rate or 0) }}</td>
                         <td class="text-end">Rs. {{ "%.0f"|format(order.total_vehicle_amount()) }}</td>
-                        <td class="text-end">{% if order.total_diesel_amount() %}− Rs. {{ "%.0f"|format(order.total_diesel_amount()) }}{% else %}—{% endif %}</td>
+                        <td class="text-end col-diesel">{% if order.total_diesel_amount() %}− Rs. {{ "%.0f"|format(order.total_diesel_amount()) }}{% else %}—{% endif %}</td>
                         <td class="text-end table-amount">Rs. {{ "%.0f"|format(order.remaining_vehicle_payment()) }}</td>
                     </tr>
                     {% else %}
-                    <tr><td colspan="10" class="text-center">No related orders found for this vehicle owner.</td></tr>
+                    <tr><td colspan="11" class="text-center">No related orders found for this vehicle owner.</td></tr>
                     {% endfor %}
                 </tbody>
                 {% if related_orders %}
                 <tfoot>
                     <tr class="bill-grand-total-row">
-                        <td colspan="5"><strong>Totals — {{ owner_summary.trips }} trip{{ 's' if owner_summary.trips != 1 }}</strong></td>
+                        <td colspan="6"><strong>Totals — {{ owner_summary.trips }} trip{{ 's' if owner_summary.trips != 1 }}</strong></td>
                         <td><strong>{{ "%.2f"|format(owner_summary.total_delivered) }}</strong></td>
-                        <td></td>
+                        <td class="col-rate"></td>
                         <td class="text-end"><strong>Rs. {{ "%.0f"|format(owner_summary.gross) }}</strong></td>
-                        <td class="text-end"><strong>− Rs. {{ "%.0f"|format(owner_summary.diesel) }}</strong></td>
+                        <td class="text-end col-diesel"><strong>− Rs. {{ "%.0f"|format(owner_summary.diesel) }}</strong></td>
                         <td class="text-end"><strong>Rs. {{ "%.0f"|format(owner_summary.net_payable) }}</strong></td>
                     </tr>
                 </tfoot>
