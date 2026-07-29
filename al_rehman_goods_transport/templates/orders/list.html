@@ -30,9 +30,9 @@
             </div>
             <div class="form-field">
                 <label class="form-label">To Site <span class="checkbox-filter-hint">(select one or more)</span></label>
-                <div class="checkbox-filter">
+                <div class="checkbox-filter" id="to-site-filter">
                     {% for site in filter_options.sites %}
-                    <label class="checkbox-filter-item">
+                    <label class="checkbox-filter-item js-site-item" data-contractor-id="{{ site.contractor_id or '' }}">
                         <input type="checkbox" name="site_ids" value="{{ site.id }}" {% if site.id in filter_state.site_ids %}checked{% endif %}>
                         <span>{{ site.name }}</span>
                     </label>
@@ -169,6 +169,10 @@
                 <span class="pnl-metric-label">Plant Cost</span>
                 <span class="pnl-metric-value pnl-cost">Rs. {{ "{:,.0f}".format(pnl.plant) }}</span>
             </div>
+            <div class="pnl-metric" title="Diesel paid direct to pumps — deducted from the vehicle owner's payable (already within Vehicle Cost)">
+                <span class="pnl-metric-label">Pump Payable</span>
+                <span class="pnl-metric-value pnl-cost">Rs. {{ "{:,.0f}".format(pnl.pump_payable) }}</span>
+            </div>
             <div class="pnl-metric {{ 'pnl-metric--profit' if pnl.profit >= 0 else 'pnl-metric--loss' }}">
                 <span class="pnl-metric-label">Net {{ 'Profit' if pnl.profit >= 0 else 'Loss' }}</span>
                 <span class="pnl-metric-value">{% if pnl.profit < 0 %}− {% endif %}Rs. {{ "{:,.0f}".format(pnl.profit|abs) }}</span>
@@ -272,5 +276,35 @@
     </div>
 </section>
 {% endcall %}
+{% endblock %}
+
+{% block page_scripts %}
+<script>
+(function () {
+    // Dependent filter: when a contractor is selected, only that contractor's
+    // "To Site" options are shown (sites carry data-contractor-id). Choosing
+    // "All contractors" shows every site again.
+    var contractorSelect = document.getElementById('contractor_id');
+    var siteItems = document.querySelectorAll('.js-site-item');
+    if (!contractorSelect || !siteItems.length) return;
+
+    function applyContractorSiteFilter() {
+        var selected = contractorSelect.value;
+        siteItems.forEach(function (item) {
+            var owner = item.getAttribute('data-contractor-id');
+            // Show all when no contractor is chosen; otherwise only matching sites.
+            var visible = !selected || owner === selected;
+            item.style.display = visible ? '' : 'none';
+            if (!visible) {
+                var cb = item.querySelector('input[type="checkbox"]');
+                if (cb) cb.checked = false;
+            }
+        });
+    }
+
+    contractorSelect.addEventListener('change', applyContractorSiteFilter);
+    applyContractorSiteFilter();
+})();
+</script>
 {% endblock %}
 

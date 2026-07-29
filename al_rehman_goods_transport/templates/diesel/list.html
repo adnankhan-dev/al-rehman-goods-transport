@@ -29,7 +29,7 @@
                 <select class="form-select" id="vehicle_id" name="vehicle_id">
                     <option value="">All vehicles</option>
                     {% for vehicle in vehicles %}
-                    <option value="{{ vehicle.id }}" {% if filter_state.vehicle_id == vehicle.id %}selected{% endif %}>{{ vehicle.vehicle_number }}</option>
+                    <option value="{{ vehicle.id }}" data-owner-id="{{ vehicle.owner_id or '' }}" {% if filter_state.vehicle_id == vehicle.id %}selected{% endif %}>{{ vehicle.vehicle_number }}</option>
                     {% endfor %}
                 </select>
             </div>
@@ -169,4 +169,34 @@
     </div>
 </section>
 {% endcall %}
+{% endblock %}
+
+{% block page_scripts %}
+<script>
+(function () {
+    // Dependent filter: when a vehicle owner is selected, only that owner's
+    // vehicles remain choosable (options carry data-owner-id). "All owners"
+    // restores the full list.
+    var ownerSelect = document.getElementById('owner_id');
+    var vehicleSelect = document.getElementById('vehicle_id');
+    if (!ownerSelect || !vehicleSelect) return;
+
+    function applyOwnerVehicleFilter() {
+        var owner = ownerSelect.value;
+        Array.prototype.forEach.call(vehicleSelect.options, function (opt) {
+            if (!opt.value) return; // keep the "All vehicles" option
+            var optOwner = opt.getAttribute('data-owner-id') || '';
+            var match = !owner || optOwner === owner;
+            opt.hidden = !match;
+            opt.disabled = !match;
+            if (!match && opt.selected) {
+                vehicleSelect.value = '';
+            }
+        });
+    }
+
+    ownerSelect.addEventListener('change', applyOwnerVehicleFilter);
+    applyOwnerVehicleFilter();
+})();
+</script>
 {% endblock %}

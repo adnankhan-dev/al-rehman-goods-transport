@@ -25,3 +25,17 @@ def record_audit(user, action, entity_type, entity_id=None, summary=None, sessio
 def list_audit_entries(session=None):
     session = session or db.session
     return session.query(AuditLog).order_by(AuditLog.created_at.desc(), AuditLog.id.desc()).all()
+
+
+def list_entity_audit(entity_type, entity_id, session=None):
+    """Full audit history (created/updated/approved/…) for one record, oldest
+    first — used to show a per-record change log on view pages."""
+    session = session or db.session
+    if entity_id is None:
+        return []
+    return (
+        session.query(AuditLog)
+        .filter(AuditLog.entity_type == entity_type, AuditLog.entity_id == int(entity_id))
+        .order_by(AuditLog.created_at.asc(), AuditLog.id.asc())
+        .all()
+    )

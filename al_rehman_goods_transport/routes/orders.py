@@ -8,7 +8,7 @@ from ..core.flash import flash
 from ..core.templating import render_template
 from ..forms import EditOrderForm, OrderForm
 from ..services import ConflictError, NotFoundError, OrderService, RateService, ValidationError
-from ..services.audit import record_audit
+from ..services.audit import list_entity_audit, record_audit
 from ..utils.pagination import parse_page
 
 
@@ -118,8 +118,12 @@ async def orders(request: Request, current_user=Depends(require_permission("orde
             "entered_by_id", "entry_date", "search",
         )
     )
-    # The "Entered by" / "Entry date" audit filters are admin-only.
-    is_admin = bool(getattr(current_user, "can", lambda _c: False)("settings.manage"))
+    # The "Entered by" / "Entry date" audit filters are shown to admins and to
+    # anyone granted the record/audit view privilege.
+    is_admin = bool(
+        getattr(current_user, "can", lambda _c: False)("settings.manage")
+        or getattr(current_user, "can", lambda _c: False)("audit.view")
+    )
 
     # Profit & Loss summary follows the same access as the Reports P&L: anyone who
     # can view Reports can see it; data-entry users (no reports.view) cannot.
@@ -331,13 +335,14 @@ async def reject_order(id: int, request: Request, current_user=Depends(require_p
 
 
 @router.get("/orders/{id}", name="orders.view_order")
-async def view_order(id: int, request: Request, _current_user=Depends(require_permission("orders.view"))):
+async def view_order(id: int, request: Request, current_user=Depends(require_permission("orders.view"))):
     service = OrderService()
     try:
         order = service.get_order(id)
     except NotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
-    return render_template(request, "orders/view.html", order=order)
+    audit_history = list_entity_audit("order", id) if current_user.can("audit.view") else None
+    return render_template(request, "orders/view.html", order=order, audit_history=audit_history)
 
 
 @router.api_route("/orders/{id}/edit", methods=["GET", "POST"], name="orders.edit_order")
@@ -371,6 +376,7 @@ async def edit_order(id: int, request: Request, current_user=Depends(require_per
                 id,
                 order_input,
                 allow_billed=current_user.can("ledger.admin"),
+                keep_approval=current_user.can("records.edit_no_reapproval"),
             )
             record_audit(current_user, "update", "order", id, f"Order #{id} updated")
             flash(request, "Order updated successfully!", "success")

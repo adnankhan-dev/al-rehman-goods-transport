@@ -19,7 +19,7 @@ class UserManagementService:
     def permission_groups(self):
         return PERMISSION_GROUPS
 
-    def create_user(self, username, email, password, confirm_password, role, permission_codes):
+    def create_user(self, username, email, password, confirm_password, role, permission_codes, name=None):
         normalized_username = (username or "").strip()
         normalized_email = (email or "").strip().lower()
         normalized_role = normalize_role(role)
@@ -34,7 +34,7 @@ class UserManagementService:
         if self.session.query(User).filter(User.email.ilike(normalized_email)).first():
             raise ValidationError("Email already exists.")
 
-        user = User(username=normalized_username, email=normalized_email)
+        user = User(username=normalized_username, email=normalized_email, name=(name or "").strip() or None)
         user.set_role(normalized_role)
         user.set_permissions(normalized_permissions)
         user.set_password(password)
@@ -42,7 +42,7 @@ class UserManagementService:
         self.session.commit()
         return user
 
-    def update_user_access(self, user_id, role, permission_codes, acting_user_id=None):
+    def update_user_access(self, user_id, role, permission_codes, acting_user_id=None, name=None):
         user = self._get_user(user_id)
         normalized_role = normalize_role(role)
         normalized_permissions = self._resolved_permissions(normalized_role, permission_codes)
@@ -50,6 +50,8 @@ class UserManagementService:
         self._validate_permissions(normalized_role, normalized_permissions)
         self._ensure_admin_not_removed(user, normalized_role, acting_user_id)
 
+        if name is not None:
+            user.name = (name or "").strip() or None
         user.set_role(normalized_role)
         user.set_permissions(normalized_permissions)
         self.session.commit()
@@ -91,6 +93,7 @@ class UserManagementService:
 
     def create_form_state(self):
         return {
+            "name": "",
             "username": "",
             "email": "",
             "role": "operations",
@@ -104,10 +107,11 @@ class UserManagementService:
         return user
 
     def _resolved_permissions(self, role, permission_codes):
-        normalized_permissions = normalize_permission_codes(permission_codes)
-        if normalized_permissions:
-            return normalized_permissions
-        return role_permissions(role)
+        # Use exactly the submitted privileges. We intentionally do NOT fall back to
+        # the role defaults when the list is empty — otherwise unchecking everything to
+        # reduce access would silently re-grant the whole role. A non-admin left with no
+        # privileges is rejected by _validate_permissions instead.
+        return normalize_permission_codes(permission_codes)
 
     def _validate_identity_fields(self, username, email, password, confirm_password):
         if not username:

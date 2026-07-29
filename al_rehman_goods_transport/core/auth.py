@@ -12,9 +12,14 @@ from .database import SessionLocal
 class AnonymousUser:
     id: int | None = None
     username: str = "Guest"
+    name: str | None = None
     is_authenticated: bool = False
     is_admin: bool = False
     role: str = "viewer"
+
+    @property
+    def display_name(self) -> str:
+        return self.username
 
     @property
     def permission_codes(self):

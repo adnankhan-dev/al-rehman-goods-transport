@@ -10,6 +10,8 @@ class User(db.Model):
 
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(80), unique=True, nullable=False)
+    # Display name shown across the app; username is used only for login.
+    name = db.Column(db.String(120), nullable=True)
     email = db.Column(db.String(120), unique=True, nullable=False)
     password_hash = db.Column(db.String(255))
     role = db.Column(db.String(50), default="admin", nullable=False)
@@ -47,6 +49,11 @@ class User(db.Model):
         if self.is_admin or self.role == "admin":
             return True
         return grants_permission(self.permission_codes, permission_code)
+
+    @property
+    def display_name(self):
+        """Name to show in the UI; falls back to username when not set."""
+        return (self.name or "").strip() or self.username
 
     @property
     def role_label(self):

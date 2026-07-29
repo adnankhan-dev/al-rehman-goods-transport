@@ -212,16 +212,16 @@
             <div class="report-panel-header">
                 <div>
                     <h3 class="report-panel-title">Profit & Loss Statement</h3>
-                    <p class="report-panel-copy">A compact statement built directly from the filtered trip records.</p>
+                    <p class="report-panel-copy">Statement for the filtered trips.</p>
                 </div>
             </div>
             <div class="report-panel-body">
                 <table class="table detail-table mb-0">
                     <tbody>
                         {% for line in statement_lines %}
-                        <tr>
-                            <td>{{ line.label }}</td>
-                            <td class="text-end {% if line.kind == 'negative' %}text-danger{% else %}text-success{% endif %}">Rs. {{ "{:,.0f}".format(line.amount) }}</td>
+                        <tr{% if line.kind == 'memo' %} class="text-muted small"{% endif %}>
+                            <td{% if line.kind == 'memo' %} style="padding-left:1.5rem;"{% endif %}>{{ line.label }}</td>
+                            <td class="text-end {% if line.kind == 'negative' %}text-danger{% elif line.kind == 'memo' %}text-muted{% else %}text-success{% endif %}">Rs. {{ "{:,.0f}".format(line.amount) }}</td>
                         </tr>
                         {% endfor %}
                         <tr>

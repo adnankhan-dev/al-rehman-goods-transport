@@ -29,7 +29,7 @@
                 <tbody>
                     {% for line in statement_lines %}
                     <tr>
-                        <td>{{ line.label }}</td>
+                        <td{% if line.kind == 'memo' %} style="padding-left:1.5rem;font-style:italic;"{% endif %}>{{ line.label }}</td>
                         <td class="text-end">Rs. {{ "{:,.0f}".format(line.amount) }}</td>
                     </tr>
                     {% endfor %}

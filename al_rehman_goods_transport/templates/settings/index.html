@@ -7,25 +7,12 @@
 {% call form_shell("Settings & Access", "Manage system values, user accounts, and role-based privileges.", "Admin", url_for('dashboard.dashboard'), "Back to Dashboard") %}
 <section class="detail-shell">
     <div class="collection-overview">
-        {{ metric_tile("Diesel Rate", "Rs. " ~ diesel_rate_display ~ " / L", "Rate used to auto-calculate litres from diesel amount", "primary", "bi bi-fuel-pump-fill") }}
         {{ metric_tile("Active Users", users|selectattr('is_active')|list|length, "User accounts currently enabled", "ocean", "bi bi-person-check-fill") }}
         {{ metric_tile("Total Users", users|length, "All ERP accounts including inactive", "accent", "bi bi-people-fill") }}
         {{ metric_tile("User Control", "Enabled" if can_manage_users else "Restricted", "Your permission to manage accounts", "slate", "bi bi-shield-lock-fill") }}
     </div>
 
     {% if can_manage_settings %}
-    <div class="detail-panel">
-        <h3>Operational Settings</h3>
-        <form method="POST" class="form-stack mt-2">
-            {{ form.hidden_tag() }}
-            <input type="hidden" name="action" value="update_diesel">
-            <div class="form-grid-two">
-                {{ render_field(form.diesel_rate, placeholder="Diesel rate per litre", help_text="Orders automatically convert diesel amount to litres using this rate.") }}
-            </div>
-            {{ form_actions("Save Settings", url_for('dashboard.dashboard'), "Back to Dashboard") }}
-        </form>
-    </div>
-
     <div class="detail-panel">
         <h3>Printed Document Letterhead</h3>
         <p class="form-note">This header appears at the top of every printed document — bills, statements, reports, and the manual entry form.</p>

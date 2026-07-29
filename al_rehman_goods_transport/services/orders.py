@@ -4,6 +4,8 @@ from io import StringIO
 
 from html import escape
 
+from sqlalchemy import func
+
 from ..extensions import db
 from ..models import Order, OrderLoading
 from ..repositories import BillingRepository, LookupRepository, OrderRepository
@@ -90,8 +92,34 @@ class OrderService:
         return summary
 
     def orders_pnl(self, filters=None):
-        """Profit & loss for the filtered set (revenue, vehicle cost, plant, profit)."""
-        return self.orders.filtered_pnl(filters or {})
+        """Profit & loss for the filtered set (revenue, vehicle cost, plant, profit).
+
+        Also surfaces the pump payable: diesel taken from our pump is deducted
+        from the vehicle owner's payable and paid straight to the pump, so it is
+        a split of the vehicle cost (it does not change net profit)."""
+        filters = filters or {}
+        pnl = self.orders.filtered_pnl(filters)
+        pump_payable = self._period_pump_payable(filters)
+        pnl["pump_payable"] = pump_payable
+        pnl["vehicle_owner_cash"] = pnl["net_vehicle"] - pump_payable
+        return pnl
+
+    def _period_pump_payable(self, filters):
+        """Approved diesel (pump payable) over the filter's date range / owner."""
+        from ..models import DieselEntry, Vehicle
+
+        query = self.session.query(func.coalesce(func.sum(DieselEntry.amount), 0.0)).filter(
+            DieselEntry.approval_status == "approved"
+        )
+        if filters.get("date_from"):
+            query = query.filter(DieselEntry.date >= filters["date_from"])
+        if filters.get("date_to"):
+            query = query.filter(DieselEntry.date <= filters["date_to"])
+        if filters.get("vehicle_owner_id"):
+            query = query.join(Vehicle, DieselEntry.vehicle_id == Vehicle.id).filter(
+                Vehicle.owner_id == filters["vehicle_owner_id"]
+            )
+        return float(query.scalar() or 0.0)
 
     def get_order(self, order_id):
         order = self.orders.get(order_id)
@@ -321,7 +349,7 @@ class OrderService:
             self.session.rollback()
             raise
 
-    def update_order(self, order_id, order_input: OrderInput, allow_billed=False):
+    def update_order(self, order_id, order_input: OrderInput, allow_billed=False, keep_approval=False):
         order = self.get_order(order_id)
         if not allow_billed:
             # Only bill administrators (ledger.admin) may edit an order that is
@@ -330,6 +358,28 @@ class OrderService:
                 raise ValidationError("This order is on a contractor bill and cannot be edited. Remove it from the bill first.")
             if order.is_vehicle_owner_billed:
                 raise ValidationError("This order is on a vehicle owner bill and cannot be edited. Remove it from the bill first.")
+
+        if keep_approval and order.approval_status == "approved":
+            # Edit-without-re-approval (records.edit_no_reapproval): amend a live
+            # order in place, keeping it approved and preserving the rates the
+            # approver already set. Financials are re-synced as a delta so the
+            # order never drops back to pending with cleared rates.
+            try:
+                previous_snapshot = snapshot_order(order)
+                preserved_contractor_rate = order.contractor_rate
+                preserved_vehicle_rate = order.vehicle_rate
+                self._write_order(order, order_input)
+                if not order_input.contractor_rate:
+                    order.contractor_rate = preserved_contractor_rate
+                if not order_input.vehicle_rate:
+                    order.vehicle_rate = preserved_vehicle_rate
+                sync_order_financials(self.session, order, previous_snapshot=previous_snapshot)
+                self._recompute_attached_bill_totals(order)
+                self.session.commit()
+            except Exception:
+                self.session.rollback()
+                raise
+            return order
 
         try:
             if order.approval_status == "approved":

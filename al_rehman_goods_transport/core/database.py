@@ -68,10 +68,12 @@ def init_db():
     _add_order_approval_columns()
     _add_diesel_approval_columns()
     _add_order_vehicle_delivered_quantity()
+    _add_user_name_column()
     _add_entity_opening_balances()
     _add_transaction_approval_columns()
     _add_bill_approval_columns()
     _convert_opening_balances_to_transactions()
+    _backfill_role_approval_permissions()
     _run_one_time_backfills()
 
 
@@ -214,6 +216,18 @@ def _add_bill_approval_columns():
             connection.execute(text("ALTER TABLE bill ADD COLUMN approved_at TIMESTAMP"))
 
 
+def _add_user_name_column():
+    """Add User.name (display name) to existing databases. NULL falls back to
+    username, so existing accounts are unchanged. SQLite + Postgres safe."""
+    inspector = inspect(engine)
+    if "user" not in inspector.get_table_names():
+        return
+    columns = {column["name"] for column in inspector.get_columns("user")}
+    if "name" not in columns:
+        with engine.begin() as connection:
+            connection.execute(text('ALTER TABLE "user" ADD COLUMN name VARCHAR(120)'))
+
+
 def _add_order_vehicle_delivered_quantity():
     """Add Order.vehicle_delivered_quantity to existing databases (SQLite +
     Postgres). NULL means the vehicle is paid on the contractor delivered
@@ -308,6 +322,47 @@ def _mark_backfills_done():
             setting = AppSetting(key="data_backfill_version")
             session.add(setting)
         setting.value = DATA_BACKFILL_VERSION
+        session.commit()
+    finally:
+        session.close()
+        SessionLocal.remove()
+
+
+def _backfill_role_approval_permissions():
+    """One-time: grant the approval permissions to existing users whose role now
+    includes them by default but whose stored permissions predate those codes
+    (e.g. an 'accounts' user created before orders/diesel/ledger approve existed).
+
+    Additive only — never removes a permission. Guarded by its own AppSetting
+    marker so it runs exactly once and does not fight an admin who later revokes
+    one of these grants.
+    """
+    marker_key = "role_approval_perm_backfill"
+    marker_value = "1"
+    session = SessionLocal()
+    try:
+        from ..models import AppSetting, User
+        from .permissions import role_permissions
+
+        marker = session.query(AppSetting).filter(AppSetting.key == marker_key).first()
+        if marker is not None and marker.value == marker_value:
+            return
+
+        approval_codes = {"orders.approve", "diesel.approve", "ledger.approve"}
+        for user in session.query(User).all():
+            if user.role == "admin":
+                continue
+            grantable = approval_codes & set(role_permissions(user.role))
+            if not grantable:
+                continue
+            current = set(user.permission_codes)
+            if grantable - current:
+                user.set_permissions(sorted(current | grantable))
+
+        if marker is None:
+            marker = AppSetting(key=marker_key)
+            session.add(marker)
+        marker.value = marker_value
         session.commit()
     finally:
         session.close()

@@ -13,8 +13,13 @@
         </div>
         <div class="form-grid-three">
             <div class="form-field">
+                <label class="form-label" for="name">Full Name</label>
+                <input class="form-control" id="name" name="name" value="{{ form_state.name }}" placeholder="Shown across the app" autocomplete="off">
+            </div>
+            <div class="form-field">
                 <label class="form-label" for="username">Username <span class="text-danger">*</span></label>
                 <input class="form-control" id="username" name="username" value="{{ form_state.username }}" required autocomplete="off">
+                <div class="form-text">Used for login only.</div>
             </div>
             <div class="form-field">
                 <label class="form-label" for="email">Email <span class="text-danger">*</span></label>

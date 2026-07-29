@@ -210,6 +210,44 @@ env var overrides the DB.
   statements, and pump accruals no longer reference them.
 - **Order view** shows Entered By / Approved By (+ timestamps) to users with `orders.approve`.
 
+## 5c. Users, privileges & records update (2026-07)
+
+- **User display name:** `User.name` (nullable; additive migration `_add_user_name_column`).
+  `User.display_name` = `name or username`. The header dropdown + sidebar show `display_name`;
+  the top-right header is a Bootstrap dropdown (name + `@username` + **Logout**). **Username is for
+  login only.** Create/edit user forms have a "Full Name" field.
+- **Privilege save is exact:** `UserManagementService._resolved_permissions` returns exactly the
+  submitted codes (no silent fall-back to role defaults — that used to re-grant the whole role when
+  you unchecked everything). Non-admin with zero privileges → validation error. Routes pass
+  `form_data.getlist("permission_codes")` (create still defaults to role perms as a new-user
+  convenience). Admins always implicitly hold `ALL_PERMISSION_CODES`.
+- **One-time approval backfill:** `_backfill_role_approval_permissions()` (own AppSetting marker
+  `role_approval_perm_backfill`, NOT the `DATA_BACKFILL_VERSION` set — bumping that would re-run the
+  destructive financial backfill) grants `orders/diesel/ledger.approve` to existing non-admin users
+  whose role default now includes them. Additive only.
+- **`records.edit_no_reapproval`** (new permission, "Edit Without Re-approval"): editing an already
+  **approved order** keeps it approved and preserves the approver-set rates, re-syncing financials as
+  a delta (`OrderService.update_order(keep_approval=…)` via `snapshot_order`+`sync_order_financials`).
+  Without it, editing an approved order still reverses financials and returns it to pending (the old
+  "back to approval with cleared rates" behaviour). Diesel entries and ledger transactions already
+  edit **in place** while staying approved, so the flag is only wired to orders.
+- **`audit.view`** (new permission, "View Records & Audit"): reveals the Entry & Approval Record +
+  per-record **Change Log** (`services/audit.list_entity_audit(entity_type, id)`) on the order view,
+  shows the orders-list Entered-by / Entry-date filters, and opens `/settings/audit`
+  (`require_any_permission("settings.manage","audit.view")`). Edits are already audited via
+  `record_audit(..., "update", ...)` for order / diesel_entry / transaction / bill.
+- **Dependent filters:** Orders list — To-Site checkboxes filter by the selected contractor
+  (`Site.contractor_id`, client-side JS on `#contractor_id`). Fuel Log — Vehicle dropdown filters by
+  the selected Vehicle Owner (`Vehicle.owner_id`, client-side JS on `#owner_id`). Both restore the
+  full list when the parent is cleared.
+- **Pump payable in P&L:** diesel is deducted from the vehicle-owner payable and paid direct to the
+  pump, so it is a **split of the vehicle payment, never subtracted again from profit**. Both P&Ls
+  (`ReportService._profit_loss_context` and `OrderService.orders_pnl` →
+  `_period_pump_payable` summing approved `DieselEntry.amount` over the date range / owner) surface
+  `pump_payable` + `vehicle_owner_cash` as memo lines / a card; net profit is unchanged.
+- **Diesel rate removed from Settings** (it lives per-pump). Report intro copy was de-jargonised
+  (no release-note style descriptions shown to end users).
+
 ## 6. Testing
 
 - Run: `PYTHONPATH=. .venv/Scripts/python.exe -m unittest al_rehman_goods_transport.tests.test_services al_rehman_goods_transport.tests.test_routes`

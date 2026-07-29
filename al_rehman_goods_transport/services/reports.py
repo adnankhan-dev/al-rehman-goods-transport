@@ -123,6 +123,12 @@ class ReportService:
         total_profit = total_revenue - total_expenses
         total_quantity = sum(order.delivered_quantity or order.quantity or 0 for order in orders)
 
+        # Diesel taken from our pump is deducted from the vehicle owner's payable
+        # and paid directly to the pump. It is therefore a SPLIT of the vehicle
+        # payment above (not an extra cost), shown so the pump payable is visible.
+        pump_payable = sum(row["amount"] for row in self._unified_diesel_rows(filters))
+        vehicle_owner_cash = vehicle_payables - pump_payable
+
         profit_by_contractor = defaultdict(float)
         for order in orders:
             profit_by_contractor[order.contractor.name if order.contractor else "Unknown"] += order.profit_amount()
@@ -171,17 +177,20 @@ class ReportService:
         return {
             "report_heading": "Profit & Loss Report",
             "comparison": comparison,
-            "report_intro_title": "Operational orders with a built-in profit and loss statement.",
-            "report_intro_copy": "Use the same familiar order-style workspace, but now with revenue, expense, and profitability visibility for every filtered trip.",
+            "report_intro_title": "Profit & Loss",
+            "report_intro_copy": "Revenue, expenses, and net profit for the selected filters.",
             "summary_cards": [
                 {"label": "Trips in Report", "value": len(orders), "hint": "Completed orders after filters", "tone": "primary"},
                 {"label": "Revenue", "value": f"Rs. {total_revenue:,.0f}", "hint": "Contractor-side billed value", "tone": "accent"},
                 {"label": "Expenses", "value": f"Rs. {total_expenses:,.0f}", "hint": "Vehicle and plant costs", "tone": "ocean"},
+                {"label": "Pump Payable", "value": f"Rs. {pump_payable:,.0f}", "hint": "Diesel paid direct to pumps (within vehicle payment)", "tone": "amber"},
                 {"label": "Net Profit", "value": f"Rs. {total_profit:,.0f}", "hint": f"Delivered quantity {total_quantity:,.2f}", "tone": "slate"},
             ],
             "statement_lines": [
                 {"label": "Revenue", "amount": total_revenue, "kind": "positive"},
                 {"label": "Vehicle Payments", "amount": vehicle_payables, "kind": "negative"},
+                {"label": "— of which paid to Vehicle Owners (cash)", "amount": vehicle_owner_cash, "kind": "memo"},
+                {"label": "— of which paid to Pumps (diesel)", "amount": pump_payable, "kind": "memo"},
                 {"label": "Plant Payments", "amount": plant_payments, "kind": "negative"},
             ],
             "statement_totals": {
@@ -217,8 +226,8 @@ class ReportService:
 
         return {
             "report_heading": "Diesel Report",
-            "report_intro_title": "Diesel-only reporting without unrelated operational noise.",
-            "report_intro_copy": "This view keeps only the pump, litres, amount, receipt, and linked trip identity so fuel review stays concise and practical.",
+            "report_intro_title": "Diesel Report",
+            "report_intro_copy": "Pump, litres, amount, receipt, and linked trip for each fuel entry.",
             "summary_cards": [
                 {"label": "Diesel Entries", "value": len(entries), "hint": "Filtered fuel issue records", "tone": "primary"},
                 {"label": "Total Litres", "value": f"{total_litres:,.2f}", "hint": "Calculated litres", "tone": "accent"},

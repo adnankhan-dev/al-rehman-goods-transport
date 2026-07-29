@@ -195,7 +195,7 @@ async def reconciliation_repair(request: Request, current_user=Depends(require_p
 # ── Audit trail ────────────────────────────────────────────────────────────────
 
 @router.get("/settings/audit", name="settings.audit")
-async def audit_trail(request: Request, _current_user=Depends(require_permission("settings.manage"))):
+async def audit_trail(request: Request, _current_user=Depends(require_any_permission("settings.manage", "audit.view"))):
     page = parse_page(request.query_params.get("page"))
     pagination = paginate_list(list_audit_entries(), page, per_page=100)
     return render_template(request, "settings/audit.html", entries=pagination["items"], pagination=pagination)
@@ -212,10 +212,11 @@ async def users_create(request: Request, current_user=Depends(require_permission
         form_data = await request.form()
         role = (form_data.get("role") or "operations").strip()
         form_state = {
+            "name": (form_data.get("name") or "").strip(),
             "username": (form_data.get("username") or "").strip(),
             "email": (form_data.get("email") or "").strip(),
             "role": role,
-            "permission_codes": form_data.getlist("permission_codes") or role_permissions(role),
+            "permission_codes": form_data.getlist("permission_codes"),
         }
         try:
             user = user_service.create_user(
@@ -225,6 +226,7 @@ async def users_create(request: Request, current_user=Depends(require_permission
                 form_data.get("confirm_password"),
                 role,
                 form_data.getlist("permission_codes") or role_permissions(role),
+                name=form_data.get("name"),
             )
             flash(request, f"User {user.username} created successfully.", "success")
             return RedirectResponse(url=str(request.url_for("settings.index")), status_code=303)
@@ -255,9 +257,9 @@ async def users_edit(user_id: int, request: Request, current_user=Depends(requir
 
         if action == "update_access":
             role = (form_data.get("role") or "viewer").strip()
-            permission_codes = form_data.getlist("permission_codes") or role_permissions(role)
+            permission_codes = form_data.getlist("permission_codes")
             try:
-                user_service.update_user_access(user_id, role, permission_codes, acting_user_id=current_user.id)
+                user_service.update_user_access(user_id, role, permission_codes, acting_user_id=current_user.id, name=form_data.get("name"))
                 flash(request, f"Access updated for {user.username}.", "success")
                 return RedirectResponse(url=str(request.url_for("settings.users_edit", user_id=user_id)), status_code=303)
             except ValidationError as exc:

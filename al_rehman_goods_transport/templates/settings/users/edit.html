@@ -50,6 +50,13 @@
 
         <div class="form-grid-two">
             <div class="form-field">
+                <label class="form-label" for="name">Full Name</label>
+                <input class="form-control" id="name" name="name" value="{{ edited_user.name or '' }}" placeholder="Shown across the app">
+                <div class="form-text">Username ({{ edited_user.username }}) is used for login only.</div>
+            </div>
+        </div>
+        <div class="form-grid-two">
+            <div class="form-field">
                 <label class="form-label" for="role">Role</label>
                 <select class="form-select js-role-select" id="role" name="role" required>
                     {% for role_key, role_data in role_definitions.items() %}

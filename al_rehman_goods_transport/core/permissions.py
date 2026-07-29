@@ -24,8 +24,10 @@ PERMISSION_GROUPS = [
             {"code": "dashboard.view", "label": "Dashboard", "description": "View the main dashboard and summary metrics."},
             {"code": "reports.view", "label": "Reports", "description": "Open operational, financial, and time reports."},
             {"code": "settings.view", "label": "Settings", "description": "Open the settings workspace."},
-            {"code": "settings.manage", "label": "Manage Settings", "description": "Update ERP-wide settings such as diesel rate and backups."},
+            {"code": "settings.manage", "label": "Manage Settings", "description": "Update ERP-wide settings and backups."},
             {"code": "users.manage", "label": "Manage Users", "description": "Create users, reset passwords, and control access."},
+            {"code": "audit.view", "label": "View Records & Audit", "description": "See who entered/edited each order, diesel entry, and ledger item, plus the audit trail."},
+            {"code": "records.edit_no_reapproval", "label": "Edit Without Re-approval", "description": "Edit already-approved orders, diesel entries, and ledger items without sending them back for approval (rates preserved)."},
         ],
     },
     {
