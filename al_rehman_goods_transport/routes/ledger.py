@@ -53,6 +53,9 @@ def _populate_transaction_choices(form, context):
     form.contractor_id.choices = [(0, "Select Contractor")] + [(contractor.id, contractor.name) for contractor in context["contractors"]]
     form.plant_id.choices = [(0, "Select Plant")] + [(plant.id, plant.name) for plant in context["plants"]]
     form.petrol_pump_id.choices = [(0, "Select Petrol Pump")] + [(pump.id, pump.name) for pump in context["petrol_pumps"]]
+    form.financial_entity_id.choices = [(0, "Select Financial Entity")] + [
+        (entity.id, f"{entity.name} ({entity.kind_label})") for entity in context.get("financial_entities", [])
+    ]
 
 
 _ENTITY_ID_FIELD = {
@@ -60,7 +63,7 @@ _ENTITY_ID_FIELD = {
     "vehicle_owner": "vehicle_owner_id",
     "plant": "plant_id",
     "petrol_pump": "petrol_pump_id",
-    "vehicle": "vehicle_id",
+    "financial_entity": "financial_entity_id",
 }
 
 
@@ -69,14 +72,26 @@ def _transaction_input_from_form(form):
     entity_type = None
     entity_id = None
     tx_type = direction
+    vehicle_id = form.vehicle_id.data if form.vehicle_id.data not in (None, 0) else None
     if direction in ("payment", "receipt", "previous_balance"):
         entity_type = form.entity_type.data or None
         field_name = _ENTITY_ID_FIELD.get(entity_type)
         if field_name:
             raw = getattr(form, field_name).data
             entity_id = raw if raw not in (None, 0) else None
+        # A vehicle is only ever a narrowing of a vehicle-owner payment, never
+        # an account of its own. With a vehicle chosen the money is booked
+        # against that one vehicle (and still rolls up to its owner); without
+        # one it is an ordinary owner-level payment.
+        if entity_type != "vehicle_owner":
+            vehicle_id = None
         if direction != "previous_balance":
-            tx_type = f"{entity_type}_{direction}" if entity_type else direction
+            if entity_type == "vehicle_owner" and vehicle_id:
+                tx_type = f"vehicle_{direction}"
+            else:
+                tx_type = f"{entity_type}_{direction}" if entity_type else direction
+    else:
+        vehicle_id = None
 
     return TransactionInput(
         type=tx_type,
@@ -87,11 +102,12 @@ def _transaction_input_from_form(form):
         reference=form.reference.data,
         entity_type=entity_type,
         entity_id=entity_id,
-        vehicle_id=form.vehicle_id.data if form.vehicle_id.data != 0 else None,
+        vehicle_id=vehicle_id,
         vehicle_owner_id=form.vehicle_owner_id.data if form.vehicle_owner_id.data != 0 else None,
         contractor_id=form.contractor_id.data if form.contractor_id.data != 0 else None,
         plant_id=form.plant_id.data if form.plant_id.data != 0 else None,
         petrol_pump_id=form.petrol_pump_id.data if form.petrol_pump_id.data != 0 else None,
+        financial_entity_id=form.financial_entity_id.data if form.financial_entity_id.data != 0 else None,
     )
 
 

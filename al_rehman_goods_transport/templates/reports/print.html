@@ -20,26 +20,76 @@
     <div class="report-panel">
         <div class="report-panel-header">
             <div>
-                <h3 class="report-panel-title">Profit & Loss Statement</h3>
-                <p class="report-panel-copy">Filtered operational profitability snapshot.</p>
+                <h3 class="report-panel-title">Profit &amp; Loss Statement</h3>
+                <p class="report-panel-copy">Read top to bottom. Lines marked &minus; are money that left the business; indented italic lines only explain how a line above was split and are not deducted again.</p>
             </div>
         </div>
         <div class="report-panel-body">
             <table class="table detail-table mb-0">
                 <tbody>
                     {% for line in statement_lines %}
+                    {% if line.kind == 'memo' %}
                     <tr>
-                        <td{% if line.kind == 'memo' %} style="padding-left:1.5rem;font-style:italic;"{% endif %}>{{ line.label }}</td>
-                        <td class="text-end">Rs. {{ "{:,.0f}".format(line.amount) }}</td>
+                        <td style="padding-left:1.75rem;font-style:italic;">&mdash; {{ line.label }}</td>
+                        <td class="text-end" style="font-style:italic;">Rs. {{ "{:,.0f}".format(line.amount) }}</td>
+                    </tr>
+                    {% elif line.kind == 'subtotal' %}
+                    <tr>
+                        <td><strong>{{ line.label }}</strong></td>
+                        <td class="text-end"><strong>Rs. {{ "{:,.0f}".format(line.amount) }}</strong></td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td>{{ line.label }}</td>
+                        <td class="text-end">{% if line.kind == 'negative' %}&minus; {% endif %}Rs. {{ "{:,.0f}".format(line.amount) }}</td>
+                    </tr>
+                    {% endif %}
+                    {% endfor %}
+                    <tr>
+                        <th>Total Expenses (trip costs + running costs)</th>
+                        <th class="text-end">&minus; Rs. {{ "{:,.0f}".format(statement_totals.expenses) }}</th>
+                    </tr>
+                    <tr>
+                        <th>= Net Profit</th>
+                        <th class="text-end">Rs. {{ "{:,.0f}".format(statement_totals.profit) }}</th>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+    <div class="report-panel">
+        <div class="report-panel-header">
+            <div>
+                <h3 class="report-panel-title">Where Every Rupee of Expense Went</h3>
+                <p class="report-panel-copy">Each expense on the statement, with what it was for.</p>
+            </div>
+        </div>
+        <div class="report-panel-body">
+            <table class="table detail-table mb-0">
+                <thead>
+                    <tr><th>Expense</th><th>What it covers</th><th class="text-end">Amount</th></tr>
+                </thead>
+                <tbody>
+                    {% for group_name in ['Direct Trip Costs', 'Operating Expenses'] %}
+                    {% set rows = expense_detail | selectattr('group', 'equalto', group_name) | list %}
+                    {% if rows %}
+                    <tr><td colspan="3"><strong>{{ group_name }}</strong></td></tr>
+                    {% for row in rows %}
+                    <tr>
+                        <td>{{ row.label }}</td>
+                        <td>{{ row.basis }}</td>
+                        <td class="text-end">&minus; Rs. {{ "{:,.0f}".format(row.amount) }}</td>
                     </tr>
                     {% endfor %}
                     <tr>
-                        <th>Total Expenses</th>
-                        <th class="text-end">Rs. {{ "{:,.0f}".format(statement_totals.expenses) }}</th>
+                        <td colspan="2" class="text-end"><em>{{ group_name }} subtotal</em></td>
+                        <td class="text-end"><strong>&minus; Rs. {{ "{:,.0f}".format(rows | sum(attribute='amount')) }}</strong></td>
                     </tr>
+                    {% endif %}
+                    {% endfor %}
                     <tr>
-                        <th>Net Profit</th>
-                        <th class="text-end">Rs. {{ "{:,.0f}".format(statement_totals.profit) }}</th>
+                        <td colspan="2"><strong>Total Expenses</strong></td>
+                        <td class="text-end"><strong>&minus; Rs. {{ "{:,.0f}".format(statement_totals.expenses) }}</strong></td>
                     </tr>
                 </tbody>
             </table>

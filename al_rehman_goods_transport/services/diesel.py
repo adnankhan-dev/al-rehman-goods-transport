@@ -301,5 +301,8 @@ class DieselService:
             vehicle.balance = _safe(vehicle.balance) + delta
             if vehicle.owner_id:
                 owner = self.session.get(VehicleOwner, vehicle.owner_id)
-                if owner:
+                # A company-expense holder is not a third party we settle with:
+                # the fuel is our own running cost (booked in the P&L), so it
+                # must not build up a payable against the holder record.
+                if owner and not owner.is_company_expense:
                     owner.balance = _safe(owner.balance) + delta

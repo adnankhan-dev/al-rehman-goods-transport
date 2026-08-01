@@ -9,6 +9,24 @@ class BaseForm(Form):
         return Markup("")
 
 
+class MoneyField(FloatField):
+    """A money amount that accepts the thousands separators it is displayed with.
+
+    Amount inputs render grouped ("1,25,000") and are stripped back to a plain
+    number by JS before submit. This also strips them server-side so a paste, a
+    browser with JS disabled, or an autofilled value cannot fail validation with
+    a confusing "Not a valid float value" on a number the user can plainly read.
+    """
+
+    def process_formdata(self, valuelist):
+        cleaned = [
+            value.replace(",", "").replace("Rs.", "").replace("Rs", "").strip()
+            if isinstance(value, str) else value
+            for value in valuelist
+        ]
+        super().process_formdata(cleaned)
+
+
 class OrderForm(BaseForm):
     order_date = DateField('Order Date', format='%Y-%m-%d', validators=[DataRequired()], render_kw={"type": "date"})
     vehicle_id = SelectField('Vehicle', coerce=int, validators=[DataRequired()])
@@ -94,15 +112,21 @@ class TransactionForm(BaseForm):
         ('initial_balance', 'Initial Balance'),
         ('previous_balance', 'Previous Balance (before ERP)'),
     ], validators=[DataRequired()])
+    # Vehicle is deliberately NOT a top-level entity type: the vehicle owner is
+    # the account we deal with. Choosing an owner optionally reveals that
+    # owner's vehicles, so a payment can be aimed at one specific vehicle or
+    # left at the owner level.
     entity_type = SelectField('Entity Type', choices=[
         ('contractor', 'Contractor'),
         ('vehicle_owner', 'Vehicle Owner'),
         ('plant', 'Plant'),
         ('petrol_pump', 'Petrol Pump'),
-        ('vehicle', 'Vehicle'),
+        ('financial_entity', 'Financial Entity (Expense / Loan)'),
     ], validators=[Optional()])
     date = DateField('Transaction Date', format='%Y-%m-%d', validators=[Optional()], render_kw={"type": "date"})
-    amount = FloatField('Amount', validators=[DataRequired()])
+    # Rendered as text (not number) so it can carry thousands separators while
+    # being typed; MoneyField strips them back off on submit.
+    amount = MoneyField('Amount', validators=[DataRequired()], render_kw={"inputmode": "decimal", "data-money": "true"})
     description = TextAreaField('Description', validators=[Optional()])
     payment_method = SelectField('Payment Method', choices=[
         ('cash', 'Cash'),
@@ -110,11 +134,12 @@ class TransactionForm(BaseForm):
         ('account', 'Account Transfer')
     ], validators=[Optional()])
     reference = StringField('Reference Number', validators=[Optional()])
-    vehicle_id = SelectField('Vehicle', coerce=int, validators=[Optional()])
+    vehicle_id = SelectField('Vehicle (optional)', coerce=int, validators=[Optional()])
     vehicle_owner_id = SelectField('Vehicle Owner', coerce=int, validators=[Optional()])
     contractor_id = SelectField('Contractor', coerce=int, validators=[Optional()])
     plant_id = SelectField('Plant', coerce=int, validators=[Optional()])
     petrol_pump_id = SelectField('Petrol Pump', coerce=int, validators=[Optional()])
+    financial_entity_id = SelectField('Financial Entity', coerce=int, validators=[Optional()])
     submit = SubmitField('Save Transaction')
 
 
@@ -139,7 +164,7 @@ class DieselEntryForm(BaseForm):
     order_id = SelectField('Linked Order', coerce=int, validators=[Optional()])
     date = DateField('Date', format='%Y-%m-%d', validators=[DataRequired()], render_kw={"type": "date"})
     litres = FloatField('Litres', validators=[Optional()])
-    amount = FloatField('Amount (Rs.)', validators=[DataRequired()])
+    amount = MoneyField('Amount', validators=[DataRequired()], render_kw={"inputmode": "decimal", "data-money": "true"})
     receipt_number = StringField('Receipt Number', validators=[Optional()])
     notes = TextAreaField('Notes', validators=[Optional()])
     submit = SubmitField('Save Entry')

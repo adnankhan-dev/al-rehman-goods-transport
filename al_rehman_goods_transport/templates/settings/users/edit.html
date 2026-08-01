@@ -41,10 +41,27 @@
     </div>
 </div>
 
-{% if not is_self or edited_user.role != 'admin' %}
+{% if edited_user.is_protected_admin %}
+<div class="detail-panel mb-4">
+    <h3><i class="bi bi-shield-lock"></i> Role &amp; Access</h3>
+    <div class="alert alert-info mb-0">
+        <i class="bi bi-info-circle"></i>
+        This is the <strong>primary administrator</strong> account. It always holds every privilege
+        and its privileges cannot be changed &mdash; this is what guarantees the system can never be
+        locked out of user management. To run a restricted administrator, create or edit any other
+        admin account; their privileges are fully editable.
+    </div>
+</div>
+{% else %}
 <div class="detail-panel mb-4">
     <h3><i class="bi bi-key"></i> Role &amp; Access</h3>
     <p class="form-note">Change the role to update all permissions at once. Use the customise option for fine-grained control.</p>
+    {% if edited_user.role == 'admin' %}
+    <p class="form-note"><i class="bi bi-info-circle"></i> Administrators now run on exactly the privileges ticked below &mdash; untick any to restrict this administrator.</p>
+    {% endif %}
+    {% if is_self %}
+    <p class="form-note text-warning"><i class="bi bi-exclamation-triangle"></i> You are editing your own account. Removing a privilege takes effect immediately for you.</p>
+    {% endif %}
     <form method="POST" class="form-stack js-user-form mt-3">
         <input type="hidden" name="action" value="update_access">
 

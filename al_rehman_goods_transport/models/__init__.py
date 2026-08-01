@@ -1,7 +1,7 @@
 from .app_setting import AppSetting
 from .audit_log import AuditLog
 from .diesel_entry import DieselEntry
-from .financial_entity import FinancialEntity
+from .financial_entity import ENTITY_KIND_CHOICES, ENTITY_KINDS, FinancialEntity
 from .financial_entity_transaction import FinancialEntityTransaction, TRANSACTION_TYPES
 from .bill import Bill
 from .company import Company
@@ -40,6 +40,8 @@ __all__ = [
     "PetrolPump",
     "PetrolPumpPrice",
     "DieselEntry",
+    "ENTITY_KINDS",
+    "ENTITY_KIND_CHOICES",
     "FinancialEntity",
     "FinancialEntityTransaction",
     "TRANSACTION_TYPES",

@@ -6,7 +6,7 @@ from fastapi.responses import RedirectResponse
 from ..core.auth import require_permission
 from ..core.flash import flash
 from ..core.templating import render_template
-from ..models import TRANSACTION_TYPES
+from ..models import ENTITY_KINDS, TRANSACTION_TYPES
 from ..services.exceptions import NotFoundError, ValidationError
 from ..services.financial_entities import FinancialEntityService
 
@@ -15,6 +15,10 @@ router = APIRouter()
 
 
 def _parse_float(value, default=0.0):
+    # Amount inputs display grouped ("1,25,000"); accept the separators back so a
+    # paste or a JS-less submit is not silently read as zero.
+    if isinstance(value, str):
+        value = value.replace(",", "").replace("Rs.", "").strip()
     try:
         return float(value)
     except (TypeError, ValueError):
@@ -56,12 +60,13 @@ async def create(request: Request, _current_user=Depends(require_permission("led
                 phone=data.get("phone", ""),
                 notes=data.get("notes", ""),
                 initial_balance=_parse_float(data.get("initial_balance"), 0.0),
+                entity_kind=data.get("entity_kind", "expense"),
             )
             flash(request, f"Financial entity '{entity.name}' created.", "success")
             return RedirectResponse(url=str(request.url_for("financial_entities.view", id=entity.id)), status_code=303)
         except ValidationError as exc:
             flash(request, str(exc), "warning")
-    return render_template(request, "financial_entities/create.html")
+    return render_template(request, "financial_entities/create.html", entity_kinds=ENTITY_KINDS)
 
 
 @router.get("/financial-entities/{id}", name="financial_entities.view")
@@ -95,12 +100,13 @@ async def edit(id: int, request: Request, _current_user=Depends(require_permissi
                 name=data.get("name", ""),
                 phone=data.get("phone", ""),
                 notes=data.get("notes", ""),
+                entity_kind=data.get("entity_kind"),
             )
             flash(request, "Entity updated.", "success")
             return RedirectResponse(url=str(request.url_for("financial_entities.view", id=id)), status_code=303)
         except ValidationError as exc:
             flash(request, str(exc), "warning")
-    return render_template(request, "financial_entities/edit.html", entity=entity)
+    return render_template(request, "financial_entities/edit.html", entity=entity, entity_kinds=ENTITY_KINDS)
 
 
 @router.post("/financial-entities/{id}/delete", name="financial_entities.delete")

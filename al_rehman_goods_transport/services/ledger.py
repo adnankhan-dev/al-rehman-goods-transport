@@ -1,7 +1,7 @@
 from dataclasses import dataclass, field
 
 from ..extensions import db
-from ..models import Contractor, FinancialEntityTransaction, PetrolPump, Plant, Vehicle, VehicleOwner
+from ..models import Contractor, FinancialEntity, FinancialEntityTransaction, PetrolPump, Plant, Vehicle, VehicleOwner
 from .billing import BillingService
 from .finance_summary import balance_summary
 from .transactions import TransactionService
@@ -9,12 +9,12 @@ from .transactions import TransactionService
 # Transaction types that bring money INTO the company
 _INFLOW_TX_TYPES = {
     "contractor_receipt", "vehicle_owner_receipt", "plant_receipt", "petrol_pump_receipt",
-    "vehicle_receipt", "amount_received", "initial_balance",
+    "vehicle_receipt", "amount_received", "initial_balance", "financial_entity_receipt",
 }
 # Transaction types that take money OUT of the company
 _OUTFLOW_TX_TYPES = {
     "vehicle_owner_payment", "plant_payment", "petrol_pump_payment", "contractor_payment",
-    "vehicle_advance", "vehicle_payment", "other_expense",
+    "vehicle_advance", "vehicle_payment", "other_expense", "financial_entity_payment",
 }
 
 
@@ -157,7 +157,10 @@ class LedgerService:
         # Balance position straight from the maintained entity balances (the
         # ledger is the single money record now that bill settlement is retired).
         contractor_receivables = sum(float(c.balance or 0) for c in Contractor.query.all())
-        owner_payables = sum(float(o.balance or 0) for o in VehicleOwner.query.all())
+        # Company-expense holders are our own vehicles, not a third party we owe.
+        owner_payables = sum(
+            float(o.balance or 0) for o in VehicleOwner.query.filter(VehicleOwner.is_company_expense.is_(False)).all()
+        )
         plant_payables = sum(float(p.balance or 0) for p in Plant.query.all())
         pump_payables = sum(float(p.balance or 0) for p in PetrolPump.query.all())
         net_position = contractor_receivables - owner_payables - plant_payables - pump_payables
@@ -211,6 +214,7 @@ class LedgerService:
             "contractors": Contractor.query.order_by(Contractor.name.asc()).all(),
             "plants": Plant.query.order_by(Plant.name.asc()).all(),
             "petrol_pumps": PetrolPump.query.order_by(PetrolPump.name.asc()).all(),
+            "financial_entities": FinancialEntity.query.order_by(FinancialEntity.name.asc()).all(),
             "vehicle_owners": VehicleOwner.query.order_by(VehicleOwner.name.asc()).all(),
             "vehicles": Vehicle.query.order_by(Vehicle.vehicle_number.asc()).all(),
             "available_sites": filter_options["sites"],

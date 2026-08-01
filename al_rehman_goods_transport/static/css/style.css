@@ -1289,6 +1289,29 @@ body.sidebar-collapsed .app-nav-link-icon {
 }
 
 /* Searchable select (type-to-search dropdown) */
+/* Money input: a fixed, uneditable "Rs." label sitting inside the field. */
+.money-field {
+    position: relative;
+}
+
+.money-field-prefix {
+    position: absolute;
+    top: 0;
+    left: 0;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    padding-left: 0.75rem;
+    color: var(--muted, #64748b);
+    font-weight: 600;
+    pointer-events: none;
+    user-select: none;
+}
+
+.money-field-input {
+    padding-left: 2.6rem;
+}
+
 .searchable-select-control {
     position: relative;
 }

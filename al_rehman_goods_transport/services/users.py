@@ -44,6 +44,15 @@ class UserManagementService:
 
     def update_user_access(self, user_id, role, permission_codes, acting_user_id=None, name=None):
         user = self._get_user(user_id)
+
+        # The primary admin is the lock-out safety net: it always holds every
+        # privilege, so its role and privilege list are not editable at all.
+        if user.is_protected_admin:
+            if name is not None:
+                user.name = (name or "").strip() or None
+            self.session.commit()
+            return user
+
         normalized_role = normalize_role(role)
         normalized_permissions = self._resolved_permissions(normalized_role, permission_codes)
 
@@ -128,7 +137,10 @@ class UserManagementService:
             raise ValidationError("Passwords do not match.")
 
     def _validate_permissions(self, role, permission_codes):
-        if role != "admin" and not permission_codes:
+        # Every editable account — administrators included — now runs on exactly
+        # the privileges saved against it, so an empty list would leave the user
+        # with no access at all rather than silently falling back to the role.
+        if not permission_codes:
             raise ValidationError("Select at least one privilege for this user.")
 
     def _ensure_admin_not_removed(self, user, next_role, acting_user_id):

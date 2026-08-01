@@ -5,7 +5,7 @@ from ..core.auth import require_any_permission, require_permission
 from ..core.flash import flash
 from ..core.templating import render_template
 from ..forms import TransactionForm
-from ..models import Contractor, PetrolPump, Plant, Vehicle, VehicleOwner
+from ..models import Contractor, FinancialEntity, PetrolPump, Plant, Vehicle, VehicleOwner
 from ..services import NotFoundError, TransactionInput, TransactionService, ValidationError
 from ..services.audit import record_audit
 
@@ -19,6 +19,9 @@ def _populate_transaction_choices(form: TransactionForm):
     form.contractor_id.choices = [(0, "Select Contractor")] + [(contractor.id, contractor.name) for contractor in Contractor.query.order_by(Contractor.name.asc()).all()]
     form.plant_id.choices = [(0, "Select Plant")] + [(plant.id, plant.name) for plant in Plant.query.order_by(Plant.name.asc()).all()]
     form.petrol_pump_id.choices = [(0, "Select Petrol Pump")] + [(pump.id, pump.name) for pump in PetrolPump.query.order_by(PetrolPump.name.asc()).all()]
+    form.financial_entity_id.choices = [(0, "Select Financial Entity")] + [
+        (entity.id, f"{entity.name} ({entity.kind_label})") for entity in FinancialEntity.query.order_by(FinancialEntity.name.asc()).all()
+    ]
 
 
 _ENTITY_ID_FIELD = {
@@ -26,7 +29,7 @@ _ENTITY_ID_FIELD = {
     "vehicle_owner": "vehicle_owner_id",
     "plant": "plant_id",
     "petrol_pump": "petrol_pump_id",
-    "vehicle": "vehicle_id",
+    "financial_entity": "financial_entity_id",
 }
 
 
@@ -35,6 +38,7 @@ def _transaction_input_from_form(form):
     entity_type = None
     entity_id = None
     tx_type = direction
+    vehicle_id = form.vehicle_id.data if form.vehicle_id.data not in (None, 0) else None
 
     if direction in ("payment", "receipt"):
         entity_type = form.entity_type.data or None
@@ -42,8 +46,17 @@ def _transaction_input_from_form(form):
         if field_name:
             raw = getattr(form, field_name).data
             entity_id = raw if raw not in (None, 0) else None
-        # Internal type, e.g. contractor + receipt -> contractor_receipt.
-        tx_type = f"{entity_type}_{direction}" if entity_type else direction
+        # A vehicle only ever narrows a vehicle-owner payment to one of that
+        # owner's vehicles; it is never an account on its own.
+        if entity_type != "vehicle_owner":
+            vehicle_id = None
+        if entity_type == "vehicle_owner" and vehicle_id:
+            tx_type = f"vehicle_{direction}"
+        else:
+            # Internal type, e.g. contractor + receipt -> contractor_receipt.
+            tx_type = f"{entity_type}_{direction}" if entity_type else direction
+    else:
+        vehicle_id = None
 
     return TransactionInput(
         type=tx_type,
@@ -54,11 +67,12 @@ def _transaction_input_from_form(form):
         reference=form.reference.data,
         entity_type=entity_type,
         entity_id=entity_id,
-        vehicle_id=form.vehicle_id.data if form.vehicle_id.data != 0 else None,
+        vehicle_id=vehicle_id,
         vehicle_owner_id=form.vehicle_owner_id.data if form.vehicle_owner_id.data != 0 else None,
         contractor_id=form.contractor_id.data if form.contractor_id.data != 0 else None,
         plant_id=form.plant_id.data if form.plant_id.data != 0 else None,
         petrol_pump_id=form.petrol_pump_id.data if form.petrol_pump_id.data != 0 else None,
+        financial_entity_id=form.financial_entity_id.data if form.financial_entity_id.data != 0 else None,
     )
 
 
@@ -183,6 +197,7 @@ async def edit_transaction(id: int, request: Request, current_user=Depends(requi
         form.contractor_id.data = transaction.contractor_id or 0
         form.plant_id.data = transaction.plant_id or 0
         form.petrol_pump_id.data = transaction.petrol_pump_id or 0
+        form.financial_entity_id.data = transaction.financial_entity_id or 0
     _populate_transaction_choices(form)
 
     if request.method == "POST" and form.validate():

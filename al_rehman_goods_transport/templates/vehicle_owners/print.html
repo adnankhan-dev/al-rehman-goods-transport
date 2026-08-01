@@ -98,6 +98,11 @@
                     <span style="font-weight:400;color:var(--muted);font-size:0.82rem;">({{ vg.trip_count }} trip{% if vg.trip_count != 1 %}s{% endif %})</span>
                 </h3>
                 {% if vg.orders %}
+                {# Money columns carry "(Rs.)" in the header instead of repeating it on
+                   every row. The rate is per unit, so the header names the unit — but
+                   only when every trip shares one, otherwise it would be misleading. #}
+                {% set unit_set = vg.orders | map(attribute='unit') | map('default', 'cft', true) | map('upper') | unique | list %}
+                {% set rate_unit = unit_set[0] if unit_set | length == 1 else 'Unit' %}
                 <table>
                     <thead>
                         <tr>
@@ -107,8 +112,8 @@
                             <th class="col-material">Material</th>
                             <th class="col-receipt">Delivery Receipt</th>
                             <th class="num">Delivered</th>
-                            <th class="num col-rate">Rate</th>
-                            <th class="num">Amount</th>
+                            <th class="num col-rate">Rate/{{ rate_unit }} (Rs.)</th>
+                            <th class="num">Amount (Rs.)</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -138,7 +143,7 @@
                 <h4 style="margin:12px 0 6px;color:var(--muted);font-size:0.85rem;">Fuel-Log Diesel — {{ vg.vehicle_number }}</h4>
                 <table>
                     <thead>
-                        <tr><th>Date</th><th>Pump</th><th>Receipt</th><th class="num">Litres</th><th class="num">Amount</th></tr>
+                        <tr><th>Date</th><th>Pump</th><th>Receipt</th><th class="num">Litres</th><th class="num">Amount (Rs.)</th></tr>
                     </thead>
                     <tbody>
                         {% for entry in vg.diesel_rows %}
@@ -155,13 +160,47 @@
                 </table>
                 {% endif %}
 
-                <div style="margin:8px 0 4px;text-align:right;font-size:0.85rem;color:var(--ink);">
-                    <strong>Vehicle {{ vg.vehicle_number }}:</strong>
-                    Rs. {{ "{:,.0f}".format(vg.gross) }}
-                    {% if vg.standalone_diesel %}− Rs. {{ "{:,.0f}".format(vg.standalone_diesel) }} (Fuel-Log diesel){% endif %}
-                    {% if vg.advances %}− Rs. {{ "{:,.0f}".format(vg.advances) }} (advances){% endif %}
-                    = <strong>Rs. {{ "{:,.0f}".format(vg.vehicle_payable) }}</strong>
-                </div>
+                {% if vg.advance_rows %}
+                <h4 style="margin:12px 0 6px;color:var(--muted);font-size:0.85rem;">Payments Made — {{ vg.vehicle_number }}</h4>
+                <table>
+                    <thead>
+                        <tr><th>Date</th><th>Detail</th><th>Method</th><th>Reference</th><th class="num">Amount (Rs.)</th></tr>
+                    </thead>
+                    <tbody>
+                        {% for txn in vg.advance_rows %}
+                        <tr>
+                            <td>{{ txn.date.strftime('%d-%m-%Y') }}</td>
+                            <td>{{ txn.description or txn.type_label }}</td>
+                            <td>{{ (txn.payment_method or '-')|title }}</td>
+                            <td>{{ txn.reference or '-' }}</td>
+                            <td class="num">− {{ "{:,.0f}".format(txn.amount or 0) }}</td>
+                        </tr>
+                        {% endfor %}
+                        <tr class="subtotal"><td colspan="4">Payments Made — {{ vg.vehicle_number }}</td><td class="num">− {{ "{:,.0f}".format(vg.advances) }}</td></tr>
+                    </tbody>
+                </table>
+                {% endif %}
+
+                <table style="margin-top:8px;">
+                    <tbody>
+                        <tr>
+                            <td>Gross amount earned by {{ vg.vehicle_number }}</td>
+                            <td class="num">Rs. {{ "{:,.0f}".format(vg.gross) }}</td>
+                        </tr>
+                        <tr>
+                            <td>&minus; Fuel-Log diesel taken by this vehicle</td>
+                            <td class="num">&minus; Rs. {{ "{:,.0f}".format(vg.standalone_diesel) }}</td>
+                        </tr>
+                        <tr>
+                            <td>&minus; Payments already made against this vehicle</td>
+                            <td class="num">&minus; Rs. {{ "{:,.0f}".format(vg.advances) }}</td>
+                        </tr>
+                        <tr class="subtotal">
+                            <td><strong>= Vehicle Payment Due &mdash; {{ vg.vehicle_number }}</strong></td>
+                            <td class="num"><strong>Rs. {{ "{:,.0f}".format(vg.vehicle_payable) }}</strong></td>
+                        </tr>
+                    </tbody>
+                </table>
             </div>
             {% else %}
             <table>
@@ -177,10 +216,10 @@
                         <th>Vehicle</th>
                         <th class="num">Trips</th>
                         <th class="num">Delivered</th>
-                        <th class="num">Gross Amt</th>
-                        <th class="num">Fuel-Log Diesel</th>
-                        <th class="num">Advances</th>
-                        <th class="num">Net Payable</th>
+                        <th class="num">Gross Amt (Rs.)</th>
+                        <th class="num">Fuel-Log Diesel (Rs.)</th>
+                        <th class="num">Payments Made (Rs.)</th>
+                        <th class="num">Vehicle Payment Due (Rs.)</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -212,7 +251,7 @@
             <h3 style="margin:22px 0 8px;color:var(--brand);font-size:1rem;">Payments &amp; Advances Made</h3>
             <table>
                 <thead>
-                    <tr><th>Date</th><th>Type</th><th>Method</th><th>Reference</th><th class="num">Amount</th></tr>
+                    <tr><th>Date</th><th>Type</th><th>Method</th><th>Reference</th><th class="num">Amount (Rs.)</th></tr>
                 </thead>
                 <tbody>
                     {% for t in payments %}

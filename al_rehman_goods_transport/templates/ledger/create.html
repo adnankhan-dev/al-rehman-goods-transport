@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "_formhelpers.html" import form_shell, form_actions, render_field, metric_tile %}
+{% from "_formhelpers.html" import form_shell, form_actions, render_field, render_searchable_select, metric_tile %}
 
 {% block title %}Create Ledger Entry - Al Rehman Goods Transport{% endblock %}
 
@@ -331,20 +331,23 @@
             <div id="entityTypeField">
                 {{ render_field(transaction_form.entity_type) }}
             </div>
-            <div id="vehicleField" style="display: none;">
-                {{ render_field(transaction_form.vehicle_id) }}
-            </div>
             <div id="vehicleOwnerField" style="display: none;">
-                {{ render_field(transaction_form.vehicle_owner_id) }}
+                {{ render_searchable_select(transaction_form.vehicle_owner_id, placeholder="Type an owner name", allow_empty=True) }}
+            </div>
+            <div id="vehicleField" style="display: none;">
+                {{ render_searchable_select(transaction_form.vehicle_id, help_text="Leave blank to pay the owner directly. Pick one of the owner's vehicles to book the payment against that vehicle — it is then listed under it in the statement and deducted from that vehicle's payable.", placeholder="Leave blank, or type a vehicle number", allow_empty=True) }}
             </div>
             <div id="contractorField" style="display: none;">
-                {{ render_field(transaction_form.contractor_id) }}
+                {{ render_searchable_select(transaction_form.contractor_id, placeholder="Type a contractor name", allow_empty=True) }}
             </div>
             <div id="plantField" style="display: none;">
-                {{ render_field(transaction_form.plant_id) }}
+                {{ render_searchable_select(transaction_form.plant_id, placeholder="Type a plant name", allow_empty=True) }}
             </div>
             <div id="petrolPumpField" style="display: none;">
-                {{ render_field(transaction_form.petrol_pump_id) }}
+                {{ render_searchable_select(transaction_form.petrol_pump_id, placeholder="Type a pump name", allow_empty=True) }}
+            </div>
+            <div id="financialEntityField" style="display: none;">
+                {{ render_searchable_select(transaction_form.financial_entity_id, help_text="Expense entities book straight to Profit &amp; Loss. Loan entities move the balance only.", placeholder="Type an entity name", allow_empty=True) }}
             </div>
             {{ render_field(transaction_form.date) }}
             {{ render_field(transaction_form.amount) }}
@@ -407,22 +410,58 @@
     });
 </script>
 {% elif mode == 'transaction' %}
+{% set vehicle_owner_map = {} %}
+{% for v in vehicles %}{% set _ = vehicle_owner_map.update({v.id: v.owner_id}) %}{% endfor %}
+<script id="vehicleOwnerMap" type="application/json">{{ vehicle_owner_map | tojson }}</script>
 <script>
     document.addEventListener('DOMContentLoaded', function() {
         const typeSelect = document.getElementById('type');
         const entityTypeField = document.getElementById('entityTypeField');
         const entityTypeSelect = document.getElementById('entity_type');
+        const ownerSelect = document.getElementById('vehicle_owner_id');
+        const vehicleSelect = document.getElementById('vehicle_id');
+        const vehicleField = document.getElementById('vehicleField');
         const entityFields = {
-            vehicle: document.getElementById('vehicleField'),
             vehicle_owner: document.getElementById('vehicleOwnerField'),
             contractor: document.getElementById('contractorField'),
             plant: document.getElementById('plantField'),
             petrol_pump: document.getElementById('petrolPumpField'),
+            financial_entity: document.getElementById('financialEntityField'),
         };
+
+        // vehicle id -> owner id, so the vehicle list can be narrowed to the
+        // chosen owner's own vehicles.
+        let vehicleOwner = {};
+        try {
+            vehicleOwner = JSON.parse(document.getElementById('vehicleOwnerMap').textContent || '{}');
+        } catch (e) { vehicleOwner = {}; }
+
+        const allVehicleOptions = vehicleSelect ? Array.from(vehicleSelect.options) : [];
+
+        function filterVehiclesByOwner() {
+            if (!vehicleSelect || !ownerSelect) return;
+            const ownerId = ownerSelect.value;
+            const keep = allVehicleOptions.filter(function (option) {
+                if (option.value === '' || option.value === '0') return true;
+                if (!ownerId || ownerId === '0') return false;
+                return String(vehicleOwner[option.value]) === String(ownerId);
+            });
+            const previous = vehicleSelect.value;
+            vehicleSelect.innerHTML = '';
+            keep.forEach(function (option) { vehicleSelect.appendChild(option); });
+            // Drop a vehicle that does not belong to the newly chosen owner.
+            vehicleSelect.value = keep.some(function (o) { return o.value === previous; }) ? previous : '0';
+            const search = document.getElementById('vehicle_id_search');
+            if (search && search.searchableSelect) {
+                search.searchableSelect.refresh(vehicleSelect.value === '0');
+            }
+        }
 
         function toggleFields() {
             const direction = typeSelect.value;
-            const usesEntity = (direction === 'payment' || direction === 'receipt');
+            // 'previous_balance' also posts against a chosen account, so it needs
+            // the entity pickers too (the server requires one for it).
+            const usesEntity = (direction === 'payment' || direction === 'receipt' || direction === 'previous_balance');
             entityTypeField.style.display = usesEntity ? 'block' : 'none';
 
             const chosen = usesEntity ? entityTypeSelect.value : null;
@@ -431,6 +470,11 @@
                     entityFields[key].style.display = (usesEntity && key === chosen) ? 'block' : 'none';
                 }
             });
+            // The vehicle picker only ever refines a vehicle-owner payment, and
+            // stays optional — blank means pay the owner directly.
+            if (vehicleField) {
+                vehicleField.style.display = (usesEntity && chosen === 'vehicle_owner') ? 'block' : 'none';
+            }
         }
 
         if (typeSelect) {
@@ -439,6 +483,10 @@
         if (entityTypeSelect) {
             entityTypeSelect.addEventListener('change', toggleFields);
         }
+        if (ownerSelect) {
+            ownerSelect.addEventListener('change', filterVehiclesByOwner);
+        }
+        filterVehiclesByOwner();
         toggleFields();
     });
 </script>

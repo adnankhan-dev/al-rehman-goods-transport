@@ -34,9 +34,19 @@ class User(db.Model):
     def set_permissions(self, permission_codes):
         self.permissions = json.dumps(normalize_permission_codes(permission_codes))
 
+    # The original/primary admin account. It always holds every privilege and
+    # its privilege list cannot be edited, so the system can never be locked
+    # out of user management. EVERY other account — admins included — uses
+    # exactly the privileges saved against it.
+    PROTECTED_ADMIN_ID = 1
+
+    @property
+    def is_protected_admin(self):
+        return self.id == self.PROTECTED_ADMIN_ID
+
     @property
     def permission_codes(self):
-        if self.is_admin or self.role == "admin":
+        if self.is_protected_admin:
             return list(ALL_PERMISSION_CODES)
 
         try:
@@ -46,7 +56,7 @@ class User(db.Model):
         return normalize_permission_codes(raw_permissions)
 
     def can(self, permission_code):
-        if self.is_admin or self.role == "admin":
+        if self.is_protected_admin:
             return True
         return grants_permission(self.permission_codes, permission_code)
 

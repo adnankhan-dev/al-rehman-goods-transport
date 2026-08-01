@@ -35,7 +35,7 @@ env var overrides the DB.
 
 ## 3. ⚠️ Hard rules (read before editing/testing)
 
-1. **NEVER wipe `data/app.db`.** It is the real local DB (163 orders as of 2026-07-03; the count
+1. **NEVER wipe `data/app.db`.** It is the real local DB (1526 orders as of 2026-08-01; the count
    grows with use — record it before any test run and verify it is unchanged after). Tests historically wiped it
    because importing the package builds the engine against the live `DATABASE_URL` before test
    overrides apply. Protections live in `tests/__init__.py` (it sets `os.environ["DATABASE_URL"]`
@@ -248,6 +248,65 @@ env var overrides the DB.
 - **Diesel rate removed from Settings** (it lives per-pump). Report intro copy was de-jargonised
   (no release-note style descriptions shown to end users).
 
+## 5d. Privileges, expenses & pickers update (2026-08)
+
+- **Admin privileges are editable.** `User.permission_codes` / `can()` no longer grant everything to
+  any admin — they honour the stored list. Only `User.PROTECTED_ADMIN_ID` (**user id 1**, the primary
+  admin) implicitly holds `ALL_PERMISSION_CODES`, and `update_user_access` refuses to change its role
+  or privileges at all (its edit page shows an explanatory panel instead of the form). Every other
+  account — admins included — runs on exactly what is ticked, so `_validate_permissions` now rejects
+  an empty list for **all** roles. One-time `_backfill_admin_explicit_permissions()` (marker
+  `admin_explicit_perm_backfill`) writes the full code list onto every non-primary admin first, so
+  nobody silently loses the access they already had.
+- **Financial entities are ledger accounts.** `FinancialEntity.entity_kind` is `expense` | `loan`
+  (`ENTITY_KINDS` in `models/financial_entity.py`). `Transaction.financial_entity_id` + entity type
+  `financial_entity` on the transaction form post through the **main ledger** (approval + audit +
+  P&L), via types `financial_entity_payment` / `financial_entity_receipt`. Balance convention matches
+  contractors (positive = they owe us): paying an **expense** entity moves company cash only; paying
+  a **loan** entity also raises their balance. The old `FinancialEntityTransaction` module remains as
+  the entity master list.
+- **Vehicle is NOT a top-level entity type.** The owner is the account we deal with. Choosing
+  `vehicle_owner` reveals an **optional** vehicle picker, filtered client-side to that owner's
+  vehicles. With a vehicle chosen the type becomes `vehicle_payment`/`vehicle_receipt` (booked
+  against that vehicle, still rolling up to the owner); left blank it is an ordinary
+  `vehicle_owner_payment`. Both `_transaction_input_from_form` copies (routes/ledger.py,
+  routes/transactions.py) implement this — keep them in sync.
+- **Per-vehicle payments show in statements.** `group_owner_activity_by_vehicle(..., advance_rows)`
+  was already computed but rendered nowhere. Owner statement (view + print) and vehicle-owner bills
+  (view + print) now show, per vehicle: trips → **Fuel-Log Diesel table → Payments Made table** → a
+  calculation table ending in **Vehicle Payment Due** = gross − fuel-log diesel − payments.
+  `BillingService._vehicle_payments_for_bill` supplies the bill side (period-bounded, approved only;
+  owner-level payments are excluded there because the Account Summary already carries them).
+- **Company-owned vehicles.** `VehicleOwner.is_company_expense` marks a holder record for our own
+  vehicles (live: *Ahsan Petrol Expense*, id 39, vehicles 2693/778/265). Their fuel is a **P&L
+  expense**, not an owner payable: excluded from `_accrual_rows`, from ledger owner payables, and
+  `DieselService._adjust_vehicle_balance` no longer moves the holder's balance. Classification is
+  marker-guarded (`company_expense_owner_classified`) **separately from the column add** — gating a
+  data step on "did we just add the column?" makes it unrepeatable and it silently never runs if the
+  column lands on its own.
+- **P&L shows every expense.** `_profit_loss_context` now reads: Revenue → Vehicle/Plant payments →
+  **Direct Trip Costs** → **Gross Profit** → operating expenses (company vehicle fuel + ledger
+  overheads: `other_expense` and payments to Expense-kind entities, via
+  `ReportRepository.company_vehicle_diesel_filtered` / `overhead_expense_transactions`) →
+  **Operating Expenses** → Total Expenses → **Net Profit**. Loan-entity payments are excluded (a
+  balance move, not a cost). Line `kind` is `positive`/`negative`/`memo`/`subtotal`; **memo lines
+  explain a split and are never deducted again**. A "Where Every Rupee of Expense Went" panel
+  itemises each expense with its basis. `OrderService.orders_pnl` subtracts the same operating
+  expenses so the orders-list strip agrees with the report.
+- **Bill summary** carries `summary_record_label`/`summary_record_count` and
+  `summary_quantity_label`/`summary_quantity`(+`_unit`) from `_bill_summary_counts` — trips+quantity
+  for contractor/owner bills, entries+litres for pump bills, loadings+quantity for plant bills. Shown
+  on the bill view tiles, the print summary grid, and the Excel export.
+- **Search-and-select everywhere.** `static/js/script.js` auto-enhances dropdowns into the
+  type-to-search combobox, on forms **and list-page filter bars**, with no per-template tagging: a
+  select is enhanced if its id/name ends in **`_id`** (every record picker is named after its FK;
+  fixed lists like `kind`, `entity_type`, `billing_status`, `report_type`, `role`, `payment_method`
+  never are) **or** it has ≥10 options. Override with `data-searchable="true"|"false"`. The binder
+  skips options that are `hidden`/`disabled` (so dependent filters keep working), clears to whichever
+  placeholder the select actually has (`""` on filters, `"0"` on WTForms), and re-syncs its visible
+  text when something else changes the select — guarded by a `selfDispatching` flag so a
+  partially-typed term is not wiped on each keystroke.
+
 ## 6. Testing
 
 - Run: `PYTHONPATH=. .venv/Scripts/python.exe -m unittest al_rehman_goods_transport.tests.test_services al_rehman_goods_transport.tests.test_routes`
@@ -257,8 +316,8 @@ env var overrides the DB.
 ## 7. Git / workflow conventions
 
 - This repo pushes to GitHub `main`, which Render auto-deploys. **Commit/push only when the user asks.**
-- End commit messages with:
-  `Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>`
+- End commit messages with the model that wrote them, e.g.:
+  `Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>`
 - Windows line-ending warnings (LF→CRLF) on commit are harmless.
 - Useful scripts at repo root: `backup_supabase.py` (read-only JSON backup via `MetaData().reflect`),
   `migrate_to_postgres.py`. Backups must use `settings.database_url` correctly (it previously pointed

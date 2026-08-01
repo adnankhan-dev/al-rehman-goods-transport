@@ -76,7 +76,9 @@ def _owner_orders_and_summary(owner, date_from=None, date_to=None):
     payments = sorted(
         [
             t for t in owner.transactions
-            if t.type == "vehicle_owner_payment" and _in_range(t.date, date_from, date_to)
+            if t.type == "vehicle_owner_payment"
+            and t.approval_status == "approved"
+            and _in_range(t.date, date_from, date_to)
         ],
         key=lambda t: (t.date, t.id),
         reverse=True,
@@ -90,7 +92,13 @@ def _owner_orders_and_summary(owner, date_from=None, date_to=None):
         advances = sorted(
             [
                 t for t in db.session.query(Transaction)
-                .filter(Transaction.type == "vehicle_payment", Transaction.vehicle_id.in_(vehicle_ids))
+                .filter(
+                    Transaction.type == "vehicle_payment",
+                    # Pending transactions post no balances, so they must not
+                    # show up as money already paid on the statement either.
+                    Transaction.approval_status == "approved",
+                    Transaction.vehicle_id.in_(vehicle_ids),
+                )
                 .all()
                 if _in_range(t.date, date_from, date_to)
             ],

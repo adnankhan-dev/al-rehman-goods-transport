@@ -1,13 +1,18 @@
 from datetime import UTC, datetime
 
 from ..extensions import db
-from ..models import FinancialEntity, FinancialEntityTransaction, TRANSACTION_TYPES
+from ..models import ENTITY_KINDS, FinancialEntity, FinancialEntityTransaction, TRANSACTION_TYPES
 from ..repositories import CompanyRepository
 from .exceptions import NotFoundError, ValidationError
 
 
 def _safe(value):
     return float(value or 0.0)
+
+
+def _normalize_kind(value):
+    kind = (value or "").strip().lower()
+    return kind if kind in ENTITY_KINDS else "expense"
 
 
 def utc_now():
@@ -27,7 +32,7 @@ class FinancialEntityService:
             raise NotFoundError("Financial entity not found.")
         return entity
 
-    def create_entity(self, name, phone=None, notes=None, initial_balance=0.0):
+    def create_entity(self, name, phone=None, notes=None, initial_balance=0.0, entity_kind="expense"):
         name = (name or "").strip()
         if not name:
             raise ValidationError("Name is required.")
@@ -36,6 +41,7 @@ class FinancialEntityService:
             raise ValidationError(f"A financial entity named '{name}' already exists.")
         entity = FinancialEntity(
             name=name,
+            entity_kind=_normalize_kind(entity_kind),
             phone=(phone or "").strip() or None,
             notes=(notes or "").strip() or None,
             balance=_safe(initial_balance),
@@ -48,7 +54,7 @@ class FinancialEntityService:
             raise
         return entity
 
-    def update_entity(self, entity_id, name, phone=None, notes=None):
+    def update_entity(self, entity_id, name, phone=None, notes=None, entity_kind=None):
         entity = self.get_entity(entity_id)
         name = (name or "").strip()
         if not name:
@@ -62,6 +68,8 @@ class FinancialEntityService:
             raise ValidationError(f"A financial entity named '{name}' already exists.")
         try:
             entity.name = name
+            if entity_kind is not None:
+                entity.entity_kind = _normalize_kind(entity_kind)
             entity.phone = (phone or "").strip() or None
             entity.notes = (notes or "").strip() or None
             self.session.commit()

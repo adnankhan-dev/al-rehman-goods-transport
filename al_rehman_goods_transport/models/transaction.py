@@ -34,12 +34,14 @@ class Transaction(db.Model):
     contractor_id = db.Column(db.Integer, db.ForeignKey("contractor.id"), nullable=True)
     plant_id = db.Column(db.Integer, db.ForeignKey("plant.id"), nullable=True)
     petrol_pump_id = db.Column(db.Integer, db.ForeignKey("petrol_pump.id"), nullable=True)
+    financial_entity_id = db.Column(db.Integer, db.ForeignKey("financial_entity.id"), nullable=True)
 
     vehicle = db.relationship("Vehicle", backref=db.backref("transactions", lazy=True))
     vehicle_owner = db.relationship("VehicleOwner", back_populates="transactions")
     contractor = db.relationship("Contractor", backref=db.backref("transactions", lazy=True))
     plant = db.relationship("Plant", backref=db.backref("transactions", lazy=True))
     petrol_pump = db.relationship("PetrolPump", back_populates="transactions")
+    financial_entity = db.relationship("FinancialEntity", backref=db.backref("ledger_transactions", lazy=True))
 
     @property
     def is_pending_approval(self):
@@ -57,6 +59,8 @@ class Transaction(db.Model):
             return self.plant.name
         if self.petrol_pump:
             return self.petrol_pump.name
+        if self.financial_entity:
+            return self.financial_entity.name
         return "-"
 
     @property

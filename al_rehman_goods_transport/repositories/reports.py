@@ -1,6 +1,6 @@
 from datetime import timedelta
 
-from sqlalchemy import func, or_
+from sqlalchemy import and_, func, or_
 
 from ..extensions import db
 from ..models import Contractor, DieselEntry, FinancialEntity, Material, Order, OrderDieselEntry, OrderLoading, PetrolPump, Plant, Site, Vehicle, VehicleOwner
@@ -177,6 +177,58 @@ class ReportRepository:
             func.coalesce(Order.completion_date, Order.order_date).desc(),
             OrderLoading.id.desc(),
         ).all()
+
+    def company_vehicle_diesel_filtered(self, filters):
+        """Fuel-log entries for vehicles held under a company-expense owner.
+
+        These are our OWN vehicles, so their fuel is a running cost of the
+        business rather than something deducted from a third-party owner's
+        payable — it belongs in the P&L as an expense in its own right."""
+        query = (
+            self.session.query(DieselEntry)
+            .join(Vehicle, Vehicle.id == DieselEntry.vehicle_id)
+            .join(VehicleOwner, VehicleOwner.id == Vehicle.owner_id)
+            .filter(
+                DieselEntry.approval_status == "approved",
+                VehicleOwner.is_company_expense.is_(True),
+            )
+        )
+        if filters.get("vehicle_id"):
+            query = query.filter(DieselEntry.vehicle_id == filters["vehicle_id"])
+        if filters.get("petrol_pump_id"):
+            query = query.filter(DieselEntry.petrol_pump_id == filters["petrol_pump_id"])
+        if filters.get("date_from"):
+            query = query.filter(DieselEntry.date >= filters["date_from"].date())
+        if filters.get("date_to"):
+            query = query.filter(DieselEntry.date <= filters["date_to"].date())
+        return query.order_by(DieselEntry.date.desc(), DieselEntry.id.desc()).all()
+
+    def overhead_expense_transactions(self, filters):
+        """Approved ledger postings that are true business expenses.
+
+        Covers 'Other Expense' entries and payments to Expense-kind financial
+        entities (rent, repairs, salaries, services). Loan entities are
+        excluded: lending money moves a balance, it does not consume profit."""
+        from ..models import Transaction
+
+        expense_entity_ids = (
+            self.session.query(FinancialEntity.id).filter(FinancialEntity.entity_kind == "expense")
+        )
+        query = self.session.query(Transaction).filter(
+            Transaction.approval_status == "approved",
+            or_(
+                Transaction.type == "other_expense",
+                and_(
+                    Transaction.type == "financial_entity_payment",
+                    Transaction.financial_entity_id.in_(expense_entity_ids),
+                ),
+            ),
+        )
+        if filters.get("date_from"):
+            query = query.filter(Transaction.date >= filters["date_from"])
+        if filters.get("date_to"):
+            query = query.filter(Transaction.date < (filters["date_to"] + timedelta(days=1)))
+        return query.order_by(Transaction.date.desc(), Transaction.id.desc()).all()
 
     def _apply_order_filters(self, query, filters):
         if filters.get("contractor_id"):

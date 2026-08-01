@@ -61,7 +61,110 @@ function bindTableTools() {
     });
 }
 
+// Dropdowns are turned into the same type-to-search control the order form
+// uses, on forms AND on list-page filter bars.
+//
+// Two rules decide, so nothing has to be tagged by hand:
+//   1. The select picks a record. Every such field is named after its foreign
+//      key and ends in "_id" (contractor_id, vehicle_id, site_id, owner_id …),
+//      while fixed choice lists never do (kind, entity_type, billing_status,
+//      report_type, role, payment_method). Those lists grow over time, so they
+//      are enhanced even while they are still short.
+//   2. Anything else long enough to be tedious to scroll.
+// Override per element with data-searchable="true" / "false".
+const SEARCHABLE_AUTO_THRESHOLD = 10;
+
+function isRecordPicker(select) {
+    return /_id$/.test(select.id || "") || /_id$/.test(select.name || "");
+}
+
+function shouldAutoEnhance(select) {
+    const explicit = select.dataset.searchable;
+    if (explicit === "false") {
+        return false;
+    }
+    if (explicit === "true") {
+        return true;
+    }
+    if (select.multiple || select.disabled) {
+        return false;
+    }
+    // Already wired by the render_searchable_select macro.
+    if (select.id && document.querySelector('[data-searchable-select-target="' + select.id + '"]')) {
+        return false;
+    }
+    // A picker with nothing but its placeholder gains nothing from a search box.
+    if (select.options.length < 2) {
+        return false;
+    }
+    return isRecordPicker(select) || select.options.length >= SEARCHABLE_AUTO_THRESHOLD;
+}
+
+function isPlaceholderOption(option) {
+    return option.value === "" || option.value === "0";
+}
+
+// Build the combobox markup around an existing <select> so filter bars and any
+// other plain dropdown get the same behaviour without template changes.
+function enhanceSelect(select) {
+    if (!select.id) {
+        select.id = "sel_" + Math.random().toString(36).slice(2, 10);
+    }
+
+    const hasPlaceholder = Array.from(select.options).some(isPlaceholderOption);
+    const selectedOption = select.options[select.selectedIndex];
+    const currentLabel = selectedOption && !isPlaceholderOption(selectedOption)
+        ? selectedOption.textContent.trim()
+        : "";
+
+    const wrapper = document.createElement("div");
+    wrapper.className = "searchable-select-control";
+
+    const input = document.createElement("input");
+    input.type = "text";
+    input.id = select.id + "_search";
+    input.className = "form-control searchable-select-input";
+    input.value = currentLabel;
+    input.placeholder = select.dataset.searchablePlaceholder || "Type to search";
+    input.autocomplete = "off";
+    input.setAttribute("role", "combobox");
+    input.setAttribute("aria-autocomplete", "list");
+    input.setAttribute("aria-expanded", "false");
+    input.dataset.searchableSelectInput = "true";
+    input.dataset.searchableSelectTarget = select.id;
+    input.dataset.searchableSelectAllowEmpty = hasPlaceholder ? "true" : "false";
+
+    const toggle = document.createElement("button");
+    toggle.type = "button";
+    toggle.className = "searchable-select-toggle";
+    toggle.tabIndex = -1;
+    toggle.setAttribute("aria-label", "Show all options");
+    toggle.dataset.searchableSelectToggle = select.id;
+    toggle.innerHTML = '<i class="bi bi-chevron-down" aria-hidden="true"></i>';
+
+    const menu = document.createElement("ul");
+    menu.className = "searchable-select-menu";
+    menu.id = select.id + "_menu";
+    menu.setAttribute("role", "listbox");
+    menu.hidden = true;
+
+    select.parentNode.insertBefore(wrapper, select);
+    wrapper.appendChild(input);
+    wrapper.appendChild(toggle);
+    wrapper.appendChild(menu);
+    wrapper.appendChild(select);
+    select.classList.add("d-none");
+
+    return input;
+}
+
 function bindSearchableSelects() {
+    document.querySelectorAll("select").forEach(function (select) {
+        if (shouldAutoEnhance(select)) {
+            enhanceSelect(select);
+        }
+    });
+
     document.querySelectorAll("[data-searchable-select-input='true']").forEach(function (input) {
         if (input.dataset.searchableSelectBound === "true") {
             return;
@@ -77,6 +180,23 @@ function bindSearchableSelects() {
         const allowEmpty = input.dataset.searchableSelectAllowEmpty === "true";
         let activeIndex = -1;
         let visibleOptions = [];
+        let selfDispatching = false;
+
+        function fireChange() {
+            selfDispatching = true;
+            select.dispatchEvent(new Event("change", { bubbles: true }));
+            selfDispatching = false;
+        }
+
+        // The "nothing chosen" option is "0" on WTForms pickers but "" on the
+        // list-page filter bars, so clearing must restore whichever this select
+        // actually has — otherwise the field submits nothing at all.
+        function emptyValue() {
+            const placeholder = Array.from(select.options).find(function (option) {
+                return option.value === "" || option.value === "0";
+            });
+            return placeholder ? placeholder.value : "";
+        }
 
         // Render the menu on <body> with fixed positioning so it can never be
         // clipped by a parent with overflow:hidden (the form card, scroll areas).
@@ -106,7 +226,13 @@ function bindSearchableSelects() {
 
         function selectableOptions() {
             return Array.from(select.options).filter(function (option) {
-                return option.value !== "" && option.value !== "0";
+                if (option.value === "" || option.value === "0") {
+                    return false;
+                }
+                // Dependent filters (owner -> vehicle, contractor -> site) narrow
+                // a list by hiding/disabling options rather than removing them,
+                // so those must not be offered here either.
+                return !option.hidden && !option.disabled;
             });
         }
 
@@ -141,7 +267,7 @@ function bindSearchableSelects() {
             input.value = option.textContent.trim();
             input.setCustomValidity("");
             closeMenu();
-            select.dispatchEvent(new Event("change", { bubbles: true }));
+            fireChange();
         }
 
         function highlight(index) {
@@ -219,7 +345,7 @@ function bindSearchableSelects() {
             const rawValue = (input.value || "").trim();
             const previousValue = select.value;
             if (!rawValue) {
-                select.value = "0";
+                select.value = emptyValue();
                 input.setCustomValidity(allowEmpty ? "" : "Select a value from the list.");
             } else {
                 const matched = findExactMatch(rawValue);
@@ -227,12 +353,12 @@ function bindSearchableSelects() {
                     select.value = matched.value;
                     input.setCustomValidity("");
                 } else {
-                    select.value = "0";
+                    select.value = emptyValue();
                     input.setCustomValidity(allowEmpty ? "" : "Select a value from the list.");
                 }
             }
             if (select.value !== previousValue) {
-                select.dispatchEvent(new Event("change", { bubbles: true }));
+                fireChange();
             }
         }
 
@@ -309,6 +435,23 @@ function bindSearchableSelects() {
             },
         };
 
+        // Keep the visible text honest when something else changes the select —
+        // a dependent filter clearing an now-invalid choice, or a script
+        // rebuilding the option list.
+        select.addEventListener("change", function () {
+            // Ignore the change events this control fires itself — otherwise a
+            // partially-typed term (which legitimately matches nothing yet)
+            // would be wiped on every keystroke.
+            if (selfDispatching) {
+                return;
+            }
+            const label = selectedOptionLabel();
+            if (label !== input.value) {
+                input.value = label;
+                input.setCustomValidity(allowEmpty || label ? "" : "Select a value from the list.");
+            }
+        });
+
         input.value = selectedOptionLabel();
         syncSelectFromText();
         if (allowEmpty && !input.value.trim()) {
@@ -317,12 +460,100 @@ function bindSearchableSelects() {
     });
 }
 
+// Money inputs: a fixed, uneditable "Rs." sits in front of the field and the
+// number groups itself with commas while it is typed. The grouped text is
+// stripped back to a plain number on submit (MoneyField also strips it
+// server-side, so a paste or a JS-less browser still posts a valid amount).
+function groupDigits(whole) {
+    return whole.replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+}
+
+function formatMoneyText(raw) {
+    // Keep only digits and the first decimal point.
+    let cleaned = String(raw).replace(/[^\d.]/g, "");
+    const firstDot = cleaned.indexOf(".");
+    if (firstDot !== -1) {
+        cleaned = cleaned.slice(0, firstDot + 1) + cleaned.slice(firstDot + 1).replace(/\./g, "");
+    }
+    if (!cleaned) {
+        return "";
+    }
+    const parts = cleaned.split(".");
+    const grouped = groupDigits(parts[0]);
+    // Money is never more precise than paisa.
+    return parts.length > 1 ? grouped + "." + parts[1].slice(0, 2) : grouped;
+}
+
+function bindMoneyInputs() {
+    document.querySelectorAll("[data-money='true']").forEach(function (input) {
+        if (input.dataset.moneyBound === "true") {
+            return;
+        }
+        input.dataset.moneyBound = "true";
+
+        // A number input rejects commas outright, so switch to text and keep the
+        // numeric keypad on mobile.
+        input.type = "text";
+        input.setAttribute("inputmode", "decimal");
+
+        if (!input.parentElement.classList.contains("money-field")) {
+            const wrapper = document.createElement("div");
+            wrapper.className = "money-field";
+            const prefix = document.createElement("span");
+            prefix.className = "money-field-prefix";
+            prefix.setAttribute("aria-hidden", "true");
+            prefix.textContent = "Rs.";
+            input.parentNode.insertBefore(wrapper, input);
+            wrapper.appendChild(prefix);
+            wrapper.appendChild(input);
+            input.classList.add("money-field-input");
+        }
+
+        input.addEventListener("input", function () {
+            // Preserve the caret: count the digits before it, then put it back
+            // after the same digit once separators shift around.
+            const start = input.selectionStart;
+            const digitsBefore = (input.value.slice(0, start).match(/[\d.]/g) || []).length;
+            input.value = formatMoneyText(input.value);
+            let seen = 0;
+            let caret = input.value.length;
+            for (let i = 0; i < input.value.length; i += 1) {
+                if (/[\d.]/.test(input.value[i])) {
+                    seen += 1;
+                }
+                if (seen === digitsBefore) {
+                    caret = i + 1;
+                    break;
+                }
+            }
+            if (digitsBefore === 0) {
+                caret = 0;
+            }
+            input.setSelectionRange(caret, caret);
+        });
+
+        input.value = formatMoneyText(input.value);
+
+        const form = input.form;
+        if (form && form.dataset.moneySubmitBound !== "true") {
+            form.dataset.moneySubmitBound = "true";
+            form.addEventListener("submit", function () {
+                form.querySelectorAll("[data-money='true']").forEach(function (field) {
+                    field.value = field.value.replace(/,/g, "");
+                });
+            });
+        }
+    });
+}
+
 if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", function () {
         bindTableTools();
         bindSearchableSelects();
+        bindMoneyInputs();
     });
 } else {
     bindTableTools();
     bindSearchableSelects();
+    bindMoneyInputs();
 }

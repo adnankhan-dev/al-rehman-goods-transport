@@ -11,6 +11,12 @@ class VehicleOwner(db.Model):
     balance = db.Column(db.Float, default=0.0, nullable=False)
     # Pre-ERP carry-forward balance (before the June cutover).
     opening_balance = db.Column(db.Float, default=0.0, server_default="0")
+    # Company-owned vehicles (e.g. "Ahsan Petrol Expense") are parked under a
+    # holder record so the fuel log can reference a vehicle, but they are NOT a
+    # third-party owner: their diesel is a company running cost, not something
+    # we owe anyone. Flagged owners are excluded from owner payables/statements
+    # /bills and their fuel is booked as a P&L expense instead.
+    is_company_expense = db.Column(db.Boolean, default=False, server_default="0", nullable=False)
     created_at = db.Column(db.DateTime, default=db.func.current_timestamp())
 
     vehicles = db.relationship("Vehicle", back_populates="owner")

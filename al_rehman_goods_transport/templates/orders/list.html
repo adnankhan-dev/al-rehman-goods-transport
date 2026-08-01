@@ -173,6 +173,12 @@
                 <span class="pnl-metric-label">Pump Payable</span>
                 <span class="pnl-metric-value pnl-cost">Rs. {{ "{:,.0f}".format(pnl.pump_payable) }}</span>
             </div>
+            {% if pnl.operating_expenses %}
+            <div class="pnl-metric" title="Company vehicle fuel and ledger overheads — running costs that are not part of a trip's price">
+                <span class="pnl-metric-label">Running Costs</span>
+                <span class="pnl-metric-value pnl-cost">Rs. {{ "{:,.0f}".format(pnl.operating_expenses) }}</span>
+            </div>
+            {% endif %}
             <div class="pnl-metric {{ 'pnl-metric--profit' if pnl.profit >= 0 else 'pnl-metric--loss' }}">
                 <span class="pnl-metric-label">Net {{ 'Profit' if pnl.profit >= 0 else 'Loss' }}</span>
                 <span class="pnl-metric-value">{% if pnl.profit < 0 %}− {% endif %}Rs. {{ "{:,.0f}".format(pnl.profit|abs) }}</span>

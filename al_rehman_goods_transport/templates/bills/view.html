@@ -63,6 +63,9 @@
     {% endif %}
     <div class="collection-overview">
         {{ metric_tile("Current Balance", "Rs. " ~ ("%.2f"|format(financial_summary.current_total)), "As per the account summary for this bill period", "primary", "bi bi-cash-stack", entity_href) }}
+        {{ metric_tile(summary_record_label, summary_record_count, "Records included in this bill", "accent", "bi bi-list-check") }}
+        {{ metric_tile(summary_quantity_label, "{:,.2f}".format(summary_quantity) ~ (" " ~ summary_quantity_unit if summary_quantity_unit else ""), "Total across every record on this bill", "ocean", "bi bi-box-seam") }}
+        {{ metric_tile("Bill Amount", "Rs. " ~ ("%.2f"|format(bill.total_amount or 0)), "Value of this bill period", "slate", "bi bi-receipt") }}
     </div>
 
     <div class="detail-grid">
@@ -72,6 +75,8 @@
                 {{ detail_value("Bill Number", bill.bill_number) }}
                 {{ detail_value("Bill Date", bill.bill_date.strftime('%Y-%m-%d %I:%M %p')) }}
                 {{ detail_value("Entity Type", bill.entity_type|replace('_', ' ')|title) }}
+                {{ detail_value(summary_record_label, summary_record_count) }}
+                {{ detail_value(summary_quantity_label, "{:,.2f}".format(summary_quantity) ~ (" " ~ summary_quantity_unit if summary_quantity_unit else "")) }}
                 {{ detail_value("Material Filter", bill.material_type or "All materials") }}
             </div>
         </div>
@@ -437,10 +442,22 @@
                             {% endif %}
                         </tr>
                         {% endfor %}
+                        {% for txn in vg.advance_rows %}
+                        <tr style="color:var(--muted);">
+                            <td>{{ txn.date.strftime('%Y-%m-%d') }}</td>
+                            <td colspan="3">Payment made for this vehicle{% if txn.description %} — {{ txn.description }}{% endif %}</td>
+                            <td>{{ (txn.payment_method or '-')|title }}</td>
+                            <td></td>
+                            <td>{{ txn.reference or '-' }}</td>
+                            <td></td>
+                            <td class="text-end" style="color:#dc2626;">− Rs. {{ "%.2f"|format(txn.amount or 0) }}</td>
+                            {% if current_user.can('ledger.admin') %}<td></td>{% endif %}
+                        </tr>
+                        {% endfor %}
                         <tr class="material-subtotal-row">
                             <td colspan="4"><strong>Vehicle {{ vg.vehicle_number }} Subtotal</strong></td>
                             <td><strong>{{ "%.2f"|format(vg.total_delivered) }}</strong></td>
-                            <td colspan="3" class="text-end"><strong>Gross Rs. {{ "%.2f"|format(vg.gross) }}{% if vg.standalone_diesel %} · Fuel-Log Diesel − Rs. {{ "%.2f"|format(vg.standalone_diesel) }}{% endif %}</strong></td>
+                            <td colspan="3" class="text-end"><strong>Gross Rs. {{ "%.2f"|format(vg.gross) }}{% if vg.standalone_diesel %} · Fuel-Log Diesel − Rs. {{ "%.2f"|format(vg.standalone_diesel) }}{% endif %}{% if vg.advances %} · Payments − Rs. {{ "%.2f"|format(vg.advances) }}{% endif %}</strong></td>
                             <td class="text-end"><strong>Rs. {{ "%.2f"|format(vg.vehicle_payable) }}</strong></td>
                             {% if current_user.can('ledger.admin') %}<td></td>{% endif %}
                         </tr>
@@ -461,6 +478,7 @@
                             <th>Delivered</th>
                             <th>Gross Amt</th>
                             <th>Fuel-Log Diesel</th>
+                            <th>Payments Made</th>
                             <th class="text-end">Net Payable</th>
                         </tr>
                     </thead>
@@ -472,16 +490,19 @@
                             <td>{{ "%.2f"|format(vg.total_delivered) }}</td>
                             <td>Rs. {{ "%.2f"|format(vg.gross) }}</td>
                             <td>{% if vg.standalone_diesel %}− Rs. {{ "%.2f"|format(vg.standalone_diesel) }}{% else %}—{% endif %}</td>
+                            <td>{% if vg.advances %}− Rs. {{ "%.2f"|format(vg.advances) }}{% else %}—{% endif %}</td>
                             <td class="text-end">Rs. {{ "%.2f"|format(vg.vehicle_payable) }}</td>
                         </tr>
                         {% endfor %}
+                        {% set payments_total = owner_vehicle_groups|sum(attribute='advances') %}
                         <tr class="bill-grand-total-row">
                             <td><strong>Grand Total</strong></td>
                             <td><strong>{{ owner_vehicle_groups|sum(attribute='trip_count') }}</strong></td>
                             <td><strong>{{ "%.2f"|format(owner_vehicle_groups|sum(attribute='total_delivered')) }}</strong></td>
                             <td><strong>Rs. {{ "%.2f"|format(owner_vehicle_groups|sum(attribute='gross')) }}</strong></td>
                             <td><strong>− Rs. {{ "%.2f"|format(diesel_deduction_total) }}</strong></td>
-                            <td class="text-end"><strong>Rs. {{ "%.2f"|format(trips_gross - diesel_deduction_total) }}</strong></td>
+                            <td><strong>− Rs. {{ "%.2f"|format(payments_total) }}</strong></td>
+                            <td class="text-end"><strong>Rs. {{ "%.2f"|format(trips_gross - diesel_deduction_total - payments_total) }}</strong></td>
                         </tr>
                     </tbody>
                 </table>

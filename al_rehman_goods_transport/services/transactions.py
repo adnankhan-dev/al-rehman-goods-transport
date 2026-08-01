@@ -37,6 +37,7 @@ class TransactionInput:
     contractor_id: int | None = None
     plant_id: int | None = None
     petrol_pump_id: int | None = None
+    financial_entity_id: int | None = None
     date: object | None = None
     is_system_generated: bool = False
     apply_financial_effect: bool = True
@@ -235,6 +236,7 @@ class TransactionService:
             "contractor_id": transaction_input.contractor_id,
             "plant_id": transaction_input.plant_id,
             "petrol_pump_id": transaction_input.petrol_pump_id,
+            "financial_entity_id": transaction_input.financial_entity_id,
             "is_system_generated": transaction_input.is_system_generated,
         }
         # Only set date when supplied (else the model default `now` applies on
@@ -280,6 +282,8 @@ class TransactionService:
             "plant_receipt": transaction_input.plant_id,
             "petrol_pump_payment": transaction_input.petrol_pump_id,
             "petrol_pump_receipt": transaction_input.petrol_pump_id,
+            "financial_entity_payment": transaction_input.financial_entity_id,
+            "financial_entity_receipt": transaction_input.financial_entity_id,
         }
         required_entity = required_entity_fields.get(transaction_input.type, True)
         if required_entity is None or required_entity == 0:
@@ -307,6 +311,7 @@ class TransactionService:
                 ("plant", transaction.plant_id),
                 ("petrol_pump", transaction.petrol_pump_id),
                 ("vehicle", transaction.vehicle_id),
+                ("financial_entity", transaction.financial_entity_id),
             ):
                 if fk:
                     self._update_entity_balance(entity_type, fk, amount)
@@ -384,6 +389,26 @@ class TransactionService:
             self._update_entity_balance("petrol_pump", transaction.petrol_pump_id or transaction.entity_id, -amount)
             return
 
+        # Financial entities (expenses and loans). Balance convention matches
+        # contractors — positive means THEY owe US:
+        #   payment out -> for a loan entity they now owe us more (+);
+        #                  for an expense entity the money is simply spent, so
+        #                  the balance is untouched and only cash moves.
+        #   receipt in  -> they owe us less (−).
+        if transaction.type == "financial_entity_payment":
+            company.balance = _safe_amount(company.balance) - amount
+            entity = self._financial_entity_for(transaction)
+            if entity is not None and not entity.is_expense_kind:
+                entity.balance = _safe_amount(entity.balance) + amount
+            return
+
+        if transaction.type == "financial_entity_receipt":
+            company.balance = _safe_amount(company.balance) + amount
+            entity = self._financial_entity_for(transaction)
+            if entity is not None:
+                entity.balance = _safe_amount(entity.balance) - amount
+            return
+
         if transaction.type in {"other_expense"}:
             company.balance = _safe_amount(company.balance) - amount
 
@@ -404,6 +429,14 @@ class TransactionService:
         if bill is not None:
             bill.settled_amount = max(0.0, _safe_amount(bill.settled_amount) + delta)
 
+    def _financial_entity_for(self, transaction):
+        from ..models import FinancialEntity
+
+        entity_id = transaction.financial_entity_id or (
+            transaction.entity_id if transaction.entity_type == "financial_entity" else None
+        )
+        return self.session.get(FinancialEntity, entity_id) if entity_id else None
+
     def _update_entity_balance(self, entity_type, entity_id, delta):
         if not entity_id:
             return
@@ -414,6 +447,7 @@ class TransactionService:
             "vehicle_owner": __import__("al_rehman_goods_transport.models", fromlist=["VehicleOwner"]).VehicleOwner,
             "plant": __import__("al_rehman_goods_transport.models", fromlist=["Plant"]).Plant,
             "petrol_pump": __import__("al_rehman_goods_transport.models", fromlist=["PetrolPump"]).PetrolPump,
+            "financial_entity": __import__("al_rehman_goods_transport.models", fromlist=["FinancialEntity"]).FinancialEntity,
         }
         model = model_map.get(entity_type)
         if model is None:

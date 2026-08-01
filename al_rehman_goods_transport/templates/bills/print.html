@@ -461,6 +461,14 @@
 
             <section class="summary-grid">
                 <div class="summary-card">
+                    <span>{{ summary_record_label }}</span>
+                    <strong>{{ summary_record_count }}</strong>
+                </div>
+                <div class="summary-card">
+                    <span>{{ summary_quantity_label }}</span>
+                    <strong>{{ "{:,.2f}".format(summary_quantity) }}{% if summary_quantity_unit %} {{ summary_quantity_unit }}{% endif %}</strong>
+                </div>
+                <div class="summary-card">
                     <span>Bill Amount</span>
                     <strong>Rs. {{ "%.2f"|format(bill.total_amount) }}</strong>
                 </div>
@@ -562,10 +570,20 @@
                                 <td class="align-right" style="color:#dc2626;">− Rs. {{ "%.2f"|format(entry.amount or 0) }}</td>
                             </tr>
                             {% endfor %}
+                            {% for txn in vg.advance_rows %}
+                            <tr style="color:#64748b;">
+                                <td>{{ txn.date.strftime('%Y-%m-%d') }}</td>
+                                <td colspan="2">Payment Made — {{ vg.vehicle_number }}</td>
+                                <td>{{ txn.reference or '-' }}</td>
+                                <td>{{ (txn.payment_method or '-')|title }}</td>
+                                <td></td>
+                                <td class="align-right" style="color:#dc2626;">− Rs. {{ "%.2f"|format(txn.amount or 0) }}</td>
+                            </tr>
+                            {% endfor %}
                             <tr class="subtotal-row">
                                 <td colspan="4"><strong>Vehicle {{ vg.vehicle_number }} Subtotal</strong></td>
                                 <td><strong>{{ "%.2f"|format(vg.total_delivered) }}</strong></td>
-                                <td class="align-right">{% if vg.standalone_diesel %}<strong>Diesel − Rs. {{ "%.2f"|format(vg.standalone_diesel) }}</strong>{% endif %}</td>
+                                <td class="align-right">{% if vg.standalone_diesel %}<strong>Diesel − Rs. {{ "%.2f"|format(vg.standalone_diesel) }}</strong>{% endif %}{% if vg.advances %}<strong> · Payments − Rs. {{ "%.2f"|format(vg.advances) }}</strong>{% endif %}</td>
                                 <td class="align-right"><strong>Rs. {{ "%.2f"|format(vg.vehicle_payable) }}</strong></td>
                             </tr>
                         </tbody>

@@ -17,6 +17,17 @@
                 <input class="form-control" type="text" id="name" name="name" required placeholder="Full name or company name">
             </div>
             <div class="form-field">
+                <label class="form-label" for="entity_kind">Entity Type</label>
+                <select class="form-select" id="entity_kind" name="entity_kind" required>
+                    {% for key, meta in entity_kinds.items() %}
+                    <option value="{{ key }}" {% if key == 'expense' %}selected{% endif %}>{{ meta.label }}</option>
+                    {% endfor %}
+                </select>
+                <div class="form-text">
+                    {% for key, meta in entity_kinds.items() %}<strong>{{ meta.label }}:</strong> {{ meta.description }}{% if not loop.last %}<br>{% endif %}{% endfor %}
+                </div>
+            </div>
+            <div class="form-field">
                 <label class="form-label" for="phone">Phone</label>
                 <input class="form-control" type="text" id="phone" name="phone" placeholder="Contact number">
             </div>

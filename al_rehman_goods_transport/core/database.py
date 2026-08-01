@@ -1,4 +1,5 @@
 import json
+from datetime import UTC, datetime
 
 from sqlalchemy import create_engine, event, inspect, text
 from sqlalchemy.orm import DeclarativeBase, Session, scoped_session, sessionmaker
@@ -72,9 +73,17 @@ def init_db():
     _add_entity_opening_balances()
     _add_transaction_approval_columns()
     _add_bill_approval_columns()
+    _add_financial_entity_kind()
+    _add_transaction_financial_entity()
+    _add_vehicle_owner_company_expense()
     _convert_opening_balances_to_transactions()
     _backfill_role_approval_permissions()
+    _backfill_admin_explicit_permissions()
     _run_one_time_backfills()
+    # Runs after the backfills: _backfill_financial_entities rewrites owner
+    # balances from vehicle sums, so the zeroing must come last or it would be
+    # undone on the same boot.
+    _zero_company_expense_balances()
 
 
 def _add_petrol_pump_opening_balance():
@@ -113,6 +122,84 @@ def _add_entity_opening_balances():
         if "opening_balance" not in columns:
             with engine.begin() as connection:
                 connection.execute(text(f"ALTER TABLE {table} ADD COLUMN opening_balance FLOAT DEFAULT 0"))
+
+
+def _add_financial_entity_kind():
+    """Add FinancialEntity.entity_kind ('expense' | 'loan'). Existing rows
+    default to 'expense'. Additive, idempotent, SQLite+Postgres safe."""
+    inspector = inspect(engine)
+    if "financial_entity" not in inspector.get_table_names():
+        return
+    columns = {column["name"] for column in inspector.get_columns("financial_entity")}
+    if "entity_kind" not in columns:
+        with engine.begin() as connection:
+            connection.execute(text("ALTER TABLE financial_entity ADD COLUMN entity_kind VARCHAR(20) DEFAULT 'expense'"))
+            connection.execute(text("UPDATE financial_entity SET entity_kind = 'expense' WHERE entity_kind IS NULL"))
+
+
+def _add_transaction_financial_entity():
+    """Add Transaction.financial_entity_id so expense/loan payments post through
+    the main ledger like every other entity. INTEGER is portable across DBs."""
+    inspector = inspect(engine)
+    if "transaction" not in inspector.get_table_names():
+        return
+    columns = {column["name"] for column in inspector.get_columns("transaction")}
+    if "financial_entity_id" not in columns:
+        with engine.begin() as connection:
+            connection.execute(text('ALTER TABLE "transaction" ADD COLUMN financial_entity_id INTEGER'))
+
+
+def _add_vehicle_owner_company_expense():
+    """Add VehicleOwner.is_company_expense — marks a holder record for our own
+    company vehicles, whose fuel is a company cost rather than an owner payable.
+
+    The column add and the one-time classification of the existing
+    'Ahsan Petrol Expense' holder are deliberately guarded SEPARATELY. Tying the
+    data step to "did we just add the column?" makes it unrepeatable: if the
+    column lands on its own (a partial deploy, a schema sync, a restart between
+    edits) the classification is skipped forever and the holder silently stays
+    an ordinary vehicle owner. The marker makes it self-healing while still
+    running exactly once, so a later deliberate unflagging is not undone."""
+    inspector = inspect(engine)
+    if "vehicle_owner" not in inspector.get_table_names():
+        return
+
+    # Postgres rejects `BOOLEAN DEFAULT 0` (an integer default on a boolean
+    # column); SQLite has no boolean literal keyword in older builds.
+    is_postgres = engine.dialect.name == "postgresql"
+    false_literal = "FALSE" if is_postgres else "0"
+    true_literal = "TRUE" if is_postgres else "1"
+
+    columns = {column["name"] for column in inspector.get_columns("vehicle_owner")}
+    if "is_company_expense" not in columns:
+        with engine.begin() as connection:
+            connection.execute(
+                text(f"ALTER TABLE vehicle_owner ADD COLUMN is_company_expense BOOLEAN DEFAULT {false_literal}")
+            )
+    with engine.begin() as connection:
+        connection.execute(
+            text(f"UPDATE vehicle_owner SET is_company_expense = {false_literal} WHERE is_company_expense IS NULL")
+        )
+
+    marker_key = "company_expense_owner_classified"
+    session = SessionLocal()
+    try:
+        from ..models import AppSetting
+
+        marker = session.query(AppSetting).filter(AppSetting.key == marker_key).first()
+        if marker is not None and marker.value == "1":
+            return
+        session.execute(
+            text(f"UPDATE vehicle_owner SET is_company_expense = {true_literal} WHERE LOWER(name) = 'ahsan petrol expense'")
+        )
+        if marker is None:
+            marker = AppSetting(key=marker_key)
+            session.add(marker)
+        marker.value = "1"
+        session.commit()
+    finally:
+        session.close()
+        SessionLocal.remove()
 
 
 def _convert_opening_balances_to_transactions():
@@ -363,6 +450,93 @@ def _backfill_role_approval_permissions():
             marker = AppSetting(key=marker_key)
             session.add(marker)
         marker.value = marker_value
+        session.commit()
+    finally:
+        session.close()
+        SessionLocal.remove()
+
+
+def _backfill_admin_explicit_permissions():
+    """One-time: write the full privilege list onto every admin account except
+    the protected primary admin (User.PROTECTED_ADMIN_ID).
+
+    Admins used to hold every privilege implicitly, so their stored list was
+    ignored (and was often empty or stale). Now that non-primary admins honour
+    exactly what is saved against them — so their privileges are actually
+    editable — that stored list must first be made to match the access they
+    already had, otherwise this change would silently demote or lock out a
+    live admin.
+
+    Additive and idempotent, guarded by its own AppSetting marker so it does
+    not fight a later deliberate revoke.
+    """
+    marker_key = "admin_explicit_perm_backfill"
+    marker_value = "1"
+    session = SessionLocal()
+    try:
+        from ..models import AppSetting, User
+
+        marker = session.query(AppSetting).filter(AppSetting.key == marker_key).first()
+        if marker is not None and marker.value == marker_value:
+            return
+
+        for user in session.query(User).filter(User.role == "admin").all():
+            if user.id == User.PROTECTED_ADMIN_ID:
+                continue
+            user.set_permissions(list(ALL_PERMISSION_CODES))
+
+        if marker is None:
+            marker = AppSetting(key=marker_key)
+            session.add(marker)
+        marker.value = marker_value
+        session.commit()
+    finally:
+        session.close()
+        SessionLocal.remove()
+
+
+def _zero_company_expense_balances():
+    """One-time: clear the stored balances on company-expense holders and their
+    vehicles.
+
+    Those balances were only ever the running sum of fuel taken by our own
+    vehicles, recorded as if a third party were owed. Nothing settles them —
+    the money is owed to the PUMP (which keeps its own payable) and the cost is
+    reported in the P&L from the fuel log. Left in place the figure is an
+    orphan: it reconciles against no statement and reads like a real debt.
+
+    The prior value is written into the holder's address/notes text so the
+    number is preserved rather than destroyed. Marker-guarded so a balance that
+    is deliberately set later is never wiped again.
+    """
+    marker_key = "company_expense_balances_zeroed"
+    session = SessionLocal()
+    try:
+        from ..models import AppSetting, Vehicle, VehicleOwner
+
+        marker = session.query(AppSetting).filter(AppSetting.key == marker_key).first()
+        if marker is not None and marker.value == "1":
+            return
+
+        stamp = datetime.now(UTC).replace(tzinfo=None).strftime("%Y-%m-%d")
+        for owner in session.query(VehicleOwner).filter(VehicleOwner.is_company_expense.is_(True)).all():
+            vehicles = session.query(Vehicle).filter(Vehicle.owner_id == owner.id).all()
+            previous = [f"{owner.name}: {float(owner.balance or 0):,.0f}"]
+            previous += [f"{v.vehicle_number}: {float(v.balance or 0):,.0f}" for v in vehicles]
+            if any(abs(float(v.balance or 0)) > 0.005 for v in vehicles) or abs(float(owner.balance or 0)) > 0.005:
+                note = (
+                    f"[{stamp}] Balances cleared — company vehicle fuel is reported as a "
+                    f"Profit & Loss expense, not as a payable. Previous: " + "; ".join(previous)
+                )
+                owner.address = f"{owner.address}\n{note}" if owner.address else note
+            owner.balance = 0.0
+            for vehicle in vehicles:
+                vehicle.balance = 0.0
+
+        if marker is None:
+            marker = AppSetting(key=marker_key)
+            session.add(marker)
+        marker.value = "1"
         session.commit()
     finally:
         session.close()

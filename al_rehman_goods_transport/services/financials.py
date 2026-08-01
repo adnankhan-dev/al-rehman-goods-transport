@@ -138,6 +138,11 @@ def _accrual_rows(entity_type, entity_id, session, exclude_bill_id=None):
             rows.append((_order_date(order), _safe(order.billable_amount)))
 
     elif entity_type == "vehicle_owner":
+        owner = session.get(VehicleOwner, entity_id)
+        if owner is not None and owner.is_company_expense:
+            # Our own vehicles: their fuel is a company running cost booked in
+            # the P&L, not a payable to a third-party owner. No accruals here.
+            return rows
         orders = (
             session.query(Order)
             .join(Vehicle, Vehicle.id == Order.vehicle_id)

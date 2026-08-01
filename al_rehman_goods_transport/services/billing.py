@@ -7,7 +7,7 @@ from datetime import UTC, datetime
 from sqlalchemy.orm import joinedload
 
 from ..extensions import db
-from ..models import Bill, DieselEntry, Order, OrderLoading
+from ..models import Bill, DieselEntry, Order, OrderLoading, Transaction, Vehicle
 from ..repositories import BillingRepository
 from .exceptions import NotFoundError, ValidationError
 from .finance_summary import balance_summary
@@ -132,10 +132,16 @@ class BillingService:
 
         trips_gross = sum(o.remaining_vehicle_payment() for o in vehicle_owner_activity_rows)
         diesel_deduction_total = sum(float(d.amount or 0) for d in vehicle_owner_diesel_rows)
-        # Vehicle-owner bills are presented grouped by vehicle.
+        # Vehicle-owner bills are presented grouped by vehicle: trips, then that
+        # vehicle's fuel log, then payments posted against that specific vehicle
+        # — all three feed the vehicle's own payable.
         owner_vehicle_groups = []
+        vehicle_payment_rows = []
         if bill.entity_type == "vehicle_owner":
-            owner_vehicle_groups = group_owner_activity_by_vehicle(vehicle_owner_activity_rows, vehicle_owner_diesel_rows)
+            vehicle_payment_rows = self._vehicle_payments_for_bill(bill)
+            owner_vehicle_groups = group_owner_activity_by_vehicle(
+                vehicle_owner_activity_rows, vehicle_owner_diesel_rows, vehicle_payment_rows
+            )
         related_transactions = self.related_transactions(bill)
 
         # Financial picture for EVERY bill, computed live at render time from
@@ -162,6 +168,11 @@ class BillingService:
             "material_summary": material_summary,
             "linked_trip_count": len(linked_orders),
             "total_quantity": sum((order.delivered_quantity or order.quantity or 0) for order in linked_orders),
+            # Headline counts for the bill summary. Quantity is taken from the
+            # side the bill is actually about: an owner bill pays on the
+            # vehicle's measured quantity, every other bill on the delivered
+            # quantity. Pump bills count litres over fuel entries instead.
+            **self._bill_summary_counts(bill, linked_orders, standalone_diesel_rows, loading_activity_rows),
             "related_transactions": related_transactions,
             "diesel_activity_rows": diesel_activity_rows,
             "standalone_diesel_rows": standalone_diesel_rows,
@@ -169,6 +180,7 @@ class BillingService:
             "vehicle_owner_activity_rows": vehicle_owner_activity_rows,
             "vehicle_owner_diesel_rows": vehicle_owner_diesel_rows,
             "owner_vehicle_groups": owner_vehicle_groups,
+            "vehicle_payment_rows": vehicle_payment_rows,
             "trips_gross": trips_gross,
             "diesel_deduction_total": diesel_deduction_total,
             "balance_summary": balance_summary(bill.entity_type, self._entity_balance(bill)),
@@ -750,6 +762,8 @@ class BillingService:
                     <tr><td>Entity</td><td>{escape(bill.entity_name)}</td></tr>
                     <tr><td>Entity Type</td><td>{escape(bill.entity_type.replace('_', ' ').title())}</td></tr>
                     <tr><td>Bill Date</td><td>{escape(bill.bill_date.strftime('%Y-%m-%d %H:%M'))}</td></tr>
+                    <tr><td>{escape(snapshot['summary_record_label'])}</td><td>{escape(str(snapshot['summary_record_count']))}</td></tr>
+                    <tr><td>{escape(snapshot['summary_quantity_label'])}</td><td>{escape(f"{snapshot['summary_quantity']:,.2f} {snapshot['summary_quantity_unit']}".strip())}</td></tr>
                     <tr><td>Total Amount</td><td>{escape(f'{bill.total_amount:.2f}')}</td></tr>
                     <tr><td>Settled Amount</td><td>{escape(f'{(bill.settled_amount or 0):.2f}')}</td></tr>
                     <tr><td>Outstanding Amount</td><td>{escape(f'{bill.outstanding_amount:.2f}')}</td></tr>
@@ -891,6 +905,72 @@ class BillingService:
             groups.values(),
             key=lambda g: (g["material"], g["contractor_rate"] if g["contractor_rate"] is not None else float("inf")),
         )
+
+    def _bill_summary_counts(self, bill, linked_orders, standalone_diesel_rows, loading_activity_rows):
+        """Headline 'how much work is on this bill' figures for the summary.
+
+        Returns summary_record_label / summary_record_count and
+        summary_quantity_label / summary_quantity (+ its unit), phrased for the
+        kind of bill being shown."""
+        if bill.entity_type == "petrol_pump":
+            return {
+                "summary_record_label": "Fuel Entries",
+                "summary_record_count": len(standalone_diesel_rows),
+                "summary_quantity_label": "Total Litres",
+                "summary_quantity": sum(float(entry.litres or 0) for entry in standalone_diesel_rows),
+                "summary_quantity_unit": "L",
+            }
+
+        if bill.entity_type == "plant":
+            return {
+                "summary_record_label": "Loadings",
+                "summary_record_count": len(loading_activity_rows),
+                "summary_quantity_label": "Total Loaded Quantity",
+                "summary_quantity": sum(float(row.load_quantity or 0) for row in loading_activity_rows),
+                "summary_quantity_unit": "",
+            }
+
+        if bill.entity_type == "vehicle_owner":
+            quantity = sum(float(order.effective_vehicle_quantity or 0) for order in linked_orders)
+        else:
+            quantity = sum(float(order.delivered_quantity or order.quantity or 0) for order in linked_orders)
+
+        units = {(order.unit or "cft").upper() for order in linked_orders}
+        return {
+            "summary_record_label": "Total Trips",
+            "summary_record_count": len(linked_orders),
+            "summary_quantity_label": "Total Quantity",
+            "summary_quantity": quantity,
+            "summary_quantity_unit": units.pop() if len(units) == 1 else "",
+        }
+
+    def _vehicle_payments_for_bill(self, bill):
+        """Approved payments posted against a specific vehicle of this owner
+        inside the bill period.
+
+        These are money already handed over for that one vehicle, so they are
+        listed under it and reduce that vehicle's payable — exactly like its
+        fuel-log diesel does. Owner-level payments are NOT included here; they
+        already appear in the bill's Account Summary and counting them in both
+        places would deduct them twice."""
+        if bill.entity_type != "vehicle_owner" or not bill.vehicle_owner_id:
+            return []
+
+        vehicle_ids = self.session.query(Vehicle.id).filter(Vehicle.owner_id == bill.vehicle_owner_id)
+        query = (
+            self.session.query(Transaction)
+            .filter(
+                Transaction.type == "vehicle_payment",
+                Transaction.approval_status == "approved",
+                Transaction.vehicle_id.in_(vehicle_ids),
+            )
+        )
+        if bill.start_date:
+            query = query.filter(Transaction.date >= bill.start_date)
+        end_date = bill.end_date or bill.bill_date
+        if end_date:
+            query = query.filter(Transaction.date <= end_date)
+        return query.order_by(Transaction.date.asc(), Transaction.id.asc()).all()
 
     def _bill_entity_id(self, bill):
         return bill.contractor_id or bill.plant_id or bill.petrol_pump_id or bill.vehicle_owner_id

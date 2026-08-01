@@ -94,14 +94,31 @@ class OrderService:
     def orders_pnl(self, filters=None):
         """Profit & loss for the filtered set (revenue, vehicle cost, plant, profit).
 
-        Also surfaces the pump payable: diesel taken from our pump is deducted
-        from the vehicle owner's payable and paid straight to the pump, so it is
-        a split of the vehicle cost (it does not change net profit)."""
+        Also surfaces the pump payable: diesel taken from our pump by a HIRED
+        vehicle is deducted from that owner's payable and paid straight to the
+        pump, so it is a split of the vehicle cost (it does not change profit).
+
+        Running costs that are NOT part of a trip's price — fuel burned by our
+        own company vehicles, and overheads posted in the ledger — are real
+        deductions and are subtracted from profit here, so this strip agrees
+        with the full Profit & Loss report."""
         filters = filters or {}
         pnl = self.orders.filtered_pnl(filters)
         pump_payable = self._period_pump_payable(filters)
         pnl["pump_payable"] = pump_payable
         pnl["vehicle_owner_cash"] = pnl["net_vehicle"] - pump_payable
+
+        from ..repositories import ReportRepository
+
+        reports = ReportRepository(self.session)
+        company_fuel = sum(float(row.amount or 0) for row in reports.company_vehicle_diesel_filtered(filters))
+        overheads = sum(float(row.amount or 0) for row in reports.overhead_expense_transactions(filters))
+        operating_expenses = company_fuel + overheads
+        pnl["company_fuel"] = company_fuel
+        pnl["overheads"] = overheads
+        pnl["operating_expenses"] = operating_expenses
+        pnl["gross_profit"] = pnl.get("profit", 0.0)
+        pnl["profit"] = pnl.get("profit", 0.0) - operating_expenses
         return pnl
 
     def _period_pump_payable(self, filters):

@@ -114,18 +114,42 @@ class ReportService:
 
     def _profit_loss_context(self, filters):
         orders = self.repository.completed_orders_filtered(filters)
-        # Order-linked diesel and advances are retired — a trip's expense side
-        # is the vehicle amount plus plant charges only.
+        # Order-linked diesel and advances are retired — a trip's direct cost is
+        # the vehicle amount plus plant charges only.
         total_revenue = sum(order.total_contractor_amount() for order in orders)
         vehicle_payables = sum(order.total_vehicle_amount() for order in orders)
         plant_payments = sum(order.plant_amount or 0 for order in orders)
-        total_expenses = vehicle_payables + plant_payments
-        total_profit = total_revenue - total_expenses
+        direct_costs = vehicle_payables + plant_payments
+        gross_profit = total_revenue - direct_costs
         total_quantity = sum(order.delivered_quantity or order.quantity or 0 for order in orders)
 
-        # Diesel taken from our pump is deducted from the vehicle owner's payable
-        # and paid directly to the pump. It is therefore a SPLIT of the vehicle
-        # payment above (not an extra cost), shown so the pump payable is visible.
+        # ── Operating expenses: real costs that are NOT part of a trip's price ──
+        # Fuel burned by our own company vehicles. Unlike a hired vehicle's
+        # diesel (which is merely deducted from what we owe that owner), this
+        # money never comes back — it is a business running cost.
+        company_fuel_rows = self.repository.company_vehicle_diesel_filtered(filters)
+        company_fuel_total = sum(float(row.amount or 0) for row in company_fuel_rows)
+        company_fuel_by_vehicle = defaultdict(float)
+        for row in company_fuel_rows:
+            company_fuel_by_vehicle[row.vehicle.vehicle_number if row.vehicle else "Unassigned"] += float(row.amount or 0)
+
+        # Overheads posted in the ledger: 'Other Expense' plus payments to
+        # Expense-kind financial entities (rent, repairs, salaries, services).
+        overhead_rows = self.repository.overhead_expense_transactions(filters)
+        overhead_total = sum(float(row.amount or 0) for row in overhead_rows)
+        overhead_by_payee = defaultdict(float)
+        for row in overhead_rows:
+            label = row.financial_entity.name if row.financial_entity else "Other Expense"
+            overhead_by_payee[label] += float(row.amount or 0)
+
+        operating_expenses = company_fuel_total + overhead_total
+        total_expenses = direct_costs + operating_expenses
+        total_profit = total_revenue - total_expenses
+
+        # Diesel taken from our pump by a HIRED vehicle is deducted from that
+        # owner's payable and paid straight to the pump. It is a SPLIT of the
+        # vehicle payment above, never an extra cost — shown only so the pump
+        # payable is visible.
         pump_payable = sum(row["amount"] for row in self._unified_diesel_rows(filters))
         vehicle_owner_cash = vehicle_payables - pump_payable
 
@@ -138,6 +162,53 @@ class ReportService:
             "Vehicle Payments": vehicle_payables,
             "Plant Payments": plant_payments,
         }
+        if company_fuel_total:
+            expense_breakdown["Company Vehicle Fuel"] = company_fuel_total
+        for label, amount in sorted(overhead_by_payee.items(), key=lambda item: item[1], reverse=True):
+            expense_breakdown[label] = amount
+
+        # Every expense line, itemised, so the statement can show exactly what
+        # was spent and on what — no unexplained aggregate.
+        expense_detail = [
+            {
+                "label": "Vehicle Payments",
+                "amount": vehicle_payables,
+                "basis": f"{len(orders)} trip{'s' if len(orders) != 1 else ''} — amount earned by the vehicles that ran them",
+                "group": "Direct Trip Costs",
+            },
+            {
+                "label": "Plant Payments",
+                "amount": plant_payments,
+                "basis": "Loading charges billed by crush plants on these trips",
+                "group": "Direct Trip Costs",
+            },
+        ]
+        if company_fuel_total:
+            detail = ", ".join(
+                f"{name} Rs. {amount:,.0f}"
+                for name, amount in sorted(company_fuel_by_vehicle.items(), key=lambda item: item[1], reverse=True)
+            )
+            expense_detail.append(
+                {
+                    "label": "Company Vehicle Fuel",
+                    "amount": company_fuel_total,
+                    "basis": f"{len(company_fuel_rows)} fuel entr{'ies' if len(company_fuel_rows) != 1 else 'y'} on our own vehicles ({detail})",
+                    "group": "Operating Expenses",
+                }
+            )
+        for label, amount in sorted(overhead_by_payee.items(), key=lambda item: item[1], reverse=True):
+            count = sum(
+                1 for row in overhead_rows
+                if (row.financial_entity.name if row.financial_entity else "Other Expense") == label
+            )
+            expense_detail.append(
+                {
+                    "label": label,
+                    "amount": amount,
+                    "basis": f"{count} ledger payment{'s' if count != 1 else ''}",
+                    "group": "Operating Expenses",
+                }
+            )
 
         # Compare against the equal-length period immediately before, so the
         # P&L answers "is this better or worse than last time?" at a glance.
@@ -155,7 +226,12 @@ class ReportService:
             prev_revenue = sum(o.total_contractor_amount() for o in prev_orders)
             prev_vehicle = sum(o.total_vehicle_amount() for o in prev_orders)
             prev_plant = sum(o.plant_amount or 0 for o in prev_orders)
-            prev_profit = prev_revenue - prev_vehicle - prev_plant
+            prev_operating = sum(
+                float(row.amount or 0) for row in self.repository.company_vehicle_diesel_filtered(prev_filters)
+            ) + sum(
+                float(row.amount or 0) for row in self.repository.overhead_expense_transactions(prev_filters)
+            )
+            prev_profit = prev_revenue - prev_vehicle - prev_plant - prev_operating
 
             def pct(current, previous):
                 if abs(previous) < 0.005:
@@ -169,6 +245,7 @@ class ReportService:
                     {"label": "Revenue", "current": total_revenue, "previous": prev_revenue, "pct": pct(total_revenue, prev_revenue)},
                     {"label": "Vehicle Payments", "current": vehicle_payables, "previous": prev_vehicle, "pct": pct(vehicle_payables, prev_vehicle)},
                     {"label": "Plant Payments", "current": plant_payments, "previous": prev_plant, "pct": pct(plant_payments, prev_plant)},
+                    {"label": "Operating Expenses", "current": operating_expenses, "previous": prev_operating, "pct": pct(operating_expenses, prev_operating)},
                     {"label": "Net Profit", "current": total_profit, "previous": prev_profit, "pct": pct(total_profit, prev_profit)},
                 ],
                 "prev_trips": len(prev_orders),
@@ -178,25 +255,50 @@ class ReportService:
             "report_heading": "Profit & Loss Report",
             "comparison": comparison,
             "report_intro_title": "Profit & Loss",
-            "report_intro_copy": "Revenue, expenses, and net profit for the selected filters.",
+            "report_intro_copy": (
+                "Read top to bottom: what we earned, what the trips cost us, what the "
+                "business cost to run, and what is left as profit."
+            ),
             "summary_cards": [
                 {"label": "Trips in Report", "value": len(orders), "hint": "Completed orders after filters", "tone": "primary"},
-                {"label": "Revenue", "value": f"Rs. {total_revenue:,.0f}", "hint": "Contractor-side billed value", "tone": "accent"},
-                {"label": "Expenses", "value": f"Rs. {total_expenses:,.0f}", "hint": "Vehicle and plant costs", "tone": "ocean"},
-                {"label": "Pump Payable", "value": f"Rs. {pump_payable:,.0f}", "hint": "Diesel paid direct to pumps (within vehicle payment)", "tone": "amber"},
+                {"label": "Revenue", "value": f"Rs. {total_revenue:,.0f}", "hint": "Earned from contractors", "tone": "accent"},
+                {"label": "Total Expenses", "value": f"Rs. {total_expenses:,.0f}", "hint": "Trip costs plus running costs", "tone": "ocean"},
                 {"label": "Net Profit", "value": f"Rs. {total_profit:,.0f}", "hint": f"Delivered quantity {total_quantity:,.2f}", "tone": "slate"},
             ],
+            # A real statement: each section subtotals, and every expense line is
+            # a genuine deduction. Memo lines explain a split and are never
+            # subtracted again — they carry kind 'memo'.
             "statement_lines": [
-                {"label": "Revenue", "amount": total_revenue, "kind": "positive"},
-                {"label": "Vehicle Payments", "amount": vehicle_payables, "kind": "negative"},
-                {"label": "— of which paid to Vehicle Owners (cash)", "amount": vehicle_owner_cash, "kind": "memo"},
-                {"label": "— of which paid to Pumps (diesel)", "amount": pump_payable, "kind": "memo"},
-                {"label": "Plant Payments", "amount": plant_payments, "kind": "negative"},
+                {"label": "Revenue — billed to contractors", "amount": total_revenue, "kind": "positive"},
+                {"label": "Vehicle Payments — earned by the vehicles", "amount": vehicle_payables, "kind": "negative"},
+                {"label": "of which settled in cash to vehicle owners", "amount": vehicle_owner_cash, "kind": "memo"},
+                {"label": "of which paid straight to pumps as diesel", "amount": pump_payable, "kind": "memo"},
+                {"label": "Plant Payments — crush plant loading charges", "amount": plant_payments, "kind": "negative"},
+                {"label": "Direct Trip Costs", "amount": direct_costs, "kind": "subtotal"},
+                {"label": "Gross Profit (revenue − trip costs)", "amount": gross_profit, "kind": "subtotal"},
+            ]
+            + [
+                {"label": row["label"], "amount": row["amount"], "kind": "negative"}
+                for row in expense_detail
+                if row["group"] == "Operating Expenses"
+            ]
+            + [
+                {"label": "Operating Expenses", "amount": operating_expenses, "kind": "subtotal"},
             ],
+            "expense_detail": expense_detail,
             "statement_totals": {
                 "revenue": total_revenue,
+                "direct_costs": direct_costs,
+                "gross_profit": gross_profit,
+                "operating_expenses": operating_expenses,
                 "expenses": total_expenses,
                 "profit": total_profit,
+            },
+            "pnl_memo": {
+                "pump_payable": pump_payable,
+                "vehicle_owner_cash": vehicle_owner_cash,
+                "company_fuel_total": company_fuel_total,
+                "overhead_total": overhead_total,
             },
             "orders": orders,
             "profit_chart": {
